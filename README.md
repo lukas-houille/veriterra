@@ -34,9 +34,9 @@ Reprise après coupure : l'état durable est sur le disque (git, docs, `PROGRESS
 Guide pas à pas : **`docs/deploiement.md`** (déployer dans Arcane V2, image GHCR, env, Caddy, auto-update, durcissement).
 
 - Image construite par la CI et poussée sur GHCR ; déployer la compose **prod** `docker-compose.prod.yml` (à base d'`image:`), jamais `docker-compose.yml` (dev, `build:`).
-- Conteneurs et déploiements : Arcane (Image Polling + Auto Update sur les services labellisés `app`/`worker`).
+- Conteneurs et déploiements : Arcane (Image Polling + Auto Update sur les services labellisés `veriterra`/`worker`).
 - Comptes, organisations et monitoring : la section `/admin` de l'app (rôle admin requis, sous-domaine dédié).
-- TLS et domaines : Caddy (`app` exposé sur `127.0.0.1:3000`, reverse proxy par Caddy).
+- TLS et domaines : Caddy (`veriterra` sur le réseau Caddy, sans port publié ; `reverse_proxy veriterra:3000`).
 
 ## Stack
 Next.js, TypeScript, Tailwind, shadcn/ui, MapLibre GL, deck.gl, Turf.js, SunCalc, PostgreSQL+PostGIS, Prisma, Redis, Auth.js (OIDC), PWA, Docker, Caddy. Détails dans `docs/architecture.md`.

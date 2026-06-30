@@ -12,6 +12,7 @@ CRM de prospection foncière auto-hébergé. À partir d'une adresse, l'outil lo
 - `docs/architecture.md` : architecture, moteur d'ombres, CI/CD, déploiement.
 - `docs/risques.md` : registre des risques et plans de limitation.
 - `docs/design-system.md` : marque, tokens et composants (produit par Claude Design).
+- `docs/deploiement.md` : déploiement prod pas à pas (Arcane V2, GHCR, Caddy, env, durcissement).
 - `PROGRESS.md` : état vivant du projet (créé et mis à jour par Claude Code).
 
 ## Administration depuis ton PC
@@ -29,9 +30,13 @@ Boucle de travail :
 Reprise après coupure : l'état durable est sur le disque (git, docs, `PROGRESS.md`). Une nouvelle session relit `CLAUDE.md`, `PLAN.md`, `PROGRESS.md` et l'historique git et repart où on en était. `claude --continue` reprend la dernière session, `claude --resume` ouvre le sélecteur. Les checkpoints (Échap deux fois ou /rewind) permettent de revenir en arrière, et git reste le filet pour les changements externes (migrations).
 
 ## Administration de la production
-- Conteneurs et déploiements : Arcane (interface web), avec Image Polling et Auto Update sur le service applicatif.
+
+Guide pas à pas : **`docs/deploiement.md`** (déployer dans Arcane V2, image GHCR, env, Caddy, auto-update, durcissement).
+
+- Image construite par la CI et poussée sur GHCR ; déployer la compose **prod** `docker-compose.prod.yml` (à base d'`image:`), jamais `docker-compose.yml` (dev, `build:`).
+- Conteneurs et déploiements : Arcane (Image Polling + Auto Update sur les services labellisés `app`/`worker`).
 - Comptes, organisations et monitoring : la section `/admin` de l'app (rôle admin requis, sous-domaine dédié).
-- TLS et domaines : Caddy.
+- TLS et domaines : Caddy (`app` exposé sur `127.0.0.1:3000`, reverse proxy par Caddy).
 
 ## Stack
 Next.js, TypeScript, Tailwind, shadcn/ui, MapLibre GL, deck.gl, Turf.js, SunCalc, PostgreSQL+PostGIS, Prisma, Redis, Auth.js (OIDC), PWA, Docker, Caddy. Détails dans `docs/architecture.md`.

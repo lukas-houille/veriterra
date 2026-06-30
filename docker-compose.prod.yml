@@ -49,8 +49,10 @@ services:
     restart: unless-stopped
     labels:
       com.getarcaneapp.arcane.updater: 'true'
+    # Exposé seulement sur la loopback de l'hôte : Caddy (sur l'hôte) fait le reverse
+    # proxy + TLS. Si Caddy tourne en conteneur, mets-le sur ce réseau et vise `app:3000`.
     ports:
-      - '3000:3000'
+      - '127.0.0.1:3000:3000'
     healthcheck:
       test:
         [

@@ -1,0 +1,65 @@
+// Veriterra — schéma de données (Tranche 0, socle).
+//
+// Invariant multi-tenant : chaque donnée propre à un tenant porte `organisationId`
+// et est protégée par Row-Level Security PostgreSQL (voir la migration RLS). Le client
+// applicatif se connecte via `DATABASE_URL` avec le rôle restreint `veriterra_app`
+// (ni superuser, ni BYPASSRLS, ni propriétaire) ; les migrations et le bootstrap auth
+// utilisent `DIRECT_URL` (rôle privilégié).
+
+generator client {
+  provider = "prisma-client-js"
+  // Emitted as a sibling of src/ and dist/ so the SAME relative import
+  // `../generated/prisma` resolves whether running from source or from the build.
+  output   = "../generated/prisma"
+}
+
+// Prisma 7 : la chaîne de connexion vit dans `prisma.config.ts` (CLI : migrate/seed) et
+// l'adapter est passé au PrismaClient (runtime). Le bloc datasource ne garde que le provider.
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+/// Tenant racine. Une organisation par utilisateur en Tranche 0 (créée en silence à
+/// la première connexion). Le partage multi-membres viendra plus tard, sans migration.
+model Organisation {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  memberships Membership[]
+}
+
+/// Identité globale, liée au sujet OIDC (Pocket ID). Clé de jointure = `oidcSubject`
+/// (le `sub` OIDC), jamais l'email (mutable). Table non scopée à un tenant : on n'y
+/// accède que par la voie privilégiée (bootstrap auth), pas par les requêtes tenant.
+model User {
+  id          String       @id @default(uuid()) @db.Uuid
+  oidcSubject String       @unique
+  email       String?
+  name        String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  memberships Membership[]
+}
+
+/// Appartenance d'un utilisateur à une organisation, avec rôle. Table scopée au tenant
+/// (porte `organisationId`) : protégée par RLS.
+model Membership {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @db.Uuid
+  organisationId String   @db.Uuid
+  role           Role     @default(MEMBER)
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organisationId])
+  @@index([organisationId])
+}

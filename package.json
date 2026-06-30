@@ -1,0 +1,39 @@
+{
+  "name": "veriterra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.13.2",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter @veriterra/db build && dotenv -e .env -- pnpm -r --parallel --stream dev",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm --filter @veriterra/db generate && pnpm -r typecheck",
+    "test": "pnpm --filter @veriterra/db build && pnpm -r --workspace-concurrency=1 test",
+    "test:e2e": "pnpm --filter @veriterra/app test:e2e",
+    "db:generate": "pnpm --filter @veriterra/db generate",
+    "db:migrate": "dotenv -e .env -- pnpm --filter @veriterra/db migrate",
+    "db:deploy": "dotenv -e .env -- pnpm --filter @veriterra/db run deploy",
+    "db:seed": "dotenv -e .env -- pnpm --filter @veriterra/db seed"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.0.1",
+    "dotenv-cli": "11.0.0",
+    "eslint": "10.6.0",
+    "globals": "17.7.0",
+    "prettier": "3.9.4",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.62.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "ioredis": "5.11.1"
+    }
+  }
+}

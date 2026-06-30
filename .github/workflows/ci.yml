@@ -1,0 +1,103 @@
+name: ci
+
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        # Multi-arch PostGIS (same image as docker-compose).
+        image: imresamu/postgis:17-3.5
+        env:
+          POSTGRES_USER: veriterra
+          POSTGRES_PASSWORD: veriterra
+          POSTGRES_DB: veriterra
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U veriterra -d veriterra"
+          --health-interval 10s --health-timeout 5s --health-retries 10 --health-start-period 30s
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+      oidc:
+        # Mock OIDC provider (non-interactive login) so the Auth.js OIDC path runs
+        # end to end without a live Pocket ID.
+        image: ghcr.io/navikt/mock-oauth2-server:2.1.10
+        env:
+          JSON_CONFIG: '{"interactiveLogin":false,"httpServer":"NettyWrapper"}'
+        ports: ['8080:8080']
+
+    env:
+      # App role (restricted) and migration role (privileged superuser of the service).
+      DATABASE_URL: postgresql://veriterra_app:veriterra_app@localhost:5432/veriterra?schema=public
+      DIRECT_URL: postgresql://veriterra:veriterra@localhost:5432/veriterra?schema=public
+      REDIS_URL: redis://localhost:6379
+      AUTH_SECRET: ci-test-secret-not-for-prod
+      AUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: 'true'
+      AUTH_POCKET_ID_ISSUER: http://localhost:8080/default
+      AUTH_POCKET_ID_ID: veriterra-ci
+      AUTH_POCKET_ID_SECRET: veriterra-ci-secret
+      E2E_OIDC: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build @veriterra/db (generate + dist)
+        run: pnpm --filter @veriterra/db build
+
+      - name: Apply migrations (extension, role, RLS, tables)
+        run: pnpm --filter @veriterra/db run deploy
+
+      - name: Unit & integration tests (RLS isolation, bootstrap, ping)
+        run: pnpm -r --workspace-concurrency=1 test
+
+      - name: Build app
+        run: pnpm build
+
+      - name: Install Playwright browser
+        run: pnpm --filter @veriterra/app exec playwright install --with-deps chromium
+
+      - name: Wait for mock OIDC discovery
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/default/.well-known/openid-configuration >/dev/null; then
+              echo "mock OIDC ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "mock OIDC did not become ready"; exit 1
+
+      - name: E2E (Playwright, OIDC via mock)
+        run: pnpm --filter @veriterra/app test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: app/playwright-report
+          retention-days: 7

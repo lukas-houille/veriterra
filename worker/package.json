@@ -1,0 +1,26 @@
+{
+  "name": "@veriterra/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "healthcheck": "tsx src/healthcheck.ts",
+    "build": "exit 0",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@veriterra/db": "workspace:*",
+    "@veriterra/shared": "workspace:*",
+    "bullmq": "5.79.2",
+    "ioredis": "5.11.1",
+    "tsx": "4.22.4"
+  },
+  "devDependencies": {
+    "dotenv": "17.4.2",
+    "vitest": "4.1.9"
+  }
+}

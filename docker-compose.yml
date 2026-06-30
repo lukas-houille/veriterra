@@ -1,0 +1,108 @@
+# Veriterra — stack locale (US-0.3). `docker compose up` lève db (Postgres+PostGIS), redis,
+# applique les migrations (service one-shot `migrate`), puis app et worker.
+# Les variables d'interpolation ${...} viennent du fichier .env du projet.
+
+services:
+  db:
+    # imresamu/postgis is the multi-arch (arm64 + amd64) drop-in for postgis/postgis,
+    # so the same image runs on Apple Silicon locally and on amd64 in CI/prod.
+    image: imresamu/postgis:17-3.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # PostGIS first-boot init restarts Postgres; give it room before gating dependents.
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # One-shot: applies migrations (extension, roles, RLS, tables) as the privileged role.
+  migrate:
+    build:
+      context: .
+      target: runtime
+    command: pnpm --filter @veriterra/db run deploy
+    environment:
+      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      DATABASE_URL: postgresql://veriterra_app:veriterra_app@db:5432/${POSTGRES_DB}?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      target: runtime
+    command: pnpm --filter @veriterra/app start
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://veriterra_app:veriterra_app@db:5432/${POSTGRES_DB}?schema=public
+      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://redis:6379
+    ports:
+      - '3000:3000'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: .
+      target: runtime
+    command: pnpm --filter @veriterra/worker start
+    environment:
+      DATABASE_URL: postgresql://veriterra_app:veriterra_app@db:5432/${POSTGRES_DB}?schema=public
+      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://redis:6379
+    stop_grace_period: 30s
+    healthcheck:
+      test: ['CMD', 'pnpm', '--filter', '@veriterra/worker', 'healthcheck']
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:

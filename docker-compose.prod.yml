@@ -1,8 +1,13 @@
 # Veriterra — déploiement prod (Arcane).
-# Image pré-construite tirée de GHCR (repo public, aucun identifiant requis) ;
-# app / worker / migrate partagent la même image avec des `command` différentes.
-# Les variables viennent du fichier .env géré par Arcane (Environment Configuration).
-# Les services app et worker portent le label updater pour l'auto-update Arcane.
+# Image pré-construite tirée de GHCR (repo public) ; veriterra / worker / migrate
+# partagent la même image avec des `command` différentes.
+# Variables via le .env géré par Arcane (Environment Configuration).
+#
+# Réseaux :
+#   - internal : db, redis, veriterra, worker, migrate. Aucun port publié ; la base et
+#     Redis ne sont PAS sur le réseau du proxy (séparation db / front).
+#   - web : réseau Caddy EXISTANT (externe). Seul `veriterra` y est attaché pour que
+#     Caddy l'atteigne en `reverse_proxy veriterra:3000`. Pas de port exposé sur l'hôte.
 
 services:
   db:
@@ -14,6 +19,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 10s
@@ -26,6 +33,8 @@ services:
     restart: unless-stopped
     volumes:
       - redisdata:/data
+    networks:
+      - internal
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
@@ -38,21 +47,24 @@ services:
     command: pnpm --filter @veriterra/db run deploy
     env_file: .env
     restart: 'no'
+    networks:
+      - internal
     depends_on:
       db:
         condition: service_healthy
 
-  app:
+  veriterra:
     image: ghcr.io/lukas-houille/veriterra:latest
-    command: pnpm --filter @veriterra/app start
+    command: pnpm --filter @veriterra/app run start
     env_file: .env
     restart: unless-stopped
     labels:
       com.getarcaneapp.arcane.updater: 'true'
-    # Exposé seulement sur la loopback de l'hôte : Caddy (sur l'hôte) fait le reverse
-    # proxy + TLS. Si Caddy tourne en conteneur, mets-le sur ce réseau et vise `app:3000`.
-    ports:
-      - '127.0.0.1:3000:3000'
+    # Sur internal (db/redis) ET sur le réseau Caddy (front). Aucun port publié :
+    # Caddy l'atteint via `reverse_proxy veriterra:3000`.
+    networks:
+      - internal
+      - web
     healthcheck:
       test:
         [
@@ -75,14 +87,16 @@ services:
 
   worker:
     image: ghcr.io/lukas-houille/veriterra:latest
-    command: pnpm --filter @veriterra/worker start
+    command: pnpm --filter @veriterra/worker run start
     env_file: .env
     restart: unless-stopped
     stop_grace_period: 30s
     labels:
       com.getarcaneapp.arcane.updater: 'true'
+    networks:
+      - internal
     healthcheck:
-      test: ['CMD', 'pnpm', '--filter', '@veriterra/worker', 'healthcheck']
+      test: ['CMD', 'pnpm', '--filter', '@veriterra/worker', 'run', 'healthcheck']
       interval: 15s
       timeout: 10s
       retries: 5
@@ -98,3 +112,11 @@ services:
 volumes:
   pgdata:
   redisdata:
+
+networks:
+  internal:
+    driver: bridge
+  web:
+    external: true
+    # Nom RÉEL de ton réseau Caddy (défaut "caddy"). Override possible via CADDY_NETWORK.
+    name: ${CADDY_NETWORK:-caddy}

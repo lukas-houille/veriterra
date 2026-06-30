@@ -37,17 +37,21 @@ Voir `.env.prod.example`. Points clés :
 - Pocket ID : `AUTH_POCKET_ID_ISSUER/ID/SECRET`, et **redirect_uri** à enregistrer côté Pocket ID :
   `https://veriterra.lukas-houille.com/api/auth/callback/pocket-id`.
 
-## 4. TLS / domaine (Caddy)
+## 4. Réseaux & TLS (Caddy)
 
-`app` n'est exposé que sur `127.0.0.1:3000` (loopback de l'hôte). Caddy (sur l'hôte) fait le reverse proxy + TLS automatique :
+Deux réseaux (séparation db / front) :
+- `internal` (bridge privé) : `db`, `redis`, `veriterra`, `worker`, `migrate`. **Aucun port publié** ; la base et Redis ne sont pas joignables depuis le proxy.
+- `web` : ton réseau **Caddy existant** (`external: true`, nom par défaut `caddy`, override via `CADDY_NETWORK`). Seul `veriterra` y est attaché.
+
+Caddy (conteneur sur ce réseau) atteint l'app par le nom de service, **sans port exposé sur l'hôte** :
 
 ```caddy
 veriterra.lukas-houille.com {
-    reverse_proxy localhost:3000
+    reverse_proxy veriterra:3000
 }
 ```
 
-Si Caddy tourne **en conteneur**, le mettre sur le réseau de la stack et viser `app:3000` (et retirer le bind loopback). Plus tard : sous-domaine admin (`admin.veriterra.lukas-houille.com`).
+Si ton réseau Caddy ne s'appelle pas `caddy`, mets `CADDY_NETWORK=<son-nom>` dans le `.env`. Plus tard : sous-domaine admin (`admin.veriterra.lukas-houille.com`).
 
 ## 5. Durcissement prod
 

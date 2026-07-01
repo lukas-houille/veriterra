@@ -18,6 +18,7 @@ import {
 } from '@veriterra/ui';
 import { auth } from '@/auth';
 import { getTerrain } from '@/modules/terrains/service';
+import { EditTerrainForm } from './edit-terrain-form';
 
 // Fiche terrain (US-1.3 données rapides + amorce US-1.4 progressive disclosure).
 // Composant serveur : appelle directement le service (pas d'aller-retour HTTP), l'isolation
@@ -153,6 +154,22 @@ export default async function TerrainPage({
               <Badge variant={statusVariant}>{statusLabel}</Badge>
             </span>
           </div>
+        </div>
+
+        {/* Édition des champs manuels et du statut (US-1.9). */}
+        <div className="mb-6">
+          <EditTerrainForm
+            key={terrain.id}
+            terrainId={terrain.id}
+            initial={{
+              label: terrain.label,
+              address: terrain.address,
+              status: terrain.status,
+              prixDemande: terrain.prixDemande,
+              lienAnnonce: terrain.lienAnnonce,
+              notes: terrain.notes,
+            }}
+          />
         </div>
 
         {/* Progressive disclosure (US-1.4) : aperçu rassurant par défaut, détail derrière onglets. */}

@@ -25,6 +25,20 @@ export interface CreateTerrainInput {
   notes?: string | null;
 }
 
+/**
+ * Entrée de modification d'un terrain (US-1.9). Tous les champs sont optionnels : seuls ceux
+ * présents sont mis à jour (mise à jour partielle). Les données parcellaires faisant autorité
+ * (contour, surface, IDU) ne sont pas éditables ici.
+ */
+export interface UpdateTerrainInput {
+  label?: string;
+  address?: string;
+  status?: string;
+  prixDemande?: number | null;
+  lienAnnonce?: string | null;
+  notes?: string | null;
+}
+
 export interface TerrainParcelleSummary {
   id: string;
   idu: string;

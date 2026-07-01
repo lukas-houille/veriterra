@@ -2,9 +2,13 @@ import { forOrg, withOrg, type Prisma } from '@veriterra/db';
 import type { GeoJsonGeometry } from '@/lib/geo/types';
 import { getEnrichTerrainQueue } from '@/lib/queues';
 import { ensureProjet } from '@/modules/projet/service';
-import type { CreateTerrainInput, TerrainSummary } from './types';
+import type { CreateTerrainInput, TerrainSummary, UpdateTerrainInput } from './types';
 
 const PARCELLE_SOURCE = 'IGN API Carto Cadastre';
+
+/** Statuts de terrain admissibles (aligné sur l'enum Prisma `TerrainStatus`). */
+export const TERRAIN_STATUSES = ['A_ETUDIER', 'PROMETTEUR', 'RESERVE', 'ECARTE'] as const;
+export type TerrainStatusValue = (typeof TERRAIN_STATUSES)[number];
 
 /** Valide qu'une valeur est bien une géométrie GeoJSON Polygon/MultiPolygon exploitable. */
 function isValidGeometry(g: unknown): g is GeoJsonGeometry {
@@ -150,4 +154,50 @@ export async function getTerrain(orgId: string, id: string): Promise<TerrainSumm
     include: { parcelles: true },
   })) as unknown as TerrainRow | null;
   return row ? toSummary(row) : null;
+}
+
+/**
+ * Modifie les champs manuels et le statut d'un terrain (US-1.9). Mise à jour partielle :
+ * seuls les champs fournis sont écrits. Scopé au tenant via `forOrg` (RLS) : le terrain d'une
+ * autre organisation est invisible, donc renvoie `null` (aucune modification inter-org). Ne
+ * touche pas aux données parcellaires faisant autorité (contour, surface, IDU).
+ */
+export async function updateTerrain(
+  orgId: string,
+  id: string,
+  input: UpdateTerrainInput,
+): Promise<TerrainSummary | null> {
+  // Vérifie l'existence dans le tenant courant avant d'écrire (update sur un id absent
+  // lèverait sinon, et un id d'une autre org est invisible sous RLS).
+  const existing = (await forOrg(orgId).terrain.findUnique({ where: { id } })) as { id: string } | null;
+  if (!existing) return null;
+
+  const data: Prisma.TerrainUpdateInput = {};
+  if (input.label !== undefined) {
+    const label = input.label.trim();
+    if (label) data.label = label;
+  }
+  if (input.address !== undefined) {
+    const address = input.address.trim();
+    if (address) data.address = address;
+  }
+  if (input.status !== undefined) {
+    if (!(TERRAIN_STATUSES as readonly string[]).includes(input.status)) {
+      throw new Error('Statut de terrain invalide.');
+    }
+    data.status = input.status as TerrainStatusValue;
+  }
+  if (input.prixDemande !== undefined) data.prixDemande = input.prixDemande;
+  if (input.lienAnnonce !== undefined) data.lienAnnonce = input.lienAnnonce;
+  if (input.notes !== undefined) data.notes = input.notes;
+
+  try {
+    await forOrg(orgId).terrain.update({ where: { id }, data });
+  } catch (e) {
+    // P2025 : la ligne a disparu (ou est devenue invisible sous RLS) entre le findUnique et
+    // l'update. On renvoie null (404) plutôt qu'une 500, au lieu de faire confiance au guard.
+    if ((e as { code?: unknown }).code === 'P2025') return null;
+    throw e;
+  }
+  return getTerrain(orgId, id);
 }

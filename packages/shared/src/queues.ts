@@ -30,17 +30,25 @@ export interface PingJobResult {
 }
 
 /**
- * Enrichissement d'un terrain (Tranche 1 : job no-op, l'enrichissement réel arrive en
- * Tranche 2). Enfilé à la création ; le worker scope son accès DB via `organizationId`.
+ * Enrichissement d'un terrain (Tranche 2 : récupère les sources et écrit des blocs sourcés).
+ * Enfilé à la création et lors d'un rafraîchissement ; le worker scope son accès DB via
+ * `organizationId`. `force` contourne le cache Redis (rafraîchissement manuel).
  */
 export interface EnrichTerrainJobData {
   organizationId: string;
   terrainId: string;
+  force?: boolean;
+}
+
+/** Issue par bloc traité (le type est un EnrichmentType, le statut un EnrichmentStatus). */
+export interface EnrichBlockOutcome {
+  type: string;
+  status: string;
 }
 
 export interface EnrichTerrainJobResult {
   terrainId: string;
-  status: 'noop';
+  blocks: EnrichBlockOutcome[];
   at: string;
 }
 

@@ -1,8 +1,16 @@
 import { forOrg, withOrg, type Prisma } from '@veriterra/db';
+import type { RisquesData } from '@veriterra/enrichment';
 import type { GeoJsonGeometry } from '@/lib/geo/types';
 import { getEnrichTerrainQueue } from '@/lib/queues';
 import { ensureProjet } from '@/modules/projet/service';
-import type { CreateTerrainInput, TerrainSummary, UpdateTerrainInput } from './types';
+import { EXPECTED_ENRICHMENT_TYPES, buildEnrichmentView } from './enrichment-view';
+import type {
+  CreateTerrainInput,
+  EnrichmentBlockView,
+  EnrichmentView,
+  TerrainSummary,
+  UpdateTerrainInput,
+} from './types';
 
 const PARCELLE_SOURCE = 'IGN API Carto Cadastre';
 
@@ -133,11 +141,70 @@ export async function createTerrain(
     return terrain.id;
   });
 
-  await getEnrichTerrainQueue().add('enrichTerrain', { organizationId: orgId, terrainId });
+  await enqueueTerrainEnrichment(orgId, terrainId);
 
   const summary = await getTerrain(orgId, terrainId);
   if (!summary) throw new Error('Terrain introuvable après création.');
   return summary;
+}
+
+/**
+ * Enfile un job d'enrichissement. `jobId` idempotent : à la création (`enrich:<terrainId>`) un
+ * clic multiple ou une reprise ne duplique pas le job ; un rafraîchissement forcé utilise un
+ * jobId horodaté pour toujours re-tourner (et contourner le cache via `force`).
+ */
+export async function enqueueTerrainEnrichment(
+  orgId: string,
+  terrainId: string,
+  opts: { force?: boolean } = {},
+): Promise<void> {
+  // Marque les blocs attendus en PENDING (crée si absent) AVANT d'enfiler : la fiche affiche
+  // aussitôt l'état "en cours" (préchargement non bloquant, US-1.4) et le rafraîchissement
+  // manuel redevient observable (anyPending repasse à vrai, le polling suit jusqu'au terminal).
+  const db = forOrg(orgId);
+  for (const type of EXPECTED_ENRICHMENT_TYPES) {
+    await db.enrichmentBlock.upsert({
+      where: { terrainId_type: { terrainId, type } },
+      create: { organisationId: orgId, terrainId, type, status: 'PENDING' },
+      update: { status: 'PENDING', error: null },
+    });
+  }
+  const jobId = opts.force ? `enrich:${terrainId}:r${Date.now()}` : `enrich:${terrainId}`;
+  await getEnrichTerrainQueue().add(
+    'enrichTerrain',
+    { organizationId: orgId, terrainId, force: opts.force },
+    { jobId },
+  );
+}
+
+// Forme minimale d'une ligne EnrichmentBlock (évite de dépendre des types Prisma générés).
+type EnrichmentRow = {
+  type: string;
+  status: string;
+  source: string | null;
+  sourceUrl: string | null;
+  confidence: string | null;
+  fetchedAt: Date | null;
+  data: unknown;
+  error: string | null;
+};
+
+/** Vue d'enrichissement d'un terrain (blocs sourcés + placeholders des types attendus). */
+export async function getTerrainEnrichment(orgId: string, terrainId: string): Promise<EnrichmentView> {
+  const rows = (await forOrg(orgId).enrichmentBlock.findMany({
+    where: { terrainId },
+  })) as unknown as EnrichmentRow[];
+  const existing: EnrichmentBlockView[] = rows.map((r) => ({
+    type: r.type,
+    status: r.status as EnrichmentBlockView['status'],
+    source: r.source,
+    sourceUrl: r.sourceUrl,
+    confidence: r.confidence as EnrichmentBlockView['confidence'],
+    fetchedAt: r.fetchedAt ? r.fetchedAt.toISOString() : null,
+    data: (r.data ?? null) as RisquesData | null,
+    error: r.error,
+  }));
+  return buildEnrichmentView(existing);
 }
 
 export async function listTerrains(orgId: string): Promise<TerrainSummary[]> {

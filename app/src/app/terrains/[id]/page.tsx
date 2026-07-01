@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
+  AlertChip,
   Badge,
   type BadgeProps,
   Card,
@@ -17,8 +18,10 @@ import {
   type PortfolioStatus,
 } from '@veriterra/ui';
 import { auth } from '@/auth';
-import { getTerrain } from '@/modules/terrains/service';
+import { getTerrain, getTerrainEnrichment } from '@/modules/terrains/service';
+import type { EnrichmentBlockView } from '@/modules/terrains/types';
 import { EditTerrainForm } from './edit-terrain-form';
+import { EnrichmentActions } from './enrichment-actions';
 
 // Fiche terrain (US-1.3 données rapides + amorce US-1.4 progressive disclosure).
 // Composant serveur : appelle directement le service (pas d'aller-retour HTTP), l'isolation
@@ -107,6 +110,93 @@ function formatDate(iso: string): string {
   return Number.isNaN(d.getTime()) ? 'date inconnue' : nfDate.format(d);
 }
 
+const CONFIDENCE_LABEL: Record<string, string> = {
+  ELEVEE: 'élevée',
+  MOYENNE: 'moyenne',
+  FAIBLE: 'faible',
+};
+
+function BlockHeader({ title, meta }: { title: string; meta?: string }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">{title}</h2>
+      {meta ? <span className="font-mono text-[11px] text-neutral-400">{meta}</span> : null}
+    </div>
+  );
+}
+
+/** Rend le bloc RISQUES (Géorisques) selon son statut : chargement, erreur, indisponible ou données. */
+function RisquesBlock({ block }: { block: EnrichmentBlockView }) {
+  const title = 'Risques';
+  if (block.status === 'PENDING') {
+    return (
+      <section aria-busy="true">
+        <BlockHeader title={title} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-16 animate-pulse rounded-lg border border-border bg-neutral-100" />
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">Chargement des risques...</p>
+      </section>
+    );
+  }
+  if (block.status === 'ERROR') {
+    return (
+      <section>
+        <BlockHeader title={title} />
+        <UnavailableState label="Récupération impossible pour l'instant, réessayez avec Actualiser" />
+      </section>
+    );
+  }
+  if (block.status === 'UNAVAILABLE' || !block.data) {
+    return (
+      <section>
+        <BlockHeader title={title} />
+        <UnavailableState label="Aucun risque disponible pour cette parcelle" />
+      </section>
+    );
+  }
+  const meta = [
+    block.source,
+    block.fetchedAt ? formatDate(block.fetchedAt) : null,
+    block.confidence ? `confiance ${CONFIDENCE_LABEL[block.confidence] ?? block.confidence.toLowerCase()}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    <section>
+      <BlockHeader title={title} meta={meta} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        {block.data.items.map((item) => (
+          <div key={item.key} className="rounded-lg border border-border p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{item.label}</p>
+            <div className="mt-1.5">
+              {item.available && item.value ? (
+                item.severity ? (
+                  <AlertChip severity={item.severity}>{item.value}</AlertChip>
+                ) : (
+                  <p className="text-sm text-foreground">{item.value}</p>
+                )
+              ) : (
+                <UnavailableState />
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      {block.sourceUrl ? (
+        <p className="mt-2 text-[10.5px] text-neutral-400">
+          Source ·{' '}
+          <a href={block.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">
+            {block.source ?? 'Géorisques'}
+          </a>
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export default async function TerrainPage({
   params,
 }: {
@@ -123,6 +213,8 @@ export default async function TerrainPage({
   if (!terrain) {
     notFound();
   }
+
+  const enrichment = await getTerrainEnrichment(session.user.orgId, id);
 
   const statusPin = STATUS_PIN[terrain.status] ?? 'à étudier';
   const statusLabel = STATUS_LABEL[terrain.status] ?? terrain.status;
@@ -271,21 +363,35 @@ export default async function TerrainPage({
             </div>
           </TabsContent>
 
-          {/* ----- Onglet Enrichissement : à venir (règle n°3, jamais silencieux) ----- */}
+          {/* ----- Onglet Enrichissement : blocs sourcés, chargés en arrière-plan ----- */}
           <TabsContent value="enrichissement">
-            <div className="grid gap-4 sm:grid-cols-3">
-              {[
-                { key: 'plu', title: 'PLU' },
-                { key: 'risques', title: 'Risques' },
-                { key: 'dvf', title: 'Prix DVF' },
-              ].map((item) => (
-                <div key={item.key}>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    {item.title}
-                  </p>
-                  <UnavailableState label="Donnée indisponible, enrichissement à venir" />
-                </div>
-              ))}
+            <div className="flex flex-col gap-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Données sourcées, chargées automatiquement en arrière-plan.
+                </p>
+                <EnrichmentActions terrainId={terrain.id} pending={enrichment.anyPending} />
+              </div>
+
+              {enrichment.blocks.map((block) =>
+                block.type === 'RISQUES' ? <RisquesBlock key={block.type} block={block} /> : null,
+              )}
+
+              {/* Blocs à venir dans les prochaines slices (jamais silencieux, règle n°3). */}
+              <div className="grid gap-4 sm:grid-cols-3">
+                {[
+                  { key: 'dvf', title: 'Prix DVF' },
+                  { key: 'plu', title: 'PLU' },
+                  { key: 'pente', title: 'Pente et services' },
+                ].map((item) => (
+                  <div key={item.key}>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      {item.title}
+                    </p>
+                    <UnavailableState label="À venir" />
+                  </div>
+                ))}
+              </div>
             </div>
           </TabsContent>
         </Tabs>

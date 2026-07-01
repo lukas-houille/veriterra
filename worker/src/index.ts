@@ -9,6 +9,7 @@ import {
   type PingJobData,
   type PingJobResult,
 } from '@veriterra/shared';
+import { runEnrichTerrain } from './enrich-terrain';
 
 const HEARTBEAT_TTL_SECONDS = 30;
 const HEARTBEAT_INTERVAL_MS = 10_000;
@@ -31,15 +32,17 @@ const pingWorker = new Worker<PingJobData, PingJobResult>(
   { connection: pingConnection, concurrency: 5 },
 );
 
-// Enrichissement d'un terrain (Tranche 1 : no-op tracé ; la vraie logique arrive en
-// Tranche 2, qui appellera les sources et écrira des blocs sourcés via `forOrg`).
+// Enrichissement d'un terrain (Tranche 2) : récupère les sources publiques et écrit des blocs
+// sourcés via `forOrg` (scoping tenant depuis le payload). Slice 1 : risques Géorisques.
 const enrichWorker = new Worker<EnrichTerrainJobData, EnrichTerrainJobResult>(
   QUEUE_NAMES.ENRICH_TERRAIN,
   async (job) => {
-    const db = forOrg(job.data.organizationId);
-    void db;
-    console.log(`[worker] enrichTerrain ${job.data.terrainId} (stub, Tranche 1)`);
-    return { terrainId: job.data.terrainId, status: 'noop', at: new Date().toISOString() };
+    const result = await runEnrichTerrain(job.data);
+    console.log(
+      `[worker] enrichTerrain ${job.data.terrainId}:`,
+      result.blocks.map((b) => `${b.type}=${b.status}`).join(', ') || 'aucun bloc',
+    );
+    return result;
   },
   { connection: enrichConnection, concurrency: 5 },
 );

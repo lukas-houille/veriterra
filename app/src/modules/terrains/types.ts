@@ -1,4 +1,5 @@
 import type { GeoJsonGeometry } from '@/lib/geo/types';
+import type { RisquesData } from '@veriterra/enrichment';
 
 /**
  * Parcelle envoyée par le client à la création. La donnée provient de la requête
@@ -47,6 +48,29 @@ export interface TerrainParcelleSummary {
   numero: string;
   surfaceM2: number;
   geojson: GeoJsonGeometry;
+}
+
+/** Statut d'un bloc d'enrichissement, aligné sur l'enum Prisma EnrichmentStatus. */
+export type EnrichmentBlockStatus = 'PENDING' | 'OK' | 'UNAVAILABLE' | 'ERROR';
+
+/** Un bloc d'enrichissement tel que consommé par la fiche (provenance + payload typé). */
+export interface EnrichmentBlockView {
+  type: string;
+  status: EnrichmentBlockStatus;
+  source: string | null;
+  sourceUrl: string | null;
+  confidence: 'ELEVEE' | 'MOYENNE' | 'FAIBLE' | null;
+  fetchedAt: string | null; // ISO 8601
+  /** Payload normalisé. En Tranche 2 slice 1, seul le type RISQUES existe (RisquesData). */
+  data: RisquesData | null;
+  error: string | null;
+}
+
+/** Vue d'enrichissement d'un terrain : blocs attendus (existants ou en attente). */
+export interface EnrichmentView {
+  blocks: EnrichmentBlockView[];
+  /** true tant qu'un bloc attendu n'a pas de statut terminal (pilote le polling client). */
+  anyPending: boolean;
 }
 
 /** Vue d'un terrain servie par l'API (données rapides + contours des parcelles). */

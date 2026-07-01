@@ -12,6 +12,8 @@ Bibliothèque de composants du design system Veriterra, construite comme **packa
 
 **Rebranding fait : la marque est Veriterra** (renommage complet, code compris : packages `@veriterra/*`, rôle DB `veriterra_app`, DB `veriterra`, image, repo, docs). Design system : `docs/design-system.md` (spec), et désormais son **implémentation réelle** dans `packages/ui` (indigo `#2F3B6E` primaire, accent soleil `#DB9B2C`, polices Archivo + Spline Sans Mono).
 
+**Tranche 2 — Évaluer (enrichissement sourcé) : EN COURS.** Slice 1 livrée (`feat/enrichissement-georisques`) : le job `enrichTerrain` n'est plus un stub, il récupère les **risques Géorisques** (argile, inondation, radon, sismicité) et écrit un bloc `EnrichmentBlock` sourcé, via un nouveau package partagé `@veriterra/enrichment` (client + cache Redis). Table + enums + migration RLS (ENABLE/FORCE, garde M3, isolation par-table). Fiabilité BullMQ (essais/backoff, jobId idempotent). La fiche affiche les blocs pilotés par le modèle (provenance/date/confiance, `AlertChip` par sévérité, préchargement non bloquant US-1.4, squelette PENDING, bouton Actualiser + polling borné). Distinction **panne transitoire** (bloc ERROR réessayable, non mis en cache) vs **absence légitime** (UNAVAILABLE terminal, règle 3). Revue adversariale multi-agents : 9 findings corrigés (le principal : ne plus figer une panne de source en faux « aucun risque »).
+
 **Tranche 1 — Projet et exploration : LIVRÉE et déployée.** Landing publique (PR #10), onboarding court + modèle `Projet` (RLS, flag de consentement de partage) (PR #9), écrans recalés sur les maquettes designées (PR #11), création de terrain de bout en bout (adresse BAN → cadastre → clic parcelle → fiche persistée → dashboard carte, PR #7-8). Puis, sur `feat/explorer-surface-fond-carte` : **recherche par surface approchée ±X m² (US-1.6)**, **fond de carte modernisé** (plan vectoriel « Positron Veriterra » recoloré à chaud depuis le plan IGN + bascule Plan/Satellite, cadastre en calque, base 3D-ready), et **pins colorés par statut cliquables** sur le dashboard (visibles même dézoomés). Revue adversariale multi-angles passée : 10 findings corrigés, dont la course `setStyle`/diff asynchrone de MapLibre (bascule de fond qui effaçait les calques), un faux négatif quand la zone est tronquée, et l'exclusion des parcelles sans contenance connue (règle 3).
 
 ### Vérifié de bout en bout
@@ -90,9 +92,11 @@ Suivis tracés (non bloquants) : M5 secrets app avec défauts `change-me` (fail-
 
 ## Prochaine étape
 
-**Tranche 1 : LIVRÉE.** Prochaines PR immédiates :
-- **US-1.9 modifier un terrain enregistré** : édition des champs manuels (libellé, adresse, prix, lien, notes) + statut depuis la fiche, scopé RLS (`updateTerrain` via `forOrg`, `PATCH /api/terrains/[id]`, formulaire client sur `/terrains/[id]`). Service et route déjà repérés.
-- **Tranche 2 — Évaluer** : enrichissement sourcé réel (le job `enrichTerrain` reste un stub), avec préchargement non bloquant (US-1.4, désormais utile car il y aura de la donnée à précharger).
+**Tranche 1 : LIVRÉE. Tranche 2 slice 1 (risques Géorisques) : LIVRÉE.** Suite de la Tranche 2 :
+- **PR 2b — Prix DVF** (US-2.3) : estimation, écart au prix demandé, comparables, hors couverture (57/67/68/Mayotte), sur le socle du pipeline (nouveau type `PRIX_DVF` d'`EnrichmentBlock`, source DVF ajoutée à `@veriterra/enrichment`).
+- Puis **pente/exposition + services** (US-2.4/2.5), **PLU + extraction IA** (US-2.1, `ANTHROPIC_API_KEY` côté worker), puis **documents attachés** (US-5.8, MinIO auto-hébergé).
+
+Suivi de dette repéré par la revue (non bloquant) : point représentatif par moyenne des sommets (préférer `ST_PointOnSurface` pour les parcelles concaves/disjointes) ; bloc PENDING jamais résolu détecté seulement côté client (persistance d'un horodatage d'enfilement pour une détection serveur possible plus tard).
 
 Autres chantiers (selon priorité) :
 - **`/design-sync`** : le dépôt est syncable (`pkg: @veriterra/ui`, `cssEntry: dist/veriterra.css`). Opération lourde (budget frais recommandé).

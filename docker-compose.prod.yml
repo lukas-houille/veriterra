@@ -1,6 +1,10 @@
-# Veriterra — déploiement prod (Arcane).
+# Veriterra — déploiement prod (Arcane, GitOps par Git Sync).
 # Image pré-construite tirée de GHCR (repo public) ; veriterra / worker / migrate
 # partagent la même image avec des `command` différentes.
+# Le tag d'image (`:latest` ci-dessous) est réécrit sur le SHA git par .github/workflows/
+# release.yml à chaque release : Arcane suit ce dépôt (Git Sync + Auto Sync) et redéploie
+# quand le compose change. Ne PAS activer l'auto-update par digest d'Arcane sur ce projet
+# (un seul déclencheur). Ne pas éditer le tag à la main, release.yml en est la source.
 # Variables via le .env géré par Arcane (Environment Configuration).
 #
 # Réseaux :
@@ -58,8 +62,6 @@ services:
     command: pnpm --filter @veriterra/app run start
     env_file: .env
     restart: unless-stopped
-    labels:
-      com.getarcaneapp.arcane.updater: 'true'
     # Sur internal (db/redis) ET sur le réseau Caddy (front). Aucun port publié :
     # Caddy l'atteint via `reverse_proxy veriterra:3000`.
     networks:
@@ -91,8 +93,6 @@ services:
     env_file: .env
     restart: unless-stopped
     stop_grace_period: 30s
-    labels:
-      com.getarcaneapp.arcane.updater: 'true'
     networks:
       - internal
     healthcheck:

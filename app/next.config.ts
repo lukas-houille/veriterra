@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   // @veriterra/shared is plain TS source, so Next transpiles it. @veriterra/db is built to JS
   // and kept EXTERNAL (below) because it embeds the Prisma 7 client (wasm + dynamic
   // requires) which must not be bundled.
-  transpilePackages: ['@veriterra/shared'],
+  transpilePackages: ['@veriterra/shared', '@veriterra/ui'],
   // Server-only / native packages required at runtime from node_modules, never bundled.
   serverExternalPackages: [
     '@veriterra/db',

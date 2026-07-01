@@ -4,11 +4,13 @@
 
 ## Où on en est
 
-**Tranche 0 — Socle : FAITE (en attente de revue + merge).** Branche `feat/socle-tranche-0`.
+**Tranche 0 — Socle : FAITE, mergée (PR #1-3) et DÉPLOYÉE en prod** via Arcane sur `veriterra.lukas-houille.com` (image GHCR, Caddy TLS, `migrate` one-shot exit 0). Couvre US-0.1 (auth OIDC Pocket ID), US-0.2 (multi-tenant + RLS + test d'isolation), US-0.3 (stack déployable).
 
-Couvre US-0.1 (auth OIDC Pocket ID), US-0.2 (multi-tenant + RLS + test d'isolation), US-0.3 (stack déployable `docker compose up`).
+**Tranche design system — `@veriterra/ui` : FAITE (en attente de revue + merge).** Branche `feat/design-system-ui`.
 
-**Rebranding fait : la marque est Veriterra** (renommage complet, code compris : packages `@veriterra/*`, rôle DB `veriterra_app`, DB `veriterra`, image, repo, docs). Design system Veriterra intégré : `docs/design-system.md`, tokens + thème Tailwind v4 (`globals.css`), polices Archivo + Spline Sans Mono (`next/font`), logo/favicon SVG, pages `/sign-in` et `/` habillées à la marque (indigo `#2F3B6E` primaire, accent soleil `#DB9B2C`). Les vrais écrans produit (avec les composants signature : DataBlock, ScoreGauge, etc.) arrivent en Tranche 1+.
+Bibliothèque de composants du design system Veriterra, construite comme **package syncable vers claude.ai/design** (le run `/design-sync` viendra ensuite). 11 composants (core + signature), tokens déplacés dans le package (source de vérité unique), polices vendorisées en `@font-face`. Voir la section dédiée plus bas.
+
+**Rebranding fait : la marque est Veriterra** (renommage complet, code compris : packages `@veriterra/*`, rôle DB `veriterra_app`, DB `veriterra`, image, repo, docs). Design system : `docs/design-system.md` (spec), et désormais son **implémentation réelle** dans `packages/ui` (indigo `#2F3B6E` primaire, accent soleil `#DB9B2C`, polices Archivo + Spline Sans Mono).
 
 ### Vérifié de bout en bout
 - `pnpm lint`, `pnpm typecheck`, `pnpm build` : verts.
@@ -16,6 +18,21 @@ Couvre US-0.1 (auth OIDC Pocket ID), US-0.2 (multi-tenant + RLS + test d'isolati
 - `pnpm --filter @veriterra/app test:e2e` (local) : accès protégé → redirection `/sign-in` au vert. Flux OIDC complet via mock : câblé en CI (`E2E_OIDC=1`).
 - `docker compose up` : `db`, `redis`, `app`, `worker` **healthy** ; `migrate` exit 0 ; `GET /api/health` → 200 `{"status":"ok","checks":{"db":true,"redis":true}}` ; `/` sans session → 307 `/sign-in`.
 - En base : `veriterra_app` sans `rolsuper`/`rolbypassrls`, RLS **ENABLE+FORCE** sur `Organisation` et `Membership`, policies `tenant_isolation` présentes, PostGIS OK.
+
+## Tranche design system — `@veriterra/ui`
+
+Nouveau package workspace `packages/ui` (`@veriterra/ui`), pensé pour être **syncable vers claude.ai/design** (package-shape de `/design-sync`).
+
+- **11 composants** (fidèles à `docs/design-system.md`, chacun avec son type `*Props` exporté et ses tests) :
+  - Primitives (§6) : `Button` (CVA + variantes default/secondary/ghost/destructive, tailles sm/default/lg, `asChild` via Radix Slot), `Card` (+ Header/Title/Description/Content/Footer), `Badge` (5 statuts), `Input`, `Tabs` (Radix).
+  - Signature (§7) : `ConfidenceDots`, `DataBlock` (bloc « donnée sourcée », bascule `unavailable` → `UnavailableState`), `UnavailableState`, `ScoreGauge` (anneau SVG), `AlertChip`, `StatusPin`.
+- **Tokens = source de vérité unique** : déplacés de `app/globals.css` vers `packages/ui/src/styles/theme.css` (`--vt-*`, variables shadcn light/dark, mapping `@theme inline`, `.font-data`). L'app les `@import` + `@source` vers `packages/ui/src`.
+- **Polices vendorisées** : `@fontsource-variable/{archivo,spline-sans-mono}` copiées en woff2 sous `packages/ui/src/styles/fonts/`, servies par `@font-face` dans le thème. L'app **abandonne `next/font`** (parité exacte app/bundle design-sync, plus de dépendance Google Fonts au build).
+- **Build** : `tsc` (émet `dist/**` ESM + `.d.ts`) + `@tailwindcss/cli` (compile `dist/veriterra.css` = tokens + `@font-face` + utilitaires des composants) + copie `dist/fonts`. Exactement ce que `/design-sync` (package-shape) consomme.
+- **Consommation par l'app** : en **source** via `transpilePackages` (comme `@veriterra/shared`) ; imports relatifs internes **extensionless** (obligatoire pour Turbopack, cf. écart ci-dessous). `dist/` gitignoré, uniquement pour design-sync.
+- **Vérifié** : `pnpm --filter @veriterra/ui build/test/typecheck` (59 tests), `pnpm lint`, `pnpm --filter @veriterra/app build` (Next, thème du package + composants), suite complète `pnpm test` (db 8 · ui 59 · app 2 · worker 1). Sélecteurs e2e préservés (texte des boutons inchangé) → e2e validé par la CI (mock OIDC).
+- **Revue en contexte neuf : GO** (re-vérifiée empiriquement : package + app buildent/testent au vert). Corrigés au passage : `input.tsx` `ring-ring` → `focus-visible:ring-ring`, `lucide-react` retiré (inutilisé, reviendra avec les icônes), `app` dep en `workspace:*`.
+- **Suivis non bloquants** : (a) cible tactile mobile du `Button` `default` à 40px (§9 demande ≥44px en mobile, à arbitrer, ex. `min-h-11 md:h-10`) ; (b) `AlertChip` utilise les hex exacts de §7 (cohérent avec la spec mais pas les classes token comme `Badge`) ; (c) `RadarScore` et la variante prix/score de `StatusPin` (§7) restent en 2e vague.
 
 ## Décisions structurantes (validées avec le porteur)
 
@@ -27,6 +44,8 @@ Couvre US-0.1 (auth OIDC Pocket ID), US-0.2 (multi-tenant + RLS + test d'isolati
 ## Stack effective (versions épinglées)
 
 Next 16.2.9 (App Router, Turbopack) · React 19.2 · Auth.js `next-auth@5.0.0-beta.31` (JWT, provider OIDC générique) · Prisma 7.8 (client Rust-free wasm + `@prisma/adapter-pg`) · Postgres 17 + PostGIS 3.5 (`imresamu/postgis`, multi-arch) · Redis 7 · BullMQ 5.79 + ioredis 5.11 · Tailwind 4 · TypeScript 5.9.3 · Vitest 4 · Playwright 1.61 · ESLint 10 (typescript-eslint, flat config) · pnpm 9.13 workspaces · Node 22.
+
+Design system (`@veriterra/ui`) : class-variance-authority · clsx · tailwind-merge 3 · lucide-react · @radix-ui/react-{slot,tabs} · @fontsource-variable/{archivo,spline-sans-mono} (vendorisées) · @tailwindcss/cli 4 · @testing-library/react + jsdom (Vitest).
 
 ## Architecture d'isolation (le cœur)
 
@@ -41,6 +60,8 @@ Next 16.2.9 (App Router, Turbopack) · React 19.2 · Auth.js `next-auth@5.0.0-be
 - **`@veriterra/db` compilé en `dist` + marqué externe dans Next** : le client Prisma 7 (wasm + requires dynamiques) ne se bundle pas. Le client généré est émis en frère de `src`/`dist` (`packages/db/generated`) et importé via `../generated/prisma/index.js` (un seul chemin valable depuis la source ET le build).
 - **Worker en `tsx`** (pas de bundling) pour éviter le même écueil Prisma. Le `dev` et le `test` racine buildent `@veriterra/db` d'abord.
 - **Next 16** : `middleware` renommé en `proxy` (`app/src/proxy.ts`).
+- **Imports relatifs de `@veriterra/ui` : extensionless** (`./button`, `../lib/cn`), PAS `.js`. Turbopack (qui transpile la source du package) ne résout pas `.js` → `.tsx` ; `tsc` et Vitest le font, mais pas le build Next. Convention alignée sur `@veriterra/shared`. Le `dist/` (esbuild de design-sync) résout aussi l'extensionless.
+- **Warning Next « multiple lockfiles »** : un `~/package-lock.json` traîne dans le home et Next le choisit comme racine. Sans effet sur le build (vert), à nettoyer côté poste (ou fixer `turbopack.root`).
 - **Image Docker unique « grasse »** (toutes deps) ; `app`/`worker`/`migrate` la lancent avec des `command` différentes. Slimming en images séparées (standalone) = à suivre.
 - **`pnpm --filter X deploy`** entre en collision avec la commande intégrée pnpm → toujours `run deploy`.
 - **Mot de passe `veriterra_app`** par défaut dans la migration RLS (dev). En prod : pré-provisionner le rôle avec un secret fort avant la migration (le `IF NOT EXISTS` ne le recrée alors pas). À durcir.
@@ -67,6 +88,8 @@ Suivis tracés (non bloquants) : M5 secrets app avec défauts `change-me` (fail-
 
 ## Prochaine étape
 
-- Pousser `feat/socle-tranche-0`, ouvrir la PR, CI verte, merge → `release.yml` pousse l'image sur GHCR (Arcane redéploie).
-- Puis **Tranche 1** (créer un terrain de bout en bout : BAN, cadastre, clic parcelle, fiche, dashboard carte minimale). Premières colonnes geometry PostGIS (modèle déjà prêt) ; toute nouvelle table tenant DOIT activer RLS (la garde M3 le vérifie).
-- Durcissements : secret/rôle `veriterra_app` en prod, image Docker slim (standalone), headers de sécurité, rate limiting, fail-fast sur `AUTH_SECRET`.
+- Pousser `feat/design-system-ui`, ouvrir la PR, CI verte, merge.
+- **Lancer `/design-sync`** : le dépôt est désormais syncable. Écrire `.design-sync/config.json` (`pkg: @veriterra/ui`, `globalName`, `cssEntry: dist/veriterra.css`, `tokensGlob`, `extraFonts` vers les woff2, `buildCmd`), lancer le convertisseur + validate, authoring/grading des previews, upload vers claude.ai/design.
+- **2e vague de composants** : `Select`, `Dialog`, `Sheet`, `Tooltip`, `Table`, `RadarScore`.
+- Puis **Tranche 1** (créer un terrain de bout en bout : BAN, cadastre, clic parcelle, fiche, dashboard carte minimale), en habillant avec `@veriterra/ui`. Premières colonnes geometry PostGIS (modèle prêt) ; toute nouvelle table tenant DOIT activer RLS (garde M3).
+- Durcissements prod : secret/rôle `veriterra_app`, `POSTGRES_PASSWORD`/`AUTH_SECRET` forts, image Docker slim (standalone), headers de sécurité, rate limiting, fail-fast sur `AUTH_SECRET`.

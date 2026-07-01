@@ -1,0 +1,9 @@
+/* Entrée du build CSS autonome de @veriterra/ui.
+   Produit dist/veriterra.css = tokens + @font-face + utilitaires Tailwind
+   réellement employés par les composants. Consommé tel quel par design-sync. */
+@import 'tailwindcss';
+@import './theme.css';
+
+/* Tailwind v4 : scanner les composants du package pour générer leurs utilitaires. */
+@source '../primitives';
+@source '../signature';

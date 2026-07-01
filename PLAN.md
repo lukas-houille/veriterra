@@ -30,10 +30,10 @@ Sortie : on note contre son besoin, on filtre, on compare, on décide.
 Position du soleil, journée animée, ombres temps réel relief plus BD TOPO, vue 3D, version 2.5D mobile. La fonctionnalité signature. Cadrer une preuve de perf sur une parcelle réelle (risque R9).
 Stories : US-4.1.
 
-## Tranche 5 — Suivi (CRM) et mobile
-Statuts, photos, notes, **visites planifiées + agenda** (US-5.6), liens externes multiples (US-5.7), outils de mesure (US-1.5), PWA installable avec offline partiel.
-Stories : US-5.1, US-5.3, US-5.6, US-5.7, US-1.5, US-6.1.
-Sortie : suivi utilisable, app installable.
+## Tranche 5 — Suivi (CRM), collaboration et mobile
+Statuts, photos, notes, **documents attachés** (étude de sol, bornage, CU ; stockage objet — US-5.8), **collaboration à plusieurs sur le projet** (invitation, rôles ; le modèle `Membership` + RLS est déjà posé — US-0.4), **visites planifiées + agenda** (US-5.6), liens externes multiples (US-5.7), outils de mesure (US-1.5), PWA installable avec offline partiel.
+Stories : US-5.1, US-5.3, US-5.8, US-0.4, US-5.6, US-5.7, US-1.5, US-6.1.
+Sortie : suivi utilisable à plusieurs, app installable.
 
 ## Jalon MVP
 À la fin de la tranche 5, l'outil doit servir sur cinq terrains réels. On ne va pas plus loin tant que ce n'est pas vrai (risque R13).
@@ -55,7 +55,7 @@ PDF de synthèse sourcé, export comparatif et GeoJSON, synthèse IA à la deman
 Section admin séparée protégée par rôle. Story : US-8.1.
 
 ## Tranche 11 — B2B et marketplace
-L'autre côté : mise en relation de l'acheteur qualifié (parcelle + projet + budget, consentement opt-in) avec constructeurs, lotisseurs, agents. Back-office pro, partage conditionné au consentement. Stories : US-8.2, US-8.3.
+L'autre côté : mise en relation de l'acheteur qualifié (parcelle + projet + budget, consentement opt-in) avec constructeurs, lotisseurs, agents. Back-office pro, partage conditionné au consentement, **partage externe d'un document par un tiers** (propriétaire qui dépose une étude de sol via lien révocable — US-8.4). Stories : US-8.2, US-8.3, US-8.4.
 
 ## Plus tard
 Durcissement SaaS public, AR limites cadastrales, import modèle 3D.

@@ -69,16 +69,19 @@ async function queryApiCarto(params: URLSearchParams): Promise<ApiCartoFeature |
   return data.features?.[0] ?? null;
 }
 
-/** Récupère une parcelle par son IDU (requête attributaire). Sans cache. */
+/**
+ * Récupère une parcelle par son IDU (requête attributaire). Sans cache.
+ * Attention : API Carto attend le numéro sur 4 caractères (zéros de tête conservés).
+ * Limite connue : pour les communes à arrondissements (Lyon, Paris, Marseille), l'IDU
+ * porte le code d'arrondissement alors que `code_insee` attend le code commune, donc la
+ * requête peut échouer. Le chemin principal (création) n'utilise PAS cette fonction : il
+ * persiste la donnée issue de la requête géométrique au clic (fetchParcelleAtPoint), qui
+ * fait autorité. À réserver aux usages où seul l'IDU est connu (enrichissement futur).
+ */
 export async function fetchParcelleFromApiByIdu(idu: string): Promise<ParcelleData> {
   const { insee, section, numero } = parseIdu(idu);
   const feature = await queryApiCarto(
-    new URLSearchParams({
-      code_insee: insee,
-      section,
-      numero: String(Number(numero)), // API Carto attend le numéro sans zéros de tête
-      _limit: '1',
-    }),
+    new URLSearchParams({ code_insee: insee, section, numero, _limit: '1' }),
   );
   if (!feature) throw new ParcelleNotFoundError(idu);
   return normalizeParcelleFeature(feature, idu);

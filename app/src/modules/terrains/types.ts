@@ -1,11 +1,25 @@
 import type { GeoJsonGeometry } from '@/lib/geo/types';
 
-/** Entrée de création d'un terrain (le client envoie les IDU choisis, pas la géométrie). */
+/**
+ * Parcelle envoyée par le client à la création. La donnée provient de la requête
+ * géométrique API Carto (au clic) qui fait autorité (IGN) et renvoie la géométrie, l'IDU,
+ * la surface et la commune. Le serveur valide la géométrie avant de la persister.
+ */
+export interface ParcelleInput {
+  idu: string;
+  commune: string;
+  section: string;
+  numero: string;
+  surfaceM2: number;
+  geojson: GeoJsonGeometry;
+}
+
+/** Entrée de création d'un terrain. */
 export interface CreateTerrainInput {
   label?: string;
   address: string;
   inseeCode: string;
-  idus: string[];
+  parcelles: ParcelleInput[];
   prixDemande?: number | null;
   lienAnnonce?: string | null;
   notes?: string | null;

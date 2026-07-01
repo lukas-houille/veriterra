@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { createTerrain, listTerrains } from '@/modules/terrains/service';
-import type { CreateTerrainInput } from '@/modules/terrains/types';
+import type { CreateTerrainInput, ParcelleInput } from '@/modules/terrains/types';
+import type { GeoJsonGeometry } from '@/lib/geo/types';
 
 export const runtime = 'nodejs';
 
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
   const input = parseCreateInput(body);
   if (!input) {
     return NextResponse.json(
-      { error: 'address, inseeCode et au moins une parcelle (idus) sont requis' },
+      { error: 'address, inseeCode et au moins une parcelle valide sont requis' },
       { status: 422 },
     );
   }
@@ -54,17 +55,44 @@ function parseCreateInput(body: unknown): CreateTerrainInput | null {
   const b = body as Record<string, unknown>;
   const address = typeof b.address === 'string' ? b.address.trim() : '';
   const inseeCode = typeof b.inseeCode === 'string' ? b.inseeCode.trim() : '';
-  const idus = Array.isArray(b.idus)
-    ? b.idus.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+  const parcelles = Array.isArray(b.parcelles)
+    ? b.parcelles.map(parseParcelle).filter((p): p is ParcelleInput => p !== null)
     : [];
-  if (!address || !inseeCode || idus.length === 0) return null;
+  if (!address || !inseeCode || parcelles.length === 0) return null;
   return {
     address,
     inseeCode,
-    idus,
+    parcelles,
     label: typeof b.label === 'string' ? b.label : undefined,
     prixDemande: typeof b.prixDemande === 'number' ? b.prixDemande : null,
     lienAnnonce: typeof b.lienAnnonce === 'string' ? b.lienAnnonce : null,
     notes: typeof b.notes === 'string' ? b.notes : null,
+  };
+}
+
+function parseParcelle(x: unknown): ParcelleInput | null {
+  if (typeof x !== 'object' || x === null) return null;
+  const p = x as Record<string, unknown>;
+  const geojson = p.geojson as { type?: unknown; coordinates?: unknown } | null;
+  if (
+    typeof p.idu !== 'string' ||
+    typeof p.commune !== 'string' ||
+    typeof p.section !== 'string' ||
+    typeof p.numero !== 'string' ||
+    typeof p.surfaceM2 !== 'number' ||
+    typeof geojson !== 'object' ||
+    geojson === null ||
+    (geojson.type !== 'Polygon' && geojson.type !== 'MultiPolygon') ||
+    !Array.isArray(geojson.coordinates)
+  ) {
+    return null;
+  }
+  return {
+    idu: p.idu,
+    commune: p.commune,
+    section: p.section,
+    numero: p.numero,
+    surfaceM2: p.surfaceM2,
+    geojson: geojson as GeoJsonGeometry,
   };
 }

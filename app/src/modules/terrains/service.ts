@@ -1,8 +1,17 @@
 import { forOrg, withOrg, type Prisma } from '@veriterra/db';
-import { fetchParcelleByIdu } from '@/lib/geo/apicarto';
 import type { GeoJsonGeometry } from '@/lib/geo/types';
 import { getEnrichTerrainQueue } from '@/lib/queues';
 import type { CreateTerrainInput, TerrainSummary } from './types';
+
+const PARCELLE_SOURCE = 'IGN API Carto Cadastre';
+
+/** Valide qu'une valeur est bien une géométrie GeoJSON Polygon/MultiPolygon exploitable. */
+function isValidGeometry(g: unknown): g is GeoJsonGeometry {
+  if (typeof g !== 'object' || g === null) return false;
+  const type = (g as { type?: unknown }).type;
+  const coordinates = (g as { coordinates?: unknown }).coordinates;
+  return (type === 'Polygon' || type === 'MultiPolygon') && Array.isArray(coordinates);
+}
 
 // Forme minimale d'une ligne terrain incluant ses parcelles (évite de dépendre des types
 // Prisma générés, notamment de la colonne géométrie `Unsupported`).
@@ -63,12 +72,16 @@ export async function createTerrain(
   userId: string | null,
   input: CreateTerrainInput,
 ): Promise<TerrainSummary> {
-  const idus = [...new Set(input.idus.map((s) => s.trim()).filter(Boolean))];
-  if (idus.length === 0) throw new Error('Au moins une parcelle est requise.');
-
-  const parcelles = await Promise.all(idus.map((idu) => fetchParcelleByIdu(idu)));
+  const parcelles = input.parcelles;
   const first = parcelles[0];
-  if (!first) throw new Error('Aucune parcelle récupérée.');
+  if (!first) throw new Error('Au moins une parcelle est requise.');
+  // On ne fait pas confiance aveuglément à la géométrie du client : on la valide avant
+  // ST_GeomFromGeoJSON (la donnée provient d'API Carto au clic, mais on borne quand même).
+  for (const p of parcelles) {
+    if (!isValidGeometry(p.geojson)) {
+      throw new Error(`Géométrie invalide pour la parcelle ${p.idu}.`);
+    }
+  }
   const label =
     input.label?.trim() ||
     `${first.commune} ${first.section} ${parcelles.map((p) => p.numero).join(', ')}`.trim();
@@ -97,7 +110,7 @@ export async function createTerrain(
           numero: p.numero,
           surfaceM2: p.surfaceM2,
           geojson: p.geojson as unknown as Prisma.InputJsonValue,
-          source: p.source,
+          source: PARCELLE_SOURCE,
         },
       });
       // Géométrie PostGIS depuis le GeoJSON, dans la même transaction tenant (RLS scoped).

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  @keyframes vtPulse{0%,100%{transform:scale(1);opacity:.55;}50%{transform:scale(1.7);opacity:0;}}
+  @keyframes vtRec{0%,100%{opacity:1;}50%{opacity:.35;}}
+  .vtscroll::-webkit-scrollbar{width:0;}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:linear-gradient(160deg,#2F3B6E,#161A2E);font-family:'Archivo',system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px;">
+
+  <!-- PHONE -->
+  <div style="width:392px;max-width:100%;height:812px;max-height:calc(100vh - 48px);background:#161A2E;border-radius:44px;padding:11px;box-shadow:0 40px 90px -30px rgba(0,0,0,0.7);position:relative;">
+    <div style="width:100%;height:100%;background:#F5F6FA;border-radius:34px;overflow:hidden;position:relative;display:flex;flex-direction:column;">
+
+      <!-- status bar -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 22px 6px;font-family:'Archivo',sans-serif;flex-shrink:0;">
+        <span style="font-size:13px;font-weight:700;">14:32</span>
+        <div style="width:120px;height:26px;background:#161A2E;border-radius:0 0 16px 16px;position:absolute;left:50%;top:0;transform:translateX(-50%);"></div>
+        <div style="display:flex;align-items:center;gap:5px;"><span style="font-size:11px;">▮▮▮</span><span style="font-size:11px;font-weight:600;">5G</span><span style="font-family:'Spline Sans Mono',monospace;font-size:11px;">87%</span></div>
+      </div>
+
+      <!-- header -->
+      <div style="display:flex;align-items:center;gap:12px;padding:6px 18px 12px;flex-shrink:0;">
+        <a href="Dashboard portefeuille.dc.html" style="width:34px;height:34px;border-radius:10px;background:#FFFFFF;border:1px solid #DADEE8;display:flex;align-items:center;justify-content:center;color:#161A2E;text-decoration:none;font-size:18px;">‹</a>
+        <div style="flex:1;">
+          <div style="font-size:16px;font-weight:700;letter-spacing:-0.01em;">Clos des Tilleuls</div>
+          <div style="font-size:11.5px;color:#6C7488;">Mode visite · Poisy</div>
+        </div>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-family:'Spline Sans Mono',monospace;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:#C0432E;background:#F8E7E2;border:1px solid #EAC3B9;border-radius:999px;padding:4px 9px;"><span style="width:6px;height:6px;border-radius:50%;background:#C0432E;animation:vtRec 1.4s infinite;"></span>En visite</span>
+      </div>
+
+      <!-- scroll -->
+      <div class="vtscroll" style="flex:1;overflow-y:auto;padding:0 18px 110px;">
+
+        <!-- GPS verif -->
+        <div style="background:#E7F2EC;border:1px solid #C4DDD0;border-radius:14px;padding:13px 15px;display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+          <div style="width:34px;height:34px;border-radius:50%;background:#2E7D5B;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;">✓</div>
+          <div style="flex:1;">
+            <div style="font-size:13.5px;font-weight:700;color:#1B5E43;">Bonne parcelle confirmée</div>
+            <div style="font-family:'Spline Sans Mono',monospace;font-size:11px;color:#3C7A5E;">AB 142 · vous êtes à 8 m du centre</div>
+          </div>
+        </div>
+
+        <!-- mini map -->
+        <div style="position:relative;height:150px;border:1px solid #DADEE8;border-radius:14px;overflow:hidden;margin-bottom:16px;background:#E6EAF2;">
+          <svg viewBox="0 0 360 150" preserveAspectRatio="none" width="100%" height="100%" style="position:absolute;inset:0;">
+            <rect width="360" height="150" fill="#E6EAF2"></rect>
+            <path d="M-5,92 C90,80 180,108 280,92 C320,84 350,92 365,88" stroke="#C2D3E6" stroke-width="9" fill="none"></path>
+            <path d="M130,-5 L150,155" stroke="#FFFFFF" stroke-width="6" fill="none"></path>
+            <g stroke="#D2D9E6" stroke-width="1" fill="none"><rect x="150" y="44" width="58" height="46"></rect></g>
+            <rect x="150" y="44" width="58" height="46" fill="#DB9B2C" fill-opacity="0.18" stroke="#DB9B2C" stroke-width="2" stroke-dasharray="5 4"></rect>
+          </svg>
+          <span style="position:absolute;left:179px;top:67px;width:46px;height:46px;border-radius:50%;background:rgba(47,59,110,0.3);transform:translate(-50%,-50%);animation:vtPulse 2s infinite;"></span>
+          <span style="position:absolute;left:179px;top:67px;width:16px;height:16px;border-radius:50%;background:#2F3B6E;border:3px solid #fff;transform:translate(-50%,-50%);box-shadow:0 1px 4px rgba(22,26,46,.5);"></span>
+        </div>
+
+        <!-- capture actions -->
+        <div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;margin-bottom:10px;">Capturer</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;">
+          <button onClick="{{addPhoto}}" style="border:1px solid #DADEE8;background:#FFF;border-radius:14px;padding:14px 6px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:7px;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2F3B6E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4l1.5 2h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l1.5-2z"></path><circle cx="12" cy="13" r="3.2"></circle></svg>
+            <span style="font-size:12px;font-weight:600;color:#161A2E;">Photo</span>
+          </button>
+          <button onClick="{{toggleRec}}" style="{{recBtnStyle}}">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{{recIconColor}}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M6 11a6 6 0 0 0 12 0M12 17v4"></path></svg>
+            <span style="font-size:12px;font-weight:600;color:{{recLabelColor}};">{{recLabel}}</span>
+          </button>
+          <button onClick="{{openAR}}" style="border:1px solid #DADEE8;background:#FFF;border-radius:14px;padding:14px 6px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:7px;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#DB9B2C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="3.5"></circle><path d="M12 4v1.5M5 13H3.5M20.5 13H19M6.5 7.5l-1-1M18.5 7.5l1-1"></path><path d="M4 20h16"></path></svg>
+            <span style="font-size:12px;font-weight:600;color:#161A2E;">Soleil AR</span>
+          </button>
+        </div>
+
+        <!-- photos -->
+        <sc-if value="{{hasPhotos}}" hint-placeholder-val="{{false}}">
+          <div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:16px;padding-bottom:2px;">
+            <sc-for list="{{photos}}" as="p" hint-placeholder-count="2">
+              <div style="width:74px;height:74px;flex-shrink:0;border-radius:12px;border:1px solid #DADEE8;background-color:#E9ECF2;background-image:repeating-linear-gradient(135deg,rgba(47,59,110,0.08) 0 7px,transparent 7px 14px);display:flex;align-items:flex-end;justify-content:flex-start;padding:6px;"><span style="font-family:'Spline Sans Mono',monospace;font-size:9px;color:#6C7488;">{{p.label}}</span></div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- memos -->
+        <sc-if value="{{hasMemos}}" hint-placeholder-val="{{false}}">
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+            <sc-for list="{{memos}}" as="m" hint-placeholder-count="1">
+              <div style="display:flex;align-items:center;gap:11px;background:#FFF;border:1px solid #DADEE8;border-radius:12px;padding:11px 13px;">
+                <div style="width:30px;height:30px;border-radius:50%;background:#EEF0F8;color:#2F3B6E;display:flex;align-items:center;justify-content:center;font-size:13px;">▶</div>
+                <div style="flex:1;height:18px;display:flex;align-items:center;gap:2px;">
+                  <sc-for list="{{m.bars}}" as="b" hint-placeholder-count="14"><span style="{{b}}"></span></sc-for>
+                </div>
+                <span style="font-family:'Spline Sans Mono',monospace;font-size:12px;color:#6C7488;">{{m.dur}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- note -->
+        <div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;margin-bottom:8px;">Note</div>
+        <textarea value="{{note}}" onChange="{{onNote}}" placeholder="Terrain en pente douce, beau dégagement au sud, voisin en construction…" style="width:100%;min-height:64px;resize:none;border:1px solid #DADEE8;border-radius:12px;padding:11px 13px;font-family:'Archivo',sans-serif;font-size:13.5px;color:#161A2E;outline:none;margin-bottom:18px;"></textarea>
+
+        <!-- statut -->
+        <div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;margin-bottom:10px;">Statut après visite</div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;">
+          <sc-for list="{{statusOpts}}" as="o" hint-placeholder-count="4"><button onClick="{{o.pick}}" style="{{o.style}}"><span style="{{o.dot}}"></span>{{o.label}}</button></sc-for>
+        </div>
+      </div>
+
+      <!-- bottom bar -->
+      <div style="position:absolute;left:0;right:0;bottom:0;padding:14px 18px 26px;background:linear-gradient(180deg,rgba(245,246,250,0),#F5F6FA 30%);">
+        <button onClick="{{finish}}" style="width:100%;border:none;background:#2F3B6E;color:#FFF;font-family:'Archivo',sans-serif;font-size:15px;font-weight:700;padding:15px;border-radius:14px;cursor:pointer;">Terminer la visite</button>
+      </div>
+
+      <!-- AR overlay -->
+      <sc-if value="{{arOpen}}" hint-placeholder-val="{{false}}">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,#2A3450,#10131F);border-radius:34px;overflow:hidden;display:flex;flex-direction:column;">
+          <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.04) 1px,transparent 1px);background-size:34px 34px;"></div>
+          <div style="position:relative;display:flex;align-items:center;justify-content:space-between;padding:50px 20px 0;">
+            <span style="font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(255,255,255,0.7);letter-spacing:0.06em;">RÉALITÉ AUGMENTÉE</span>
+            <button onClick="{{closeAR}}" style="width:32px;height:32px;border-radius:50%;border:none;background:rgba(255,255,255,0.16);color:#FFF;font-size:17px;cursor:pointer;">×</button>
+          </div>
+          <div style="position:relative;flex:1;display:flex;align-items:center;justify-content:center;">
+            <svg viewBox="0 0 340 240" width="92%">
+              <path d="M30,210 Q170,20 310,210" fill="none" stroke="rgba(251,224,138,0.5)" stroke-width="2" stroke-dasharray="2 6"></path>
+              <line x1="20" y1="210" x2="320" y2="210" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"></line>
+              <circle cx="60" cy="178" r="4" fill="rgba(255,255,255,0.6)"></circle>
+              <circle cx="120" cy="96" r="4" fill="rgba(255,255,255,0.6)"></circle>
+              <circle cx="225" cy="74" r="4" fill="rgba(255,255,255,0.6)"></circle>
+              <circle cx="285" cy="150" r="4" fill="rgba(255,255,255,0.6)"></circle>
+              <circle cx="205" cy="70" r="30" fill="rgba(251,224,138,0.25)"></circle>
+              <circle cx="205" cy="70" r="13" fill="#FBE08A"></circle>
+              <text x="40" y="230" font-family="Spline Sans Mono,monospace" font-size="11" fill="rgba(255,255,255,0.75)">06:12</text>
+              <text x="300" y="230" text-anchor="end" font-family="Spline Sans Mono,monospace" font-size="11" fill="rgba(255,255,255,0.75)">20:48</text>
+            </svg>
+          </div>
+          <div style="position:relative;padding:0 22px 40px;text-align:center;">
+            <div style="font-size:17px;font-weight:700;color:#FFF;margin-bottom:4px;">Parcours du soleil aujourd'hui</div>
+            <div style="font-family:'Spline Sans Mono',monospace;font-size:12px;color:rgba(255,255,255,0.7);">Maintenant 14:32 · plein sud-ouest · hauteur 38°</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- done overlay -->
+      <sc-if value="{{done}}" hint-placeholder-val="{{false}}">
+        <div style="position:absolute;inset:0;background:rgba(16,20,34,0.55);border-radius:34px;display:flex;align-items:flex-end;">
+          <div style="background:#FFF;width:100%;border-radius:26px 26px 34px 34px;padding:28px 24px 30px;text-align:center;">
+            <div style="width:58px;height:58px;border-radius:50%;background:#E7F2EC;color:#2E7D5B;display:flex;align-items:center;justify-content:center;font-size:29px;margin:0 auto 14px;">✓</div>
+            <h3 style="margin:0 0 6px;font-size:20px;font-weight:800;">Visite enregistrée</h3>
+            <p style="margin:0 0 18px;font-size:13.5px;color:#6C7488;line-height:1.5;">{{summary}} · synchronisé avec votre portefeuille.</p>
+            <a href="Dashboard portefeuille.dc.html" style="display:block;background:#2F3B6E;color:#FFF;font-size:14.5px;font-weight:600;padding:13px;border-radius:12px;text-decoration:none;margin-bottom:9px;">Retour au terrain</a>
+            <button onClick="{{reopen}}" style="width:100%;border:1px solid #DADEE8;background:#FFF;color:#4C5468;font-family:'Archivo',sans-serif;font-size:14px;font-weight:600;padding:12px;border-radius:12px;cursor:pointer;">Continuer la visite</button>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:440,&quot;height&quot;:880}}">
+class Component extends DCLogic {
+  state = { photos: 1, recording: false, recTime: 0, memos: [12], note: '', statut: 'Prometteur', arOpen: false, done: false };
+  STATUS = { 'À étudier': '#98A0B0', 'Prometteur': '#2E7D5B', 'Réservé': '#DB9B2C', 'Écarté': '#C0432E' };
+
+  componentWillUnmount() { if (this._t) clearInterval(this._t); }
+  addPhoto() { this.setState(s => ({ photos: s.photos + 1 })); }
+  toggleRec() {
+    if (this.state.recording) {
+      clearInterval(this._t); this._t = null;
+      this.setState(s => ({ recording: false, memos: [...s.memos, Math.max(1, s.recTime)], recTime: 0 }));
+    } else {
+      this.setState({ recording: true, recTime: 0 });
+      this._t = setInterval(() => this.setState(s => ({ recTime: s.recTime + 1 })), 1000);
+    }
+  }
+  mmss(s) { const m = Math.floor(s / 60), x = s % 60; return m + ':' + (x < 10 ? '0' : '') + x; }
+
+  renderVals() {
+    const S = this.state;
+    const bars = seed => Array.from({ length: 16 }, (_, i) => { const h = 4 + Math.round((Math.sin(seed + i * 1.3) * 0.5 + 0.5) * 12); return `display:inline-block;width:2px;height:${h}px;border-radius:1px;background:#C4CCDB;`; });
+    return {
+      addPhoto: () => this.addPhoto(), toggleRec: () => this.toggleRec(), openAR: () => this.setState({ arOpen: true }), closeAR: () => this.setState({ arOpen: false }),
+      recLabel: S.recording ? this.mmss(S.recTime) : 'Mémo', recLabelColor: S.recording ? '#C0432E' : '#161A2E', recIconColor: S.recording ? '#C0432E' : '#2F3B6E',
+      recBtnStyle: `border:1px solid ${S.recording ? '#EAC3B9' : '#DADEE8'};background:${S.recording ? '#F8E7E2' : '#FFF'};border-radius:14px;padding:14px 6px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:7px;`,
+      hasPhotos: S.photos > 0, photos: Array.from({ length: S.photos }, (_, i) => ({ label: 'IMG ' + (i + 1) })),
+      hasMemos: S.memos.length > 0, memos: S.memos.map((d, i) => ({ dur: this.mmss(d), bars: bars(i + 1).slice(0, 14) })),
+      note: S.note, onNote: e => this.setState({ note: e.target.value }),
+      statusOpts: Object.keys(this.STATUS).map(st => { const on = S.statut === st, c = this.STATUS[st]; return { label: st, pick: () => this.setState({ statut: st }), dot: `width:7px;height:7px;border-radius:50%;background:${c};`, style: `display:inline-flex;align-items:center;gap:6px;border:1px solid ${on ? c : '#DADEE8'};background:${on ? c + '1A' : '#FFF'};color:${on ? c : '#4C5468'};font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;padding:8px 12px;border-radius:9px;cursor:pointer;` }; }),
+      arOpen: S.arOpen, done: S.done,
+      finish: () => { if (this._t) { clearInterval(this._t); this._t = null; } this.setState({ recording: false, done: true }); },
+      reopen: () => this.setState({ done: false }),
+      summary: S.photos + (S.photos > 1 ? ' photos' : ' photo') + ', ' + S.memos.length + (S.memos.length > 1 ? ' mémos' : ' mémo')
+    };
+  }
+}
+</script>
+</body>
+</html>

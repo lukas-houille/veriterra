@@ -12,7 +12,7 @@ test('landing page is public', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveURL(/\/$/);
   await expect(
-    page.getByRole('heading', { name: /Acheter un terrain en confiance/i }),
+    page.getByRole('heading', { name: /Toutes les données d'un terrain/i }),
   ).toBeVisible();
 });
 

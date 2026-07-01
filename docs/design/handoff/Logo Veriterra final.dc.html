@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:#ECEBE7;}
+</style>
+</helmet>
+
+<div style="min-width:max-content;background-color:#ECEBE7;background-image:radial-gradient(rgba(0,0,0,0.05) 1px, transparent 1px);background-size:26px 26px;padding:60px;font-family:'Archivo',system-ui,sans-serif;color:#161A2E;">
+
+  <div style="max-width:900px;margin-bottom:36px;">
+    <div style="font-family:'Spline Sans Mono',monospace;font-size:12px;letter-spacing:0.18em;color:#7A7E96;text-transform:uppercase;margin-bottom:14px;">Veriterra · logo verrouillé</div>
+    <h1 style="margin:0 0 12px;font-size:34px;font-weight:800;letter-spacing:-0.03em;line-height:1.1;">Le logo</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:#56596E;max-width:740px;">Un bloc carré de parcelles cadastrales sur fond gris, contour foncé, ta parcelle en ambre, et les ombres des bâtiments voisins qui débordent du carré. Coins légèrement arrondis, centré dans le canvas, exporté en SVG.</p>
+  </div>
+
+  <!-- HERO LOCKUP : mark left, wordmark right -->
+  <div style="background:#FFFFFF;border:1px solid #DADCE8;border-radius:16px;padding:40px 52px;display:flex;align-items:center;gap:26px;margin-bottom:22px;box-shadow:0 16px 36px -22px rgba(22,26,46,0.3);width:700px;">
+    <svg width="118" height="118" viewBox="0 0 152 152" fill="none" style="flex-shrink:0;overflow:visible;" aria-hidden="true">
+      <defs><clipPath id="cfh"><rect x="22" y="22" width="108" height="108" rx="8"></rect></clipPath></defs>
+      <rect x="22" y="22" width="108" height="108" rx="8" fill="#EAECF4"></rect>
+      <g clip-path="url(#cfh)">
+        <rect x="63" y="65" width="37" height="65" fill="#DB9B2C"></rect>
+        <rect x="22" y="22" width="41" height="56" fill="none" stroke="#2F3B6E" stroke-width="1.5"></rect>
+        <rect x="22" y="78" width="41" height="52" fill="none" stroke="#2F3B6E" stroke-width="1.5"></rect>
+        <rect x="63" y="22" width="37" height="43" fill="none" stroke="#2F3B6E" stroke-width="1.5"></rect>
+        <rect x="63" y="65" width="37" height="65" fill="none" stroke="#2F3B6E" stroke-width="1.5"></rect>
+        <rect x="100" y="22" width="30" height="37" fill="none" stroke="#2F3B6E" stroke-width="1.5"></rect>
+        <rect x="100" y="59" width="30" height="39" fill="none" stroke="#2F3B6E" stroke-width="1.5"></rect>
+        <rect x="100" y="98" width="30" height="32" fill="none" stroke="#2F3B6E" stroke-width="1.5"></rect>
+      </g>
+      <polygon points="34,36 50,36 68,51 68,63 52,63 34,48" fill="#2F3B6E" fill-opacity="{{sOp}}"></polygon>
+      <polygon points="70,40 85,40 103,55 103,68 88,68 70,53" fill="#2F3B6E" fill-opacity="{{sOp}}"></polygon>
+      <polygon points="106,102 118,102 136,117 136,134 124,134 106,119" fill="#2F3B6E" fill-opacity="{{sOp}}"></polygon>
+      <polygon points="30,108 45,108 63,123 63,134 48,134 30,119" fill="#2F3B6E" fill-opacity="{{sOp}}"></polygon>
+      <rect x="34" y="36" width="16" height="12" fill="#2F3B6E"></rect>
+      <rect x="70" y="40" width="15" height="13" fill="#2F3B6E"></rect>
+      <rect x="106" y="102" width="12" height="17" fill="#2F3B6E"></rect>
+      <rect x="30" y="108" width="15" height="11" fill="#2F3B6E"></rect>
+      <rect x="22" y="22" width="108" height="108" rx="8" fill="none" stroke="#2F3B6E" stroke-width="2"></rect>
+    </svg>
+    <span style="font-size:50px;font-weight:700;letter-spacing:-0.025em;color:#161A2E;">Veriterra</span>
+  </div>
+
+  <!-- DARK LOCKUP -->
+  <div style="background:#161A2E;border:1px solid #161A2E;border-radius:16px;padding:40px 52px;display:flex;align-items:center;gap:26px;margin-bottom:34px;width:700px;">
+    <svg width="118" height="118" viewBox="0 0 152 152" fill="none" style="flex-shrink:0;overflow:visible;" aria-hidden="true">
+      <defs><clipPath id="cfd"><rect x="22" y="22" width="108" height="108" rx="8"></rect></clipPath></defs>
+      <rect x="22" y="22" width="108" height="108" rx="8" fill="#222B52"></rect>
+      <g clip-path="url(#cfd)">
+        <rect x="63" y="65" width="37" height="65" fill="#DB9B2C"></rect>
+        <rect x="22" y="22" width="41" height="56" fill="none" stroke="#8E9CD8" stroke-width="1.5"></rect>
+        <rect x="22" y="78" width="41" height="52" fill="none" stroke="#8E9CD8" stroke-width="1.5"></rect>
+        <rect x="63" y="22" width="37" height="43" fill="none" stroke="#8E9CD8" stroke-width="1.5"></rect>
+        <rect x="63" y="65" width="37" height="65" fill="none" stroke="#8E9CD8" stroke-width="1.5"></rect>
+        <rect x="100" y="22" width="30" height="37" fill="none" stroke="#8E9CD8" stroke-width="1.5"></rect>
+        <rect x="100" y="59" width="30" height="39" fill="none" stroke="#8E9CD8" stroke-width="1.5"></rect>
+        <rect x="100" y="98" width="30" height="32" fill="none" stroke="#8E9CD8" stroke-width="1.5"></rect>
+      </g>
+      <polygon points="34,36 50,36 68,51 68,63 52,63 34,48" fill="#000000" fill-opacity="{{sOpDark}}"></polygon>
+      <polygon points="70,40 85,40 103,55 103,68 88,68 70,53" fill="#000000" fill-opacity="{{sOpDark}}"></polygon>
+      <polygon points="106,102 118,102 136,117 136,134 124,134 106,119" fill="#000000" fill-opacity="{{sOpDark}}"></polygon>
+      <polygon points="30,108 45,108 63,123 63,134 48,134 30,119" fill="#000000" fill-opacity="{{sOpDark}}"></polygon>
+      <rect x="34" y="36" width="16" height="12" fill="#C2CCEC"></rect>
+      <rect x="70" y="40" width="15" height="13" fill="#C2CCEC"></rect>
+      <rect x="106" y="102" width="12" height="17" fill="#C2CCEC"></rect>
+      <rect x="30" y="108" width="15" height="11" fill="#C2CCEC"></rect>
+      <rect x="22" y="22" width="108" height="108" rx="8" fill="none" stroke="#5A6BA8" stroke-width="2"></rect>
+    </svg>
+    <span style="font-size:50px;font-weight:700;letter-spacing:-0.025em;color:#FFFFFF;">Veriterra</span>
+  </div>
+
+  <!-- FICHIER SVG -->
+  <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:20px;">
+    <span style="font-family:'Spline Sans Mono',monospace;font-size:12px;letter-spacing:0.14em;color:#8A8576;text-transform:uppercase;">Fichier SVG exporté</span>
+    <span style="height:1px;flex:1;background:#D2D0C8;"></span>
+  </div>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch;">
+    <div style="background:#FFFFFF;border:1px solid #DADCE8;border-radius:14px;padding:22px;display:flex;align-items:center;gap:20px;">
+      <img src="assets/veriterra-mark.svg" width="104" height="104" alt="Veriterra symbole" style="display:block;">
+      <div style="background:#161A2E;border-radius:12px;padding:8px;"><img src="assets/veriterra-mark-dark.svg" width="88" height="88" alt="Veriterra symbole sombre" style="display:block;"></div>
+    </div>
+    <div style="flex:1;min-width:280px;background:#FFFFFF;border:1px solid #DADCE8;border-radius:14px;padding:22px;display:flex;flex-direction:column;justify-content:center;gap:10px;">
+      <div style="font-family:'Spline Sans Mono',monospace;font-size:12px;color:#2F3B6E;">assets/veriterra-mark.svg</div>
+      <div style="font-family:'Spline Sans Mono',monospace;font-size:12px;color:#2F3B6E;">assets/veriterra-mark-dark.svg</div>
+      <div style="font-size:13px;line-height:1.6;color:#56596E;margin-top:4px;">Coins arrondis (rx 8), fond transparent, bloc carré centré, ombres comprises dans le canvas. Prêts pour favicon, app icon et exports.</div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showShadows&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;section&quot;:&quot;Logo&quot;,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const showShadows = this.props.showShadows ?? true;
+    return {
+      sOp: showShadows ? 0.17 : 0,
+      sOpDark: showShadows ? 0.30 : 0
+    };
+  }
+}
+</script>
+</body>
+</html>

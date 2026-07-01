@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:#F5F6FA;background-image:radial-gradient(rgba(47,59,110,0.05) 1px,transparent 1px);background-size:26px 26px;font-family:'Archivo',system-ui,sans-serif;color:#161A2E;display:flex;flex-direction:column;">
+
+  <!-- top -->
+  <div style="display:flex;align-items:center;gap:16px;padding:16px 22px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <svg width="28" height="28" viewBox="0 0 152 152" fill="none" aria-hidden="true">
+        <defs><clipPath id="onav"><rect x="22" y="22" width="108" height="108" rx="10"></rect></clipPath></defs>
+        <rect x="22" y="22" width="108" height="108" rx="10" fill="#EAECF4"></rect>
+        <g clip-path="url(#onav)"><rect x="63" y="65" width="37" height="65" fill="#DB9B2C"></rect><rect x="22" y="22" width="41" height="56" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="22" y="78" width="41" height="52" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="63" y="22" width="37" height="43" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="63" y="65" width="37" height="65" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="100" y="22" width="30" height="37" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="100" y="59" width="30" height="39" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="100" y="98" width="30" height="32" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect></g>
+        <rect x="22" y="22" width="108" height="108" rx="10" fill="none" stroke="#2F3B6E" stroke-width="3"></rect>
+      </svg>
+      <span style="font-size:18px;font-weight:700;letter-spacing:-0.02em;">Veriterra</span>
+    </div>
+    <div style="flex:1;max-width:380px;margin:0 auto;">
+      <div style="height:6px;border-radius:3px;background:#E4E7EE;overflow:hidden;"><div style="height:100%;border-radius:3px;background:#2F3B6E;transition:width .3s;width:{{progress}};"></div></div>
+    </div>
+    <a href="Dashboard portefeuille.dc.html" style="font-size:13px;font-weight:600;color:#6C7488;text-decoration:none;">Passer</a>
+  </div>
+
+  <!-- card -->
+  <div style="flex:1;display:flex;align-items:flex-start;justify-content:center;padding:18px 18px 40px;">
+    <div style="width:100%;max-width:600px;background:#FFFFFF;border:1px solid #DADEE8;border-radius:18px;box-shadow:0 20px 50px -28px rgba(22,26,46,0.35);padding:32px;">
+
+      <sc-if value="{{done}}" hint-placeholder-val="{{false}}">
+        <div style="text-align:center;padding:14px 4px;">
+          <div style="width:64px;height:64px;border-radius:50%;background:#E7F2EC;color:#2E7D5B;display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 18px;">✓</div>
+          <h2 style="margin:0 0 8px;font-size:26px;font-weight:800;letter-spacing:-0.02em;">Votre espace est prêt</h2>
+          <p style="margin:0 0 22px;font-size:15px;color:#6C7488;line-height:1.6;">On a créé votre section « Recherche de terrain ». Vous pouvez ajouter un terrain ou explorer la carte.</p>
+          <div style="background:#F5F6FA;border:1px solid #EFF1F6;border-radius:12px;padding:16px;text-align:left;margin-bottom:22px;display:flex;flex-direction:column;gap:9px;">
+            <sc-for list="{{recap}}" as="r" hint-placeholder-count="4">
+              <div style="display:flex;justify-content:space-between;gap:12px;"><span style="font-size:13px;color:#6C7488;">{{r.k}}</span><span style="font-size:13px;font-weight:600;color:#161A2E;text-align:right;">{{r.v}}</span></div>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+            <a href="Explorer.dc.html" style="font-size:14px;font-weight:700;color:#161A2E;background:#DB9B2C;padding:12px 20px;border-radius:11px;text-decoration:none;">Explorer la carte</a>
+            <a href="Dashboard portefeuille.dc.html" style="font-size:14px;font-weight:600;color:#161A2E;background:#FFF;border:1px solid #DADEE8;padding:12px 20px;border-radius:11px;text-decoration:none;">Accéder à mon espace</a>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{wizard}}" hint-placeholder-val="{{true}}">
+        <div>
+          <div style="font-family:'Spline Sans Mono',monospace;font-size:11.5px;letter-spacing:0.08em;text-transform:uppercase;color:#98A0B0;margin-bottom:8px;">Étape {{step}} sur 4 · {{stepLabel}}</div>
+
+          <!-- STEP 1 -->
+          <sc-if value="{{s1}}" hint-placeholder-val="{{true}}">
+            <div>
+              <h2 style="margin:0 0 4px;font-size:24px;font-weight:800;letter-spacing:-0.02em;">Quel est votre projet ?</h2>
+              <p style="margin:0 0 22px;font-size:14.5px;color:#6C7488;line-height:1.5;">On adapte les critères et le score à votre objectif.</p>
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                <sc-for list="{{projetOpts}}" as="o" hint-placeholder-count="3">
+                  <button onClick="{{o.pick}}" style="{{o.style}}"><span style="{{o.radio}}"></span><span style="font-size:15px;font-weight:600;">{{o.label}}</span></button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- STEP 2 -->
+          <sc-if value="{{s2}}" hint-placeholder-val="{{false}}">
+            <div>
+              <h2 style="margin:0 0 4px;font-size:24px;font-weight:800;letter-spacing:-0.02em;">Où cherchez-vous ?</h2>
+              <p style="margin:0 0 22px;font-size:14.5px;color:#6C7488;line-height:1.5;">Une commune ou un secteur, et un rayon autour.</p>
+              <label style="font-size:12px;font-weight:600;color:#4C5468;display:block;margin-bottom:7px;">Commune ou secteur</label>
+              <input value="{{commune}}" onChange="{{onCommune}}" style="width:100%;border:1px solid #DADEE8;border-radius:10px;padding:12px 14px;font-family:'Archivo',sans-serif;font-size:14.5px;color:#161A2E;outline:none;margin-bottom:22px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><label style="font-size:12px;font-weight:600;color:#4C5468;">Rayon de recherche</label><span style="font-family:'Spline Sans Mono',monospace;font-size:14px;color:#2F3B6E;font-weight:500;">{{rayon}} km</span></div>
+              <input type="range" min="1" max="50" step="1" value="{{rayon}}" onChange="{{onRayon}}" style="width:100%;accent-color:#2F3B6E;cursor:pointer;">
+            </div>
+          </sc-if>
+
+          <!-- STEP 3 -->
+          <sc-if value="{{s3}}" hint-placeholder-val="{{false}}">
+            <div>
+              <h2 style="margin:0 0 4px;font-size:24px;font-weight:800;letter-spacing:-0.02em;">Votre budget et vos priorités</h2>
+              <p style="margin:0 0 22px;font-size:14.5px;color:#6C7488;line-height:1.5;">On s'en sert pour filtrer et calculer le score.</p>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><label style="font-size:12px;font-weight:600;color:#4C5468;">Budget maximum</label><span style="font-family:'Spline Sans Mono',monospace;font-size:14px;color:#2F3B6E;font-weight:500;">{{budgetDisp}}</span></div>
+              <input type="range" min="50000" max="600000" step="10000" value="{{budget}}" onChange="{{onBudget}}" style="width:100%;accent-color:#2F3B6E;cursor:pointer;margin-bottom:20px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><label style="font-size:12px;font-weight:600;color:#4C5468;">Surface minimale</label><span style="font-family:'Spline Sans Mono',monospace;font-size:14px;color:#2F3B6E;font-weight:500;">{{surfaceDisp}}</span></div>
+              <input type="range" min="200" max="2000" step="50" value="{{surfaceMin}}" onChange="{{onSurface}}" style="width:100%;accent-color:#2F3B6E;cursor:pointer;margin-bottom:22px;">
+              <label style="font-size:12px;font-weight:600;color:#4C5468;display:block;margin-bottom:9px;">Ce qui compte le plus</label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <sc-for list="{{prioriteOpts}}" as="o" hint-placeholder-count="6"><button onClick="{{o.toggle}}" style="{{o.style}}">{{o.label}}</button></sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- STEP 4 -->
+          <sc-if value="{{s4}}" hint-placeholder-val="{{false}}">
+            <div>
+              <h2 style="margin:0 0 4px;font-size:24px;font-weight:800;letter-spacing:-0.02em;">Où en êtes-vous ?</h2>
+              <p style="margin:0 0 22px;font-size:14.5px;color:#6C7488;line-height:1.5;">Pour calibrer les rappels et les alertes.</p>
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                <sc-for list="{{avancementOpts}}" as="o" hint-placeholder-count="3">
+                  <button onClick="{{o.pick}}" style="{{o.style}}"><span style="{{o.radio}}"></span><span style="font-size:15px;font-weight:600;">{{o.label}}</span></button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:28px;">
+            <button onClick="{{back}}" style="{{backStyle}}">Retour</button>
+            <button onClick="{{next}}" style="border:none;background:#2F3B6E;color:#FFF;font-family:'Archivo',sans-serif;font-size:14.5px;font-weight:600;padding:12px 22px;border-radius:11px;cursor:pointer;" style-hover="background:#222B52;">{{nextLabel}}</button>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:760,&quot;height&quot;:720}}">
+class Component extends DCLogic {
+  state = {
+    step: 1, done: false,
+    projet: 'Construire ma résidence principale', commune: 'Annecy et alentours', rayon: 15,
+    budget: 280000, surfaceMin: 600, priorites: ['Ensoleillement', 'Prix'], avancement: 'Je cherche activement'
+  };
+  PROJETS = ['Construire ma résidence principale', 'Résidence secondaire', 'Investissement locatif'];
+  AVANC = ['Je me renseigne', 'Je cherche activement', 'Je suis prêt à acheter'];
+  PRIOS = ['Ensoleillement', 'Prix', 'Calme', 'Constructibilité', 'Proximité écoles', 'Vue dégagée'];
+  LABELS = ['Projet', 'Zone', 'Critères', 'Avancement'];
+
+  fmt(n) { return n.toLocaleString('fr-FR'); }
+  next() { this.setState(s => s.step < 4 ? { step: s.step + 1 } : { done: true }); }
+  back() { this.setState(s => ({ step: Math.max(1, s.step - 1) })); }
+  togglePrio(p) { this.setState(s => ({ priorites: s.priorites.includes(p) ? s.priorites.filter(x => x !== p) : [...s.priorites, p] })); }
+
+  radioCard(label, sel, onClick) {
+    return {
+      label, pick: onClick,
+      style: `display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:1.5px solid ${sel ? '#2F3B6E' : '#DADEE8'};background:${sel ? '#EEF0F8' : '#FFF'};border-radius:12px;padding:15px 16px;cursor:pointer;font-family:'Archivo',sans-serif;color:#161A2E;`,
+      radio: `width:18px;height:18px;border-radius:50%;flex-shrink:0;border:2px solid ${sel ? '#2F3B6E' : '#C4CCDB'};background:${sel ? 'radial-gradient(circle,#2F3B6E 0 5px,#fff 6px 20px)' : '#fff'};`
+    };
+  }
+
+  renderVals() {
+    const S = this.state;
+    return {
+      progress: (S.step / 4 * 100) + '%', step: S.step, stepLabel: this.LABELS[S.step - 1],
+      done: S.done, wizard: !S.done,
+      s1: S.step === 1, s2: S.step === 2, s3: S.step === 3, s4: S.step === 4,
+      projetOpts: this.PROJETS.map(p => this.radioCard(p, S.projet === p, () => this.setState({ projet: p }))),
+      avancementOpts: this.AVANC.map(p => this.radioCard(p, S.avancement === p, () => this.setState({ avancement: p }))),
+      commune: S.commune, onCommune: e => this.setState({ commune: e.target.value }),
+      rayon: S.rayon, onRayon: e => this.setState({ rayon: +e.target.value }),
+      budget: S.budget, onBudget: e => this.setState({ budget: +e.target.value }), budgetDisp: this.fmt(S.budget) + ' €',
+      surfaceMin: S.surfaceMin, onSurface: e => this.setState({ surfaceMin: +e.target.value }), surfaceDisp: this.fmt(S.surfaceMin) + ' m²',
+      prioriteOpts: this.PRIOS.map(p => {
+        const on = S.priorites.includes(p);
+        return { label: p, toggle: () => this.togglePrio(p), style: `border:1px solid ${on ? '#2F3B6E' : '#DADEE8'};background:${on ? '#EEF0F8' : '#FFF'};color:${on ? '#2F3B6E' : '#4C5468'};font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;padding:8px 13px;border-radius:9px;cursor:pointer;` };
+      }),
+      next: () => this.next(), back: () => this.back(),
+      nextLabel: S.step < 4 ? 'Continuer' : 'Terminer',
+      backStyle: `border:1px solid #DADEE8;background:#FFF;color:#4C5468;font-family:'Archivo',sans-serif;font-size:14px;font-weight:600;padding:12px 18px;border-radius:11px;cursor:pointer;visibility:${S.step === 1 ? 'hidden' : 'visible'};`,
+      recap: [
+        { k: 'Projet', v: S.projet },
+        { k: 'Zone', v: S.commune + ' · ' + S.rayon + ' km' },
+        { k: 'Budget', v: 'jusqu\'à ' + this.fmt(S.budget) + ' €' },
+        { k: 'Priorités', v: S.priorites.join(', ') || 'Aucune' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

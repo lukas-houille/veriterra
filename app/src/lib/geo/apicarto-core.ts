@@ -97,3 +97,87 @@ export async function fetchParcelleAtPoint(lon: number, lat: number): Promise<Pa
   const feature = await queryApiCarto(new URLSearchParams({ geom, _limit: '1' }));
   return feature ? normalizeParcelleFeature(feature, feature.properties.idu ?? '') : null;
 }
+
+/** Parcelle candidate d'une recherche par zone (US-1.6). Sous-ensemble de ParcelleData. */
+export interface ParcelleInZone {
+  idu: string;
+  commune: string;
+  section: string;
+  numero: string;
+  surfaceM2: number;
+  geojson: GeoJsonGeometry;
+}
+
+/** Résultat d'une recherche par emprise. `truncated` = plafond atteint (zone trop large). */
+export interface ZoneParcellesResult {
+  parcelles: ParcelleInZone[];
+  truncated: boolean;
+}
+
+/** Plafond de features renvoyées par l'API Carto (au-delà, on invite à resserrer la zone). */
+export const ZONE_PARCELLE_LIMIT = 1000;
+
+/**
+ * Récupère les parcelles cadastrales intersectant une emprise rectangulaire (bbox WGS84,
+ * `[ouest, sud, est, nord]`), par requête géométrique API Carto. Pour US-1.6 (recherche
+ * par surface approchée dans la zone explorée). `truncated` indique que le plafond est
+ * atteint : le résultat est partiel, il faut resserrer la zone.
+ */
+export async function fetchParcellesInBbox(
+  bbox: [number, number, number, number],
+  opts: { limit?: number; signal?: AbortSignal } = {},
+): Promise<ZoneParcellesResult> {
+  const [minLng, minLat, maxLng, maxLat] = bbox;
+  const limit = Math.min(Math.max(1, opts.limit ?? ZONE_PARCELLE_LIMIT), ZONE_PARCELLE_LIMIT);
+  const geom = JSON.stringify({
+    type: 'Polygon',
+    coordinates: [
+      [
+        [minLng, minLat],
+        [maxLng, minLat],
+        [maxLng, maxLat],
+        [minLng, maxLat],
+        [minLng, minLat],
+      ],
+    ],
+  });
+  const res = await fetch(
+    `${APICARTO_PARCELLE_URL}?${new URLSearchParams({ geom, _limit: String(limit) }).toString()}`,
+    opts.signal ? { signal: opts.signal } : undefined,
+  );
+  if (!res.ok) throw new Error(`API Carto a répondu ${res.status}`);
+  const data = (await res.json()) as { features?: ApiCartoFeature[] };
+  const features = data.features ?? [];
+  // On écarte les parcelles sans contenance connue : la recherche par surface ne doit jamais
+  // traiter une donnée indisponible comme un 0 m² (règles inviolables 1 et 3). `truncated`
+  // reste calculé sur le nombre brut renvoyé (signal « zone au plafond »).
+  const parcelles = features
+    .filter((f) => typeof f.properties.contenance === 'number' && f.properties.contenance > 0)
+    .map((feature) => {
+      const p = normalizeParcelleFeature(feature, feature.properties.idu ?? '');
+      return {
+        idu: p.idu,
+        commune: p.commune,
+        section: p.section,
+        numero: p.numero,
+        surfaceM2: p.surfaceM2,
+        geojson: p.geojson,
+      };
+    });
+  return { parcelles, truncated: features.length >= limit };
+}
+
+/**
+ * Garde les parcelles dont la surface est à ±tolérance de la cible (en m²). Fonction pure,
+ * cœur de US-1.6 (recherche par surface approchée). Une tolérance négative est ramenée à sa
+ * valeur absolue ; une cible <= 0 ne retient rien.
+ */
+export function filterBySurface<T extends { surfaceM2: number }>(
+  parcelles: T[],
+  targetM2: number,
+  toleranceM2: number,
+): T[] {
+  if (!(targetM2 > 0)) return [];
+  const tol = Math.abs(toleranceM2);
+  return parcelles.filter((p) => Math.abs(p.surfaceM2 - targetM2) <= tol);
+}

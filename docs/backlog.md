@@ -15,6 +15,13 @@ Format : `US-x.y` — En tant que … je veux … afin de …, suivi des critèr
 - Chaque donnée est rattachée à une organisation.
 - Un membre invité voit les terrains de l'organisation, pas ceux des autres organisations.
 - Test d'isolation : un utilisateur d'une autre organisation reçoit 403 sur une ressource non autorisée.
+- Modèle de données **FAIT** en Tranche 0 (table `Membership` + RLS par organisation) : le partage futur n'exige pas de migration. Ce qui reste = l'UX de collaboration (US-0.4).
+
+**US-0.4 [MVP] Collaboration sur le projet.** En tant qu'acheteur, je veux inviter une ou plusieurs personnes à travailler sur mon projet afin de partager la base des terrains, notes et agenda et de décider ensemble.
+- Un membre invité rejoint l'organisation et voit le même projet, les mêmes terrains, notes et visites planifiées ; les modifications sont partagées en temps quasi réel.
+- Invitation par email ou lien, avec un rôle (propriétaire, éditeur, lecture seule) ; révocation possible.
+- Les données restent scopées à l'organisation (RLS) : aucun accès inter-organisation.
+- **Décision d'architecture à prendre** avant implémentation : partage au niveau **organisation** (tous les projets de l'org sont partagés, le plus simple, le modèle actuel `Membership`) vs. partage **par projet** (ACL fine, plusieurs projets dont certains privés) ; et mécanisme d'invitation (lien signé vs. compte OIDC pré-provisionné).
 
 **US-0.3 [MVP] Socle technique déployable.** En tant qu'admin, je déploie la stack via Docker Compose afin de faire tourner l'app.
 - `docker compose up` lève app, worker, Postgres+PostGIS, Redis.
@@ -61,6 +68,11 @@ L'exploration est la feature phare. Le parcours : définir mon projet (onboardin
 **US-1.7 [V2] Terrains constructibles sans bâtiment et contact mairie.** En explorant, je veux repérer les terrains nus constructibles et contacter la mairie afin d'identifier le propriétaire.
 - Filtre des parcelles constructibles (zone PLU) et sans bâtiment (croisement du bâti cadastre / BD TOPO Bâtiment).
 - Bouton "Contacter la mairie" qui prépare un mail pré-rempli (demande d'identité du propriétaire) vers l'email de la mairie, trouvé via l'Annuaire de l'Administration ; état "email mairie indisponible" géré proprement.
+
+**US-1.9 [MVP] Modifier un terrain enregistré.** En tant qu'acheteur, je veux modifier un terrain déjà enregistré afin de corriger ou compléter ses informations.
+- Depuis la fiche, modifier les champs manuels : libellé, adresse, prix demandé, lien d'annonce, notes, et statut (à étudier, prometteur, réservé, écarté).
+- Enregistrement scopé à l'organisation (RLS) : impossible de modifier le terrain d'une autre organisation.
+- Les données parcellaires faisant autorité (contour, surface, IDU) ne sont pas éditables à la main (la ré-association de parcelles viendra plus tard).
 
 ## Epic 2 — Enrichissement automatique
 
@@ -168,6 +180,18 @@ L'exploration est la feature phare. Le parcours : définir mon projet (onboardin
 
 **US-5.7 [V2] Liens externes multiples.** Je veux rattacher plusieurs annonces (leboncoin, sites immobiliers) afin de suivre un terrain sur toutes ses sources.
 - Au-delà du `lienAnnonce` unique de la fiche (déjà présent), possibilité d'ajouter plusieurs liens nommés, avec la source détectée.
+
+**US-5.8 [V2] Documents attachés au terrain.** Je veux joindre des documents à un terrain (étude de sol, bornage, CU, devis, diagnostic) afin de centraliser le dossier.
+- Dépôt de fichiers (PDF, images) rattachés à un terrain, avec type/libellé, provenance (déposé par, date) et taille ; stockés hors base et hors dépôt (stockage objet).
+- Chaque document porte sa source et sa date, cohérent avec la règle des chiffres sourcés (un document est une pièce justificative datée, pas une valeur inventée).
+- État "aucun document" géré proprement.
+- **Décision d'architecture requise** avant implémentation : introduction d'un stockage objet (MinIO/S3), modèle `Document` scopé au tenant (RLS), limites de taille et types autorisés, antivirus/validation d'upload.
+
+**US-8.4 [LATER] Partage externe d'un document (côté offre).** En tant que propriétaire ou agent, je veux partager un document sur un terrain (ex. une étude de sol) afin d'enrichir le dossier de l'acheteur.
+- Un tiers externe (propriétaire, agent, notaire) dépose un document via un lien de partage dédié et révocable, sans compte inter-organisation.
+- Le partage est conditionné à un consentement explicite ; il ne franchit jamais l'isolation tenant par défaut (pas d'accès inter-organisation implicite, voir règle inviolable n°2).
+- Traçabilité : qui a déposé quoi, quand ; l'acheteur valide ou écarte la pièce.
+- **Décision d'architecture requise** : modèle de partage (lien signé à durée limitée vs. invité), frontière de confiance des uploads externes, articulation avec le consentement marketplace (US-8.2). Brique de la marketplace (côté offre qui alimente le lead).
 
 ## Epic 6 — Mobile et visite
 

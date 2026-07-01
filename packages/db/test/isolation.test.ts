@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { admin, prisma } from '../src/client';
 import { forOrg } from '../src/rls';
 import {
+  ENRICHMENT_A_ID,
+  ENRICHMENT_B_ID,
   ORG_A_ID,
   ORG_B_ID,
   PROJET_B_ID,
@@ -92,6 +94,27 @@ describe('RLS tenant isolation', () => {
     const db = forOrg(ORG_B_ID);
     const projets = await db.projet.findMany();
     expect(projets.map((p) => p.id)).toEqual([PROJET_B_ID]);
+  });
+
+  it('org B sees only its own enrichment blocks (EnrichmentBlock RLS)', async () => {
+    const db = forOrg(ORG_B_ID);
+    const blocks = await db.enrichmentBlock.findMany();
+    expect(blocks.map((b) => b.id)).toEqual([ENRICHMENT_B_ID]);
+  });
+
+  it("org B cannot read org A's enrichment block by id", async () => {
+    const db = forOrg(ORG_B_ID);
+    const block = await db.enrichmentBlock.findUnique({ where: { id: ENRICHMENT_A_ID } });
+    expect(block).toBeNull();
+  });
+
+  it('WITH CHECK blocks creating an enrichment block stamped with another org', async () => {
+    const db = forOrg(ORG_B_ID);
+    await expect(
+      db.enrichmentBlock.create({
+        data: { organisationId: ORG_A_ID, terrainId: TERRAIN_A_ID, type: 'PLU' },
+      }),
+    ).rejects.toThrow();
   });
 
   it('fails closed: an unscoped query (no tenant context) returns nothing', async () => {

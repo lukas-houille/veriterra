@@ -21,6 +21,14 @@ export function getEnrichTerrainQueue(): Queue<EnrichTerrainJobData> {
   if (!enrichTerrainQueue) {
     enrichTerrainQueue = new Queue<EnrichTerrainJobData>(QUEUE_NAMES.ENRICH_TERRAIN, {
       connection: getRedisConnection(),
+      // Fiabilité : réessais avec backoff exponentiel (les sources publiques peuvent flancher),
+      // et purge bornée pour ne pas laisser gonfler Redis.
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5_000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 200 },
+      },
     });
   }
   return enrichTerrainQueue;

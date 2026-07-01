@@ -36,6 +36,7 @@ model Organisation {
   terrains    Terrain[]
   parcelles   TerrainParcelle[]
   projets     Projet[]
+  enrichments EnrichmentBlock[]
 }
 
 /// Type de maison visé par le projet de l'acheteur (nombre de niveaux).
@@ -124,6 +125,7 @@ model Terrain {
   organisation Organisation      @relation(fields: [organisationId], references: [id], onDelete: Cascade)
   projet       Projet?           @relation(fields: [projetId], references: [id], onDelete: SetNull)
   parcelles    TerrainParcelle[]
+  enrichments  EnrichmentBlock[]
 
   @@index([organisationId])
   @@index([projetId])
@@ -152,4 +154,57 @@ model TerrainParcelle {
   @@index([organisationId])
   @@index([terrainId])
   @@index([idu])
+}
+
+/// Type de bloc d'enrichissement (Tranche 2). Extensible sans nouvelle table : on commence par
+/// RISQUES (Géorisques), PRIX_DVF, PLU, PENTE et SERVICES suivront.
+enum EnrichmentType {
+  RISQUES
+  PRIX_DVF
+  PLU
+  PENTE
+  SERVICES
+}
+
+/// Statut d'un bloc. UNAVAILABLE = donnée indisponible comme cas de première classe (règle 3),
+/// jamais une valeur par défaut silencieuse. ERROR = échec de récupération (réessayable).
+enum EnrichmentStatus {
+  PENDING
+  OK
+  UNAVAILABLE
+  ERROR
+}
+
+/// Indice de confiance d'une donnée sourcée (règle 1).
+enum ConfidenceLevel {
+  ELEVEE
+  MOYENNE
+  FAIBLE
+}
+
+/// Bloc d'enrichissement sourcé rattaché à un terrain (Tranche 2). Un bloc par couple
+/// (terrain, type). Table scopée au tenant (`organisationId`) : protégée par RLS. Le payload
+/// normalisé vit dans `data` (Json), avec sa provenance (`source`, `sourceUrl`, `fetchedAt`) et
+/// son indice de confiance. Écrit par le worker via `forOrg`/`withOrg`.
+model EnrichmentBlock {
+  id             String           @id @default(uuid()) @db.Uuid
+  organisationId String           @db.Uuid
+  terrainId      String           @db.Uuid
+  type           EnrichmentType
+  status         EnrichmentStatus @default(PENDING)
+  data           Json?
+  source         String?
+  sourceUrl      String?
+  confidence     ConfidenceLevel?
+  fetchedAt      DateTime?
+  error          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  terrain      Terrain      @relation(fields: [terrainId], references: [id], onDelete: Cascade)
+
+  @@unique([terrainId, type])
+  @@index([organisationId])
+  @@index([terrainId])
 }

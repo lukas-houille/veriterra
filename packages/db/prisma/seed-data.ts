@@ -15,6 +15,8 @@ export const PARCELLE_A_ID = '00000000-0000-0000-0000-0000000000a3';
 export const PARCELLE_B_ID = '00000000-0000-0000-0000-0000000000b3';
 export const PROJET_A_ID = '00000000-0000-0000-0000-0000000000a4';
 export const PROJET_B_ID = '00000000-0000-0000-0000-0000000000b4';
+export const ENRICHMENT_A_ID = '00000000-0000-0000-0000-0000000000a5';
+export const ENRICHMENT_B_ID = '00000000-0000-0000-0000-0000000000b5';
 
 // Petits carrés GeoJSON (WGS84) autour de Lyon, un par tenant.
 const POLY_A = {
@@ -142,5 +144,35 @@ export async function seed(): Promise<void> {
     where: { id: PROJET_B_ID },
     update: {},
     create: { id: PROJET_B_ID, organisationId: ORG_B_ID, name: 'Projet B' },
+  });
+
+  // Blocs d'enrichissement (Tranche 2), un par tenant, pour les tests d'isolation.
+  await admin.enrichmentBlock.upsert({
+    where: { id: ENRICHMENT_A_ID },
+    update: {},
+    create: {
+      id: ENRICHMENT_A_ID,
+      organisationId: ORG_A_ID,
+      terrainId: TERRAIN_A_ID,
+      type: 'RISQUES',
+      status: 'OK',
+      source: 'Géorisques',
+      confidence: 'ELEVEE',
+      data: { items: [] },
+    },
+  });
+  await admin.enrichmentBlock.upsert({
+    where: { id: ENRICHMENT_B_ID },
+    update: {},
+    create: {
+      id: ENRICHMENT_B_ID,
+      organisationId: ORG_B_ID,
+      terrainId: TERRAIN_B_ID,
+      type: 'RISQUES',
+      status: 'OK',
+      source: 'Géorisques',
+      confidence: 'ELEVEE',
+      data: { items: [] },
+    },
   });
 }

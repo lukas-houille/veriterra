@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import { isUuid } from '@/lib/uuid';
 import { getTerrain, TERRAIN_STATUSES, updateTerrain } from '@/modules/terrains/service';
 import type { UpdateTerrainInput } from '@/modules/terrains/types';
 
@@ -12,10 +13,6 @@ const ADDRESS_MAX_LEN = 300;
 const LINK_MAX_LEN = 2000;
 const NOTES_MAX_LEN = 5000;
 
-// L'id de route est un UUID (colonne @db.Uuid) : on le valide avant d'atteindre Postgres, sinon
-// une valeur malformée lève une erreur SQL (22P02) remontée en 500 au lieu d'un 404 propre.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** Erreur de validation d'entrée (mappée en 400). */
 class BadInputError extends Error {}
 
@@ -26,7 +23,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
   }
   const { id } = await params;
-  if (!UUID_RE.test(id)) {
+  if (!isUuid(id)) {
     return NextResponse.json({ error: 'introuvable' }, { status: 404 });
   }
   const terrain = await getTerrain(session.user.orgId, id);
@@ -44,7 +41,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
   }
   const { id } = await params;
-  if (!UUID_RE.test(id)) {
+  if (!isUuid(id)) {
     return NextResponse.json({ error: 'introuvable' }, { status: 404 });
   }
 

@@ -9,6 +9,7 @@
  */
 export const QUEUE_NAMES = {
   PING: 'ping',
+  ENRICH_TERRAIN: 'enrichTerrain',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -28,7 +29,23 @@ export interface PingJobResult {
   at: string;
 }
 
+/**
+ * Enrichissement d'un terrain (Tranche 1 : job no-op, l'enrichissement réel arrive en
+ * Tranche 2). Enfilé à la création ; le worker scope son accès DB via `organizationId`.
+ */
+export interface EnrichTerrainJobData {
+  organizationId: string;
+  terrainId: string;
+}
+
+export interface EnrichTerrainJobResult {
+  terrainId: string;
+  status: 'noop';
+  at: string;
+}
+
 /** Map each queue name to its payload type. */
 export interface JobDataByQueue {
   [QUEUE_NAMES.PING]: PingJobData;
+  [QUEUE_NAMES.ENRICH_TERRAIN]: EnrichTerrainJobData;
 }

@@ -6,6 +6,10 @@ import { defineConfig } from 'vitest/config';
 config({ path: fileURLToPath(new URL('../.env', import.meta.url)) });
 
 export default defineConfig({
+  resolve: {
+    // Résout l'alias `@/…` (tsconfig paths) pour les tests comme pour le build Next.
+    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+  },
   test: {
     environment: 'node',
     include: ['test/**/*.test.ts'],

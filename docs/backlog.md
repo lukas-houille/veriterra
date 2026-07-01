@@ -146,6 +146,14 @@ Format : `US-x.y` — En tant que … je veux … afin de …, suivi des critèr
 **US-5.5 [V2] Historique de prix et motif d'abandon.** Je veux tracer l'évolution afin de négocier et capitaliser.
 - Historique du prix, motif d'abandon saisissable.
 
+**US-5.6 [V2] Visites planifiées et agenda.** Je veux planifier une visite afin de m'organiser et y revenir facilement.
+- Choix d'une date et d'une heure de visite depuis la fiche terrain.
+- Ajout à un agenda : export `.ics` et lien Google Agenda, avec les infos du terrain (adresse, parcelle) et un lien de retour vers la fiche.
+- Rappel avant la visite ; la visite bascule le statut vers « À visiter » et apparaît dans le pipeline.
+
+**US-5.7 [V2] Liens externes multiples.** Je veux rattacher plusieurs annonces (leboncoin, sites immobiliers) afin de suivre un terrain sur toutes ses sources.
+- Au-delà du `lienAnnonce` unique de la fiche (déjà présent), possibilité d'ajouter plusieurs liens nommés, avec la source détectée.
+
 ## Epic 6 — Mobile et visite
 
 **US-6.1 [MVP] PWA installable.** Je veux installer l'app afin de l'utiliser comme une app.

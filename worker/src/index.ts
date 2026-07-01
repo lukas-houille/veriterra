@@ -4,6 +4,8 @@ import {
   QUEUE_NAMES,
   WORKER_HEARTBEAT_KEY,
   createRedisConnection,
+  type EnrichTerrainJobData,
+  type EnrichTerrainJobResult,
   type PingJobData,
   type PingJobResult,
 } from '@veriterra/shared';
@@ -12,25 +14,43 @@ const HEARTBEAT_TTL_SECONDS = 30;
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const SHUTDOWN_FORCE_MS = 25_000;
 
-// A BullMQ Worker's connection runs in blocking mode, so the heartbeat needs its own.
-const workerConnection = createRedisConnection();
+// Chaque Worker BullMQ ouvre une connexion en mode bloquant : le heartbeat a la sienne.
+const pingConnection = createRedisConnection();
+const enrichConnection = createRedisConnection();
 const heartbeatConnection = createRedisConnection();
 
-const worker = new Worker<PingJobData, PingJobResult>(
+const pingWorker = new Worker<PingJobData, PingJobResult>(
   QUEUE_NAMES.PING,
   async (job) => {
-    // The worker has no Auth.js session, so it derives the tenant context from the job
-    // payload. No DB work in the Tranche-0 no-op job, but we establish the pattern:
-    // every future job scopes its DB access through `forOrg(job.data.organizationId)`.
+    // Pas de session Auth.js : le contexte tenant vient du payload. On établit le pattern,
+    // chaque job scope son accès DB via `forOrg(job.data.organizationId)`.
     const db = forOrg(job.data.organizationId);
     void db;
     return { pong: job.data.echo, at: new Date().toISOString() };
   },
-  { connection: workerConnection, concurrency: 5 },
+  { connection: pingConnection, concurrency: 5 },
 );
 
-worker.on('completed', (job) => console.log(`[worker] ping ${job.id} completed`));
-worker.on('failed', (job, err) => console.error(`[worker] ping ${job?.id} failed:`, err));
+// Enrichissement d'un terrain (Tranche 1 : no-op tracé ; la vraie logique arrive en
+// Tranche 2, qui appellera les sources et écrira des blocs sourcés via `forOrg`).
+const enrichWorker = new Worker<EnrichTerrainJobData, EnrichTerrainJobResult>(
+  QUEUE_NAMES.ENRICH_TERRAIN,
+  async (job) => {
+    const db = forOrg(job.data.organizationId);
+    void db;
+    console.log(`[worker] enrichTerrain ${job.data.terrainId} (stub, Tranche 1)`);
+    return { terrainId: job.data.terrainId, status: 'noop', at: new Date().toISOString() };
+  },
+  { connection: enrichConnection, concurrency: 5 },
+);
+
+for (const [name, w] of [
+  ['ping', pingWorker],
+  ['enrichTerrain', enrichWorker],
+] as const) {
+  w.on('completed', (job) => console.log(`[worker] ${name} ${job.id} completed`));
+  w.on('failed', (job, err) => console.error(`[worker] ${name} ${job?.id} failed:`, err));
+}
 
 async function beat(): Promise<void> {
   try {
@@ -47,7 +67,8 @@ async function beat(): Promise<void> {
 
 const heartbeat = setInterval(() => void beat(), HEARTBEAT_INTERVAL_MS);
 void beat();
-worker.on('active', () => void beat());
+pingWorker.on('active', () => void beat());
+enrichWorker.on('active', () => void beat());
 
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
@@ -60,8 +81,12 @@ async function shutdown(signal: string): Promise<void> {
     process.exit(1);
   }, SHUTDOWN_FORCE_MS);
   try {
-    await worker.close(); // stops taking new jobs, waits for in-flight to finish
-    await Promise.allSettled([workerConnection.quit(), heartbeatConnection.quit()]);
+    await Promise.all([pingWorker.close(), enrichWorker.close()]);
+    await Promise.allSettled([
+      pingConnection.quit(),
+      enrichConnection.quit(),
+      heartbeatConnection.quit(),
+    ]);
   } finally {
     clearTimeout(force);
     process.exit(0);
@@ -71,4 +96,4 @@ async function shutdown(signal: string): Promise<void> {
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 process.on('SIGINT', () => void shutdown('SIGINT'));
 
-console.log('[worker] started, listening on queue:', QUEUE_NAMES.PING);
+console.log('[worker] started, listening on queues:', QUEUE_NAMES.PING, QUEUE_NAMES.ENRICH_TERRAIN);

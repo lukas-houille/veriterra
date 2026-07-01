@@ -16,7 +16,8 @@ test('sign in via OIDC, reach the protected home, then sign out', async ({ page 
   await page.getByRole('button', { name: /Pocket ID/i }).click();
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByText(/Connecté/)).toBeVisible();
+  // La home protégée est désormais le dashboard des terrains (Tranche 1).
+  await expect(page.getByRole('heading', { name: /Terrains suivis/i })).toBeVisible();
 
   await page.getByRole('button', { name: /déconnecter/i }).click();
   await expect(page).toHaveURL(/\/sign-in/);

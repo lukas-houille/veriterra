@@ -1,7 +1,10 @@
 name: release
 
 # Runs only AFTER `ci` succeeds on main, so an untested/broken commit never produces an
-# image that Arcane would auto-deploy. Builds from the exact commit CI validated.
+# image that Arcane would deploy. Builds from the exact commit CI validated, then épingle
+# ce SHA dans docker-compose.prod.yml et le commit sur main : Arcane (Git Sync) voit le
+# compose changer et redéploie l'image exacte. Déploiement piloté par git, traçable, un
+# seul déclencheur (pas de polling de digest).
 on:
   workflow_run:
     workflows: [ci]
@@ -13,7 +16,7 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
@@ -43,8 +46,25 @@ jobs:
           target: runtime
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: |
-            ${{ steps.meta.outputs.labels }}
-            com.getarcaneapp.arcane.updater=true
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # GitOps : épingle l'image prod sur le SHA qu'on vient de publier et commit sur main.
+      # Arcane (Git Sync) détecte le changement de compose et redéploie ce SHA exact.
+      # Un push fait avec GITHUB_TOKEN ne redéclenche aucun workflow (pas de boucle CI) ;
+      # `[skip ci]` est une ceinture-bretelles.
+      - name: Pin compose au SHA publié et commit sur main
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          sed -i -E "s|(ghcr\.io/lukas-houille/veriterra):[^[:space:]\"']+|\1:${SHA}|g" docker-compose.prod.yml
+          if git diff --quiet -- docker-compose.prod.yml; then
+            echo "Tag déjà à jour, rien à committer."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docker-compose.prod.yml
+          git commit -m "chore(deploy): épingle l'image prod sur ${SHA} [skip ci]"
+          git push origin HEAD:main

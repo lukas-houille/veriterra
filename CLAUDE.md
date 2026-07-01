@@ -56,7 +56,7 @@ CRM de prospection foncière auto-hébergé : à partir d'une adresse, l'outil l
 ## CI/CD
 - GitHub Actions sur PR : lint, typecheck, tests unitaires et fonctionnels, build.
 - Sur merge vers main : build image Docker, push sur GHCR (image pré-construite, pas de build sur le serveur).
-- Déploiement : Arcane détecte le nouveau digest (Image Polling + Auto Update, label `com.getarcaneapp.arcane.updater=true`) et redéploie.
+- Déploiement (GitOps) : `release.yml` réécrit le tag d'image de `docker-compose.prod.yml` sur le SHA git publié et commit sur main ; Arcane suit le dépôt (Git Sync + Auto Sync), voit le compose changer et redéploie ce SHA exact. Un seul déclencheur, pas d'auto-update par digest.
 - Garde les migrations réversibles, tague les images par SHA git, sauvegarde la base avant déploiement.
 
 ## Structure du dépôt

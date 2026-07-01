@@ -8,10 +8,11 @@ vi.mock('@/lib/queues', () => ({
   getEnrichTerrainQueue: () => ({ add: vi.fn(async () => ({ id: 'job-1' })) }),
 }));
 
-import { createTerrain, getTerrain, listTerrains } from '@/modules/terrains/service';
+import { createTerrain, getTerrain, listTerrains, updateTerrain } from '@/modules/terrains/service';
 import type { ParcelleInput } from '@/modules/terrains/types';
 
 const ORG_ID = '00000000-0000-0000-0000-0000000000cc';
+const OTHER_ORG_ID = '00000000-0000-0000-0000-0000000000cd';
 
 function parcelle(idu: string, surfaceM2: number): ParcelleInput {
   return {
@@ -43,10 +44,16 @@ beforeAll(async () => {
     update: {},
     create: { id: ORG_ID, name: 'Org Terrain Test' },
   });
+  await admin.organisation.upsert({
+    where: { id: OTHER_ORG_ID },
+    update: {},
+    create: { id: OTHER_ORG_ID, name: 'Autre Org Terrain Test' },
+  });
 });
 
 afterAll(async () => {
   await admin.organisation.delete({ where: { id: ORG_ID } }).catch(() => undefined);
+  await admin.organisation.delete({ where: { id: OTHER_ORG_ID } }).catch(() => undefined);
   await admin.$disconnect();
 });
 
@@ -99,5 +106,55 @@ describe('createTerrain', () => {
         ],
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe('updateTerrain', () => {
+  async function newTerrain(idu: string) {
+    return createTerrain(ORG_ID, null, {
+      address: 'a',
+      inseeCode: '69381',
+      parcelles: [parcelle(idu, 400)],
+    });
+  }
+
+  it('met à jour les champs manuels et le statut, parcelles intactes', async () => {
+    const t = await newTerrain('69382000AB0070');
+    const updated = await updateTerrain(ORG_ID, t.id, {
+      status: 'PROMETTEUR',
+      prixDemande: 199000,
+      notes: 'à revoir',
+      label: 'Terrain Nord',
+    });
+    expect(updated?.status).toBe('PROMETTEUR');
+    expect(updated?.prixDemande).toBe(199000);
+    expect(updated?.notes).toBe('à revoir');
+    expect(updated?.label).toBe('Terrain Nord');
+    expect(updated?.parcelles).toHaveLength(1);
+    expect(updated?.surfaceTotaleM2).toBe(400);
+  });
+
+  it('permet de vider un champ optionnel (prix vers null)', async () => {
+    const t = await createTerrain(ORG_ID, null, {
+      address: 'a',
+      inseeCode: '69381',
+      parcelles: [parcelle('69382000AB0071', 400)],
+      prixDemande: 100000,
+    });
+    const updated = await updateTerrain(ORG_ID, t.id, { prixDemande: null });
+    expect(updated?.prixDemande).toBeNull();
+  });
+
+  it('refuse un statut invalide', async () => {
+    const t = await newTerrain('69382000AB0072');
+    await expect(updateTerrain(ORG_ID, t.id, { status: 'NIMPORTE' })).rejects.toThrow();
+  });
+
+  it("ignore la modification d'un terrain d'une autre organisation (RLS) et renvoie null", async () => {
+    const t = await newTerrain('69382000AB0073');
+    const res = await updateTerrain(OTHER_ORG_ID, t.id, { status: 'ECARTE' });
+    expect(res).toBeNull();
+    const still = await getTerrain(ORG_ID, t.id);
+    expect(still?.status).toBe('A_ETUDIER');
   });
 });

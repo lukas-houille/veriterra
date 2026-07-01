@@ -1,21 +1,10 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { Archivo, Spline_Sans_Mono } from 'next/font/google';
 import './globals.css';
 
-// Archivo = interface ; Spline Sans Mono = données vérifiables (design-system §3).
-const archivo = Archivo({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
-  variable: '--font-archivo',
-  display: 'swap',
-});
-const splineMono = Spline_Sans_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500'],
-  variable: '--font-spline-mono',
-  display: 'swap',
-});
+// Polices : Archivo (interface) et Spline Sans Mono (données) sont fournies par
+// @veriterra/ui via @font-face (packages/ui/src/styles/theme.css), et exposées
+// aux variables --font-sans / --font-mono. Plus de dépendance next/font.
 
 export const metadata: Metadata = {
   title: 'Veriterra',
@@ -25,7 +14,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="fr" className={`${archivo.variable} ${splineMono.variable}`}>
+    <html lang="fr">
       <body>{children}</body>
     </html>
   );

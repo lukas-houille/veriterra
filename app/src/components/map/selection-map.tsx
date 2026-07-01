@@ -7,7 +7,7 @@ import {
   type GeoJSONSource,
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { Input, cn } from '@veriterra/ui';
+import type { CSSProperties } from 'react';
 import { veriterraMapStyle, FRANCE_CENTER, FRANCE_ZOOM } from './map-style';
 import { searchAddress } from '@/lib/geo/ban';
 import { fetchParcelleAtPoint } from '@/lib/geo/apicarto-core';
@@ -32,6 +32,24 @@ interface SelectionMapProps {
 
 const AMBER = '#db9b2c';
 const SELECTION_SOURCE = 'selection';
+
+// Jetons visuels de la maquette « Explorer » (docs/design/handoff/Explorer.dc.html).
+const SANS = "'Archivo', system-ui, sans-serif";
+const MONO = "'Spline Sans Mono', ui-monospace, monospace";
+const PANEL = '#FFFFFF';
+const BORDER = '#DADEE8';
+const TEXT = '#161A2E';
+const SUB = '#6C7488';
+const MICRO = '#98A0B0';
+const FLOAT_SHADOW = '0 8px 24px -12px rgba(16,20,34,0.4)';
+
+const microLabel: CSSProperties = {
+  fontSize: '10px',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  color: MICRO,
+  fontWeight: 600,
+};
 
 const EMPTY_FC = { type: 'FeatureCollection' as const, features: [] as unknown[] };
 
@@ -83,7 +101,8 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
       attributionControl: { compact: true },
     });
     mapRef.current = map;
-    map.addControl(new NavigationControl(), 'top-right');
+    // Zoom natif MapLibre en bas-droite (la carte contextuelle occupe le haut-droite).
+    map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
 
     map.on('load', () => {
       map.addSource(SELECTION_SOURCE, {
@@ -192,36 +211,100 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
   const totalSurface = selection.reduce((acc, p) => acc + p.surfaceM2, 0);
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-lg border border-neutral-200">
-      <div ref={containerRef} className="h-full w-full" aria-label="Carte de sélection de parcelles" />
+    <div style={{ position: 'relative', height: '100%', width: '100%', overflow: 'hidden' }}>
+      <div
+        ref={containerRef}
+        style={{ height: '100%', width: '100%' }}
+        aria-label="Carte de sélection de parcelles"
+      />
 
-      {/* Recherche d'adresse */}
-      <div className="absolute left-3 top-3 z-10 w-[min(22rem,calc(100%-1.5rem))]">
-        <Input
-          type="search"
-          value={query}
-          placeholder="Rechercher une adresse..."
-          aria-label="Rechercher une adresse"
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setShowSuggestions(true);
+      {/* Recherche d'adresse (haut-gauche) */}
+      <div
+        style={{
+          position: 'absolute',
+          left: '16px',
+          top: '16px',
+          width: '340px',
+          maxWidth: 'calc(100% - 32px)',
+          zIndex: 12,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '9px',
+            background: PANEL,
+            border: `1px solid ${BORDER}`,
+            borderRadius: '11px',
+            padding: '0 14px',
+            height: '46px',
+            boxShadow: FLOAT_SHADOW,
           }}
-          onFocus={() => setShowSuggestions(true)}
-          className="shadow-sm"
-        />
+        >
+          <span aria-hidden="true" style={{ color: MICRO, fontSize: '16px', lineHeight: 1 }}>
+            ⌕
+          </span>
+          <input
+            type="search"
+            value={query}
+            placeholder="Rechercher une adresse, une commune"
+            aria-label="Rechercher une adresse"
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setShowSuggestions(true);
+            }}
+            onFocus={() => setShowSuggestions(true)}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              outline: 'none',
+              fontFamily: SANS,
+              fontSize: '14px',
+              color: TEXT,
+              width: '100%',
+            }}
+          />
+        </div>
         {showSuggestions && suggestions.length > 0 && (
-          <ul className="mt-1 max-h-64 overflow-auto rounded-md border border-neutral-200 bg-card shadow-md">
+          <ul
+            style={{
+              margin: '6px 0 0',
+              padding: 0,
+              listStyle: 'none',
+              maxHeight: '16rem',
+              overflowY: 'auto',
+              background: PANEL,
+              border: `1px solid ${BORDER}`,
+              borderRadius: '11px',
+              boxShadow: '0 12px 30px -10px rgba(16,20,34,0.45)',
+            }}
+          >
             {suggestions.map((feature) => (
               <li key={`${feature.citycode}-${feature.label}`}>
                 <button
                   type="button"
                   onClick={() => pickAddress(feature)}
-                  className={cn(
-                    'block w-full px-3 py-2 text-left text-sm text-foreground',
-                    'hover:bg-neutral-50 focus-visible:bg-neutral-50 focus-visible:outline-none',
-                  )}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    width: '100%',
+                    textAlign: 'left',
+                    border: 'none',
+                    background: 'transparent',
+                    padding: '10px 14px',
+                    cursor: 'pointer',
+                    color: TEXT,
+                    fontFamily: SANS,
+                    fontSize: '13.5px',
+                    fontWeight: 500,
+                  }}
                 >
-                  {feature.label}
+                  <span aria-hidden="true" style={{ color: MICRO }}>
+                    ⌖
+                  </span>
+                  <span>{feature.label}</span>
                 </button>
               </li>
             ))}
@@ -229,25 +312,81 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
         )}
       </div>
 
-      {/* Surface agrégée + état de chargement / erreur */}
-      <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-1">
-        <div className="rounded-md border border-neutral-200 bg-card px-3 py-2 shadow-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+      {/* Surface agrégée + indice (bas-gauche) */}
+      <div
+        style={{
+          position: 'absolute',
+          left: '16px',
+          bottom: '16px',
+          zIndex: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          maxWidth: 'calc(100% - 32px)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px',
+            background: PANEL,
+            border: `1px solid ${BORDER}`,
+            borderRadius: '9px',
+            padding: '8px 12px',
+            boxShadow: FLOAT_SHADOW,
+          }}
+        >
+          <span style={microLabel}>
             {selection.length} parcelle{selection.length > 1 ? 's' : ''} · Surface totale
           </span>
           {selection.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Cliquez une parcelle sur la carte</p>
+            <span style={{ fontSize: '13px', color: SUB }}>Cliquez une parcelle sur la carte</span>
           ) : (
-            <p className="font-mono text-sm text-foreground">{formatSurface(totalSurface)}</p>
+            <span style={{ fontFamily: MONO, fontSize: '14px', color: TEXT }}>{formatSurface(totalSurface)}</span>
           )}
         </div>
+        <div
+          style={{
+            background: PANEL,
+            border: `1px solid ${BORDER}`,
+            borderRadius: '9px',
+            padding: '7px 12px',
+            fontSize: '12px',
+            color: SUB,
+          }}
+        >
+          Cliquez une parcelle pour la sélectionner
+        </div>
         {clickLoading && (
-          <span className="rounded-md bg-card px-2 py-1 text-xs text-muted-foreground shadow-sm">
+          <span
+            style={{
+              alignSelf: 'flex-start',
+              background: PANEL,
+              border: `1px solid ${BORDER}`,
+              borderRadius: '9px',
+              padding: '6px 10px',
+              fontSize: '12px',
+              color: SUB,
+              boxShadow: FLOAT_SHADOW,
+            }}
+          >
             Recherche de la parcelle...
           </span>
         )}
         {error && (
-          <span className="max-w-xs rounded-md border border-neutral-200 bg-card px-2 py-1 text-xs text-danger shadow-sm">
+          <span
+            role="alert"
+            style={{
+              maxWidth: '20rem',
+              background: '#F8E7E2',
+              border: '1px solid #E7C4BC',
+              borderRadius: '9px',
+              padding: '7px 11px',
+              fontSize: '12px',
+              color: '#C0432E',
+            }}
+          >
             {error}
           </span>
         )}

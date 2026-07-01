@@ -1,21 +1,46 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import {
-  Button,
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-  Input,
-} from '@veriterra/ui';
 import type { SelectedParcelle } from '@/components/map/selection-map';
 import type { TerrainSummary } from '@/modules/terrains/types';
+
+// Écran « Explorer » (création de terrain). Reproduction fidèle de la maquette
+// designée (docs/design/handoff/Explorer.dc.html) : plein écran carte, barre de
+// recherche flottante et panneau de détails. La logique (état, sélection de
+// parcelles, appel API, redirection) est préservée à l'identique.
+
+const SANS = "'Archivo', system-ui, sans-serif";
+const MONO = "'Spline Sans Mono', ui-monospace, monospace";
+
+// Jetons de couleur (mode clair de la maquette).
+const PANEL = '#FFFFFF';
+const BORDER = '#DADEE8';
+const TEXT = '#161A2E';
+const SUB = '#6C7488';
+const MICRO = '#98A0B0';
+const NAVY = '#2F3B6E';
+
+const microLabel: CSSProperties = {
+  fontSize: '10px',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  color: MICRO,
+  fontWeight: 600,
+};
+const fieldInput: CSSProperties = {
+  width: '100%',
+  border: `1px solid ${BORDER}`,
+  background: PANEL,
+  borderRadius: '9px',
+  padding: '9px 12px',
+  fontSize: '14px',
+  fontFamily: SANS,
+  color: TEXT,
+  outline: 'none',
+};
 
 // La carte MapLibre ne doit jamais être rendue côté serveur (accès à window).
 const SelectionMap = dynamic(
@@ -23,12 +48,48 @@ const SelectionMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-full w-full items-center justify-center rounded-lg border border-neutral-200 bg-card text-sm text-muted-foreground">
+      <div
+        style={{
+          display: 'flex',
+          height: '100%',
+          width: '100%',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#E9ECF2',
+          color: SUB,
+          fontFamily: SANS,
+          fontSize: '14px',
+        }}
+      >
         Chargement de la carte...
       </div>
     ),
   },
 );
+
+function Mark({ size = 30 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 152 152" fill="none" aria-hidden="true">
+      <defs>
+        <clipPath id="navlogo">
+          <rect x="22" y="22" width="108" height="108" rx="10" />
+        </clipPath>
+      </defs>
+      <rect x="22" y="22" width="108" height="108" rx="10" fill="#EAECF4" />
+      <g clipPath="url(#navlogo)">
+        <rect x="63" y="65" width="37" height="65" fill="#DB9B2C" />
+        <rect x="22" y="22" width="41" height="56" fill="none" stroke={NAVY} strokeWidth="2.4" />
+        <rect x="22" y="78" width="41" height="52" fill="none" stroke={NAVY} strokeWidth="2.4" />
+        <rect x="63" y="22" width="37" height="43" fill="none" stroke={NAVY} strokeWidth="2.4" />
+        <rect x="63" y="65" width="37" height="65" fill="none" stroke={NAVY} strokeWidth="2.4" />
+        <rect x="100" y="22" width="30" height="37" fill="none" stroke={NAVY} strokeWidth="2.4" />
+        <rect x="100" y="59" width="30" height="39" fill="none" stroke={NAVY} strokeWidth="2.4" />
+        <rect x="100" y="98" width="30" height="32" fill="none" stroke={NAVY} strokeWidth="2.4" />
+      </g>
+      <rect x="22" y="22" width="108" height="108" rx="10" fill="none" stroke={NAVY} strokeWidth="3" />
+    </svg>
+  );
+}
 
 /** Découpe le code INSEE (5 premiers caractères) d'un IDU cadastral. */
 function inseeFromIdu(idu: string): string {
@@ -70,7 +131,7 @@ export default function NouveauTerrainPage() {
   const totalSurface = parcelles.reduce((acc, p) => acc + p.surfaceM2, 0);
   const canSubmit = parcelles.length > 0 && address.trim() !== '' && inseeCode !== '' && !submitting;
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) return;
     setSubmitting(true);
@@ -126,128 +187,275 @@ export default function NouveauTerrainPage() {
     }
   }
 
+  const parcelleCount = parcelles.length;
+  const cardDescription =
+    parcelleCount === 0
+      ? 'Sélectionnez au moins une parcelle sur la carte pour continuer.'
+      : `${parcelleCount} parcelle${parcelleCount > 1 ? 's' : ''} sélectionnée${parcelleCount > 1 ? 's' : ''}.`;
+
   return (
-    <main className="min-h-screen bg-background p-4 md:p-6">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Nouveau terrain</h1>
-            <p className="text-sm text-muted-foreground">
-              Recherchez une adresse, puis cliquez sur la carte pour sélectionner une ou plusieurs
-              parcelles.
-            </p>
-          </div>
-          <Button asChild variant="ghost">
-            <Link href="/dashboard">Retour au tableau de bord</Link>
-          </Button>
+    <div
+      style={{
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        fontFamily: SANS,
+        background: '#F5F6FA',
+        color: TEXT,
+      }}
+    >
+      {/* SHELL TOP BAR */}
+      <header
+        style={{
+          position: 'relative',
+          zIndex: 30,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '20px',
+          height: '58px',
+          padding: '0 22px',
+          background: PANEL,
+          borderBottom: `1px solid ${BORDER}`,
+          flexShrink: 0,
+        }}
+      >
+        <Link
+          href="/terrains/nouveau"
+          style={{ display: 'flex', alignItems: 'center', gap: '11px', color: 'inherit' }}
+        >
+          <Mark size={30} />
+          <span style={{ fontSize: '20px', fontWeight: 700, letterSpacing: '-0.02em' }}>Veriterra</span>
+        </Link>
+        <nav aria-label="Navigation principale" style={{ display: 'flex', gap: '4px', marginLeft: '14px' }}>
+          <span
+            aria-current="page"
+            style={{
+              fontSize: '14px',
+              fontWeight: 600,
+              color: NAVY,
+              background: '#EEF0F8',
+              padding: '7px 13px',
+              borderRadius: '8px',
+            }}
+          >
+            Explorer
+          </span>
+          <Link
+            href="/dashboard"
+            style={{ fontSize: '14px', fontWeight: 500, color: SUB, padding: '7px 13px', borderRadius: '8px' }}
+          >
+            Mes terrains
+          </Link>
+        </nav>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Link
+            href="/dashboard"
+            title="Mon espace"
+            aria-label="Mon espace"
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '50%',
+              background: NAVY,
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '13px',
+              fontWeight: 700,
+              letterSpacing: '0.02em',
+            }}
+          >
+            VT
+          </Link>
+        </div>
+      </header>
+
+      {/* MAP AREA */}
+      <div style={{ position: 'relative', flex: 1, overflow: 'hidden', background: '#E9ECF2' }}>
+        <div style={{ position: 'absolute', inset: 0 }}>
+          <SelectionMap onSelectionChange={handleSelectionChange} onAddressPick={handleAddressPick} />
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[1fr_24rem]">
-          <div className="h-[60vh] min-h-[24rem] lg:h-[calc(100vh-8rem)]">
-            <SelectionMap
-              onSelectionChange={handleSelectionChange}
-              onAddressPick={handleAddressPick}
-            />
-          </div>
+        {/* PANNEAU DÉTAILS (carte contextuelle, haut-droite) */}
+        <aside
+          aria-label="Détails du terrain"
+          style={{
+            position: 'absolute',
+            right: '16px',
+            top: '16px',
+            width: '360px',
+            maxWidth: 'calc(100% - 32px)',
+            maxHeight: 'calc(100% - 32px)',
+            display: 'flex',
+            flexDirection: 'column',
+            background: PANEL,
+            border: `1px solid ${BORDER}`,
+            borderRadius: '14px',
+            boxShadow: '0 18px 40px -14px rgba(16,20,34,0.5)',
+            zIndex: 20,
+            overflow: 'hidden',
+          }}
+        >
+          <form
+            onSubmit={handleSubmit}
+            style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '16px' }}
+          >
+            <div style={{ marginBottom: '14px' }}>
+              <h1 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: TEXT }}>Détails du terrain</h1>
+              <p style={{ margin: '3px 0 0', fontSize: '12.5px', color: SUB, lineHeight: 1.4 }}>{cardDescription}</p>
+            </div>
 
-          <Card>
-            <form onSubmit={handleSubmit}>
-              <CardHeader>
-                <CardTitle>Détails du terrain</CardTitle>
-                <CardDescription>
-                  {parcelles.length === 0
-                    ? 'Sélectionnez au moins une parcelle sur la carte pour continuer.'
-                    : `${parcelles.length} parcelle${parcelles.length > 1 ? 's' : ''} sélectionnée${parcelles.length > 1 ? 's' : ''}.`}
-                </CardDescription>
-              </CardHeader>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '13px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <label htmlFor="address" style={microLabel}>
+                  Adresse
+                </label>
+                <input
+                  id="address"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="12 rue des Terrains, 33000 Bordeaux"
+                  style={fieldInput}
+                />
+              </div>
 
-              <CardContent className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="address" className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    Adresse
-                  </label>
-                  <Input
-                    id="address"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="12 rue des Terrains, 33000 Bordeaux"
-                  />
-                </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <label htmlFor="prix" style={microLabel}>
+                  Prix demandé (€)
+                </label>
+                <input
+                  id="prix"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={prixDemande}
+                  onChange={(e) => setPrixDemande(e.target.value)}
+                  placeholder="150000"
+                  style={{ ...fieldInput, fontFamily: MONO }}
+                />
+              </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="prix" className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    Prix demandé (€)
-                  </label>
-                  <Input
-                    id="prix"
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    value={prixDemande}
-                    onChange={(e) => setPrixDemande(e.target.value)}
-                    placeholder="150000"
-                    className="font-mono"
-                  />
-                </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <label htmlFor="lien" style={microLabel}>
+                  Lien de l&apos;annonce
+                </label>
+                <input
+                  id="lien"
+                  type="url"
+                  value={lienAnnonce}
+                  onChange={(e) => setLienAnnonce(e.target.value)}
+                  placeholder="https://..."
+                  style={fieldInput}
+                />
+              </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="lien" className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    Lien de l&apos;annonce
-                  </label>
-                  <Input
-                    id="lien"
-                    type="url"
-                    value={lienAnnonce}
-                    onChange={(e) => setLienAnnonce(e.target.value)}
-                    placeholder="https://..."
-                  />
-                </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <label htmlFor="notes" style={microLabel}>
+                  Notes
+                </label>
+                <textarea
+                  id="notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={3}
+                  placeholder="Observations, contexte, points à vérifier..."
+                  style={{ ...fieldInput, resize: 'vertical', lineHeight: 1.5 }}
+                />
+              </div>
+            </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="notes" className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    Notes
-                  </label>
-                  <textarea
-                    id="notes"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    rows={3}
-                    placeholder="Observations, contexte, points à vérifier..."
-                    className="flex w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-foreground placeholder:text-neutral-400 focus-visible:border-indigo-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  />
-                </div>
+            {/* Surface totale sourcée */}
+            <div
+              style={{
+                marginTop: '14px',
+                borderTop: `1px solid ${BORDER}`,
+                paddingTop: '13px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '8px' }}>
+                <span style={microLabel}>Surface totale</span>
+                <span style={{ fontFamily: MONO, fontSize: '18px', fontWeight: 500, color: TEXT }}>
+                  {parcelleCount === 0
+                    ? 'Donnée indisponible'
+                    : `${Math.round(totalSurface).toLocaleString('fr-FR')} m²`}
+                </span>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  marginTop: '8px',
+                  fontSize: '10.5px',
+                  color: MICRO,
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2F6E8F', flexShrink: 0 }}
+                />
+                <span>Source · IGN API Carto Cadastre</span>
+              </div>
+            </div>
 
-                <div className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    Surface totale
-                  </span>
-                  <p className="font-mono text-sm text-foreground">
-                    {parcelles.length === 0
-                      ? 'Donnée indisponible'
-                      : `${Math.round(totalSurface).toLocaleString('fr-FR')} m²`}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">Source : IGN API Carto Cadastre</p>
-                </div>
+            {error && (
+              <p
+                role="alert"
+                style={{
+                  marginTop: '13px',
+                  marginBottom: 0,
+                  border: '1px solid #E7C4BC',
+                  background: '#F8E7E2',
+                  color: '#C0432E',
+                  borderRadius: '9px',
+                  padding: '9px 12px',
+                  fontSize: '13px',
+                }}
+              >
+                {error}
+              </p>
+            )}
 
-                {error && (
-                  <p
-                    role="alert"
-                    className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
-                  >
-                    {error}
-                  </p>
-                )}
-              </CardContent>
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              style={{
+                marginTop: '16px',
+                width: '100%',
+                textAlign: 'center',
+                background: canSubmit ? NAVY : '#AEB4C6',
+                color: '#FFFFFF',
+                fontFamily: SANS,
+                fontSize: '13.5px',
+                fontWeight: 600,
+                padding: '11px',
+                borderRadius: '9px',
+                border: 'none',
+                cursor: canSubmit ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {submitting ? 'Création...' : 'Créer le terrain'}
+            </button>
 
-              <CardFooter>
-                <Button type="submit" disabled={!canSubmit} className="w-full">
-                  {submitting ? 'Création...' : 'Créer le terrain'}
-                </Button>
-              </CardFooter>
-            </form>
-          </Card>
-        </div>
+            <Link
+              href="/dashboard"
+              style={{
+                marginTop: '8px',
+                display: 'block',
+                textAlign: 'center',
+                color: SUB,
+                fontSize: '13px',
+                fontWeight: 500,
+                padding: '8px',
+                borderRadius: '9px',
+              }}
+            >
+              Retour au tableau de bord
+            </Link>
+          </form>
+        </aside>
       </div>
-    </main>
+    </div>
   );
 }

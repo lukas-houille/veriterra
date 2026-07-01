@@ -37,3 +37,6 @@ pnpm-debug.log*
 
 # docker volumes (local)
 .volumes/
+
+# design handoff zips (extraits sous docs/design/handoff)
+*.zip

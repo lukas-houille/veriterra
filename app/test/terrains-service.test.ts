@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { admin, forOrg } from '@veriterra/db';
+import { admin } from '@veriterra/db';
 
 // Enfilage mocké (pas de Redis dans ce test) et récupération parcellaire mockée
 // (pas d'appel réseau à API Carto) : on teste la persistance + la géométrie + le scoping.

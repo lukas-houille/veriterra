@@ -13,6 +13,8 @@ export const TERRAIN_A_ID = '00000000-0000-0000-0000-0000000000a2';
 export const TERRAIN_B_ID = '00000000-0000-0000-0000-0000000000b2';
 export const PARCELLE_A_ID = '00000000-0000-0000-0000-0000000000a3';
 export const PARCELLE_B_ID = '00000000-0000-0000-0000-0000000000b3';
+export const PROJET_A_ID = '00000000-0000-0000-0000-0000000000a4';
+export const PROJET_B_ID = '00000000-0000-0000-0000-0000000000b4';
 
 // Petits carrés GeoJSON (WGS84) autour de Lyon, un par tenant.
 const POLY_A = {
@@ -122,4 +124,23 @@ export async function seed(): Promise<void> {
     SET geom = ST_SetSRID(ST_Multi(ST_GeomFromGeoJSON(geojson::text)), 4326)
     WHERE id IN (${PARCELLE_A_ID}::uuid, ${PARCELLE_B_ID}::uuid) AND geom IS NULL
   `;
+
+  // Projets (Tranche 1), un par tenant, pour les tests d'isolation.
+  await admin.projet.upsert({
+    where: { id: PROJET_A_ID },
+    update: {},
+    create: {
+      id: PROJET_A_ID,
+      organisationId: ORG_A_ID,
+      name: 'Projet A',
+      budgetMax: 200000,
+      surfaceMinM2: 400,
+      surfaceMaxM2: 800,
+    },
+  });
+  await admin.projet.upsert({
+    where: { id: PROJET_B_ID },
+    update: {},
+    create: { id: PROJET_B_ID, organisationId: ORG_B_ID, name: 'Projet B' },
+  });
 }

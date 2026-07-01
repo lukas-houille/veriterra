@@ -1,6 +1,7 @@
 import { forOrg, withOrg, type Prisma } from '@veriterra/db';
 import type { GeoJsonGeometry } from '@/lib/geo/types';
 import { getEnrichTerrainQueue } from '@/lib/queues';
+import { ensureProjet } from '@/modules/projet/service';
 import type { CreateTerrainInput, TerrainSummary } from './types';
 
 const PARCELLE_SOURCE = 'IGN API Carto Cadastre';
@@ -86,10 +87,14 @@ export async function createTerrain(
     input.label?.trim() ||
     `${first.commune} ${first.section} ${parcelles.map((p) => p.numero).join(', ')}`.trim();
 
+  // Tout terrain est rattaché au projet actif de l'organisation (créé si besoin).
+  const projet = await ensureProjet(orgId);
+
   const terrainId = await withOrg(orgId, async (tx) => {
     const terrain = await tx.terrain.create({
       data: {
         organisationId: orgId,
+        projetId: projet.id,
         createdById: userId ?? undefined,
         label,
         address: input.address,

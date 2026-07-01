@@ -4,6 +4,7 @@ import { forOrg } from '../src/rls';
 import {
   ORG_A_ID,
   ORG_B_ID,
+  PROJET_B_ID,
   TERRAIN_A_ID,
   TERRAIN_B_ID,
   USER_A_ID,
@@ -85,6 +86,12 @@ describe('RLS tenant isolation', () => {
         data: { organisationId: ORG_A_ID, label: 'x', address: 'x', inseeCode: '00000' },
       }),
     ).rejects.toThrow();
+  });
+
+  it('org B sees only its own projet (Projet RLS)', async () => {
+    const db = forOrg(ORG_B_ID);
+    const projets = await db.projet.findMany();
+    expect(projets.map((p) => p.id)).toEqual([PROJET_B_ID]);
   });
 
   it('fails closed: an unscoped query (no tenant context) returns nothing', async () => {

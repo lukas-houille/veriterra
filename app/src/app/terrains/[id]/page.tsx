@@ -134,7 +134,7 @@ export default async function TerrainPage({
         {/* En-tête */}
         <div className="mb-6">
           <Link
-            href="/"
+            href="/dashboard"
             className="inline-flex items-center gap-1.5 rounded-sm text-sm text-indigo-500 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ArrowLeftIcon />

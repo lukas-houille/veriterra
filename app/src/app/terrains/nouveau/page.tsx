@@ -91,7 +91,14 @@ export default function NouveauTerrainPage() {
         body: JSON.stringify({
           address: address.trim(),
           inseeCode,
-          idus: parcelles.map((p) => p.idu),
+          parcelles: parcelles.map((p) => ({
+            idu: p.idu,
+            commune: p.commune,
+            section: p.section,
+            numero: p.numero,
+            surfaceM2: p.surfaceM2,
+            geojson: p.geojson,
+          })),
           prixDemande: parsedPrix,
           lienAnnonce: lienAnnonce.trim() === '' ? null : lienAnnonce.trim(),
           notes: notes.trim() === '' ? null : notes.trim(),

@@ -1,38 +1,41 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { admin } from '@veriterra/db';
 
-// Enfilage mocké (pas de Redis dans ce test) et récupération parcellaire mockée
-// (pas d'appel réseau à API Carto) : on teste la persistance + la géométrie + le scoping.
+// Enfilage mocké (pas de Redis dans ce test). La donnée parcellaire est fournie par le
+// client (issue d'API Carto au clic) : le service la persiste, on teste persistance +
+// géométrie + scoping tenant, sans appel réseau.
 vi.mock('@/lib/queues', () => ({
   getEnrichTerrainQueue: () => ({ add: vi.fn(async () => ({ id: 'job-1' })) }),
 }));
-vi.mock('@/lib/geo/apicarto', () => ({
-  fetchParcelleByIdu: vi.fn(async (idu: string) => ({
+
+import { createTerrain, getTerrain, listTerrains } from '@/modules/terrains/service';
+import type { ParcelleInput } from '@/modules/terrains/types';
+
+const ORG_ID = '00000000-0000-0000-0000-0000000000cc';
+
+function parcelle(idu: string, surfaceM2: number): ParcelleInput {
+  return {
     idu,
     commune: 'Lyon',
-    section: 'AA',
+    section: 'AB',
     numero: idu.slice(-4),
-    surfaceM2: idu.endsWith('0001') ? 500 : 300,
+    surfaceM2,
     geojson: {
-      type: 'Polygon',
+      type: 'MultiPolygon',
       coordinates: [
         [
-          [4.83, 45.75],
-          [4.831, 45.75],
-          [4.831, 45.751],
-          [4.83, 45.751],
-          [4.83, 45.75],
+          [
+            [4.83, 45.75],
+            [4.831, 45.75],
+            [4.831, 45.751],
+            [4.83, 45.751],
+            [4.83, 45.75],
+          ],
         ],
       ],
     },
-    source: 'mock',
-    fetchedAt: new Date().toISOString(),
-  })),
-}));
-
-import { createTerrain, getTerrain, listTerrains } from '@/modules/terrains/service';
-
-const ORG_ID = '00000000-0000-0000-0000-0000000000cc';
+  };
+}
 
 beforeAll(async () => {
   await admin.organisation.upsert({
@@ -43,7 +46,6 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Cascade supprime terrains + parcelles.
   await admin.organisation.delete({ where: { id: ORG_ID } }).catch(() => undefined);
   await admin.$disconnect();
 });
@@ -53,7 +55,7 @@ describe('createTerrain', () => {
     const summary = await createTerrain(ORG_ID, null, {
       address: '1 rue Test, Lyon',
       inseeCode: '69381',
-      idus: ['69381000AA0001', '69381000AA0002'],
+      parcelles: [parcelle('69382000AB0062', 500), parcelle('69382000AB0063', 300)],
       prixDemande: 250000,
     });
 
@@ -69,7 +71,6 @@ describe('createTerrain', () => {
     expect(geoms).toHaveLength(2);
     expect(geoms.every((r) => r.g?.includes('MultiPolygon'))).toBe(true);
 
-    // Lisible via le bon tenant.
     const fetched = await getTerrain(ORG_ID, summary.id);
     expect(fetched?.id).toBe(summary.id);
     expect((await listTerrains(ORG_ID)).map((t) => t.id)).toContain(summary.id);
@@ -77,7 +78,26 @@ describe('createTerrain', () => {
 
   it('refuse une création sans parcelle', async () => {
     await expect(
-      createTerrain(ORG_ID, null, { address: 'x', inseeCode: '69381', idus: [] }),
+      createTerrain(ORG_ID, null, { address: 'x', inseeCode: '69381', parcelles: [] }),
+    ).rejects.toThrow();
+  });
+
+  it('refuse une géométrie invalide', async () => {
+    await expect(
+      createTerrain(ORG_ID, null, {
+        address: 'x',
+        inseeCode: '69381',
+        parcelles: [
+          {
+            idu: 'x',
+            commune: 'x',
+            section: 'x',
+            numero: '0001',
+            surfaceM2: 1,
+            geojson: { type: 'Point' as unknown as 'Polygon', coordinates: [] },
+          },
+        ],
+      }),
     ).rejects.toThrow();
   });
 });

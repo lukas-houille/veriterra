@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  #vtmap{user-select:none;}
+  @keyframes vtCard{from{opacity:0;transform:translateY(-8px) scale(.98);}to{opacity:1;transform:none;}}
+</style>
+</helmet>
+
+<div data-screen-label="Explorer" style="height:100vh;display:flex;flex-direction:column;font-family:'Archivo',system-ui,sans-serif;background:{{ui.pageBg}};color:{{ui.text}};">
+
+  <!-- SHELL TOP BAR -->
+  <header style="position:relative;z-index:30;display:flex;align-items:center;gap:20px;height:58px;padding:0 22px;background:{{ui.panel}};border-bottom:1px solid {{ui.border}};flex-shrink:0;">
+    <a href="Explorer.dc.html" style="display:flex;align-items:center;gap:11px;text-decoration:none;color:inherit;">
+      <svg width="30" height="30" viewBox="0 0 152 152" fill="none" aria-hidden="true">
+        <defs><clipPath id="navlogo"><rect x="22" y="22" width="108" height="108" rx="10"></rect></clipPath></defs>
+        <rect x="22" y="22" width="108" height="108" rx="10" fill="#EAECF4"></rect>
+        <g clip-path="url(#navlogo)">
+          <rect x="63" y="65" width="37" height="65" fill="#DB9B2C"></rect>
+          <rect x="22" y="22" width="41" height="56" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect>
+          <rect x="22" y="78" width="41" height="52" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect>
+          <rect x="63" y="22" width="37" height="43" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect>
+          <rect x="63" y="65" width="37" height="65" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect>
+          <rect x="100" y="22" width="30" height="37" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect>
+          <rect x="100" y="59" width="30" height="39" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect>
+          <rect x="100" y="98" width="30" height="32" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect>
+        </g>
+        <rect x="22" y="22" width="108" height="108" rx="10" fill="none" stroke="#2F3B6E" stroke-width="3"></rect>
+      </svg>
+      <span style="font-size:20px;font-weight:700;letter-spacing:-0.02em;">Veriterra</span>
+    </a>
+    <nav style="display:flex;gap:4px;margin-left:14px;">
+      <span style="font-size:14px;font-weight:600;color:#2F3B6E;background:#EEF0F8;padding:7px 13px;border-radius:8px;">Explorer</span>
+      <a href="Dashboard portefeuille.dc.html" style="font-size:14px;font-weight:500;color:{{ui.sub}};padding:7px 13px;border-radius:8px;text-decoration:none;" style-hover="background:{{ui.inputBg}};">Mes terrains</a>
+    </nav>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+      <a href="Profil.dc.html" title="Mon profil" style="width:38px;height:38px;border-radius:50%;background:#2F3B6E;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;text-decoration:none;letter-spacing:0.02em;">CL</a>
+    </div>
+  </header>
+
+  <!-- MAP AREA -->
+  <div id="vtmap" onMouseDown="{{onDown}}" onMouseMove="{{onMove}}" onMouseUp="{{onUp}}" onMouseLeave="{{onUp}}" style="position:relative;flex:1;overflow:hidden;background:{{mapBg}};cursor:{{mapCursor}};">
+
+    <!-- 2D MAP -->
+    <sc-if value="{{flatOn}}" hint-placeholder-val="{{true}}">
+      <svg width="1280" height="860" style="position:absolute;left:0;top:0;transform:{{mapTransform}};transform-origin:0 0;">
+        <rect x="-400" y="-400" width="2080" height="1660" fill="{{pal.land}}"></rect>
+        <sc-for list="{{hroads}}" as="r" hint-placeholder-count="7"><line x1="{{r.x1}}" y1="{{r.y1}}" x2="{{r.x2}}" y2="{{r.y2}}" stroke="{{pal.roadMinor}}" stroke-width="3" stroke-linecap="round"></line></sc-for>
+        <sc-for list="{{vroads}}" as="r" hint-placeholder-count="11"><line x1="{{r.x1}}" y1="{{r.y1}}" x2="{{r.x2}}" y2="{{r.y2}}" stroke="{{pal.roadMinor}}" stroke-width="3" stroke-linecap="round"></line></sc-for>
+        <sc-for list="{{mains}}" as="m" hint-placeholder-count="2"><path d="{{m.d}}" fill="none" stroke="{{pal.roadMajor}}" stroke-width="7" stroke-linecap="round"></path></sc-for>
+        <sc-for list="{{parks}}" as="p" hint-placeholder-count="2"><polygon points="{{p.points}}" fill="{{pal.park}}"></polygon></sc-for>
+        <polygon points="{{lakePts}}" fill="{{pal.water}}"></polygon>
+        <sc-for list="{{parcels}}" as="pc" hint-placeholder-count="0"><rect onClick="{{pc.onClick}}" x="{{pc.x}}" y="{{pc.y}}" width="{{pc.w}}" height="{{pc.h}}" rx="2" fill="{{pc.fill}}" stroke="{{pc.stroke}}" stroke-width="{{pc.sw}}" style="cursor:pointer;"></rect></sc-for>
+        <sc-if value="{{sunMode}}" hint-placeholder-val="{{false}}">
+          <rect x="-400" y="-400" width="2080" height="1660" fill="{{tintFill}}" fill-opacity="{{tintOp}}" style="pointer-events:none;"></rect>
+          <sc-for list="{{shade}}" as="s" hint-placeholder-count="0"><polygon points="{{s.shadow}}" fill="#243154" fill-opacity="0.2"></polygon></sc-for>
+          <sc-for list="{{shade}}" as="s" hint-placeholder-count="0"><rect x="{{s.bx}}" y="{{s.by}}" width="{{s.bw}}" height="{{s.bh}}" rx="1.5" fill="#F0EEE7" stroke="#AEB6C6" stroke-width="0.7"></rect></sc-for>
+        </sc-if>
+        <sc-for list="{{labels}}" as="l" hint-placeholder-count="0"><text x="{{l.x}}" y="{{l.y}}" font-family="Archivo, sans-serif" font-size="{{l.size}}" font-weight="600" fill="{{pal.label}}" letter-spacing="0.04em">{{l.text}}</text></sc-for>
+        <sc-for list="{{pins}}" as="p" hint-placeholder-count="8">
+          <g onClick="{{p.onClick}}" style="cursor:pointer;">
+            <circle cx="{{p.x}}" cy="{{p.y}}" r="8.5" fill="{{p.ring}}"></circle>
+            <circle cx="{{p.x}}" cy="{{p.y}}" r="5.5" fill="{{p.color}}"></circle>
+          </g>
+        </sc-for>
+      </svg>
+    </sc-if>
+
+    <!-- SEARCH (hidden while measuring sun) -->
+    <sc-if value="{{mapChrome}}" hint-placeholder-val="{{true}}">
+      <div style="position:absolute;left:16px;top:16px;width:340px;max-width:calc(100% - 120px);z-index:12;">
+        <div style="display:flex;align-items:center;gap:9px;background:{{ui.panel}};border:1px solid {{ui.border}};border-radius:11px;padding:0 14px;height:46px;box-shadow:0 8px 24px -12px rgba(16,20,34,0.4);">
+          <span style="color:#98A0B0;font-size:16px;">⌕</span>
+          <input value="{{query}}" onChange="{{onQuery}}" onFocus="{{onFocus}}" placeholder="Rechercher une adresse, une commune" style="border:none;background:transparent;outline:none;font-family:'Archivo',sans-serif;font-size:14px;color:{{ui.text}};width:100%;">
+        </div>
+        <sc-if value="{{searchOpen}}" hint-placeholder-val="{{false}}">
+          <div style="margin-top:6px;background:{{ui.panel}};border:1px solid {{ui.border}};border-radius:11px;overflow:hidden;box-shadow:0 12px 30px -10px rgba(16,20,34,0.45);">
+            <sc-for list="{{suggestions}}" as="s" hint-placeholder-count="4">
+              <button onClick="{{s.go}}" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:none;background:transparent;padding:10px 14px;cursor:pointer;color:{{ui.text}};font-family:'Archivo',sans-serif;" style-hover="background:{{ui.inputBg}};">
+                <span style="color:#98A0B0;">⌖</span><span style="font-size:13.5px;font-weight:500;">{{s.label}}</span>
+              </button>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <!-- SUN DIRECTION CHIP (sun mode) -->
+    <sc-if value="{{sunMode}}" hint-placeholder-val="{{false}}">
+      <div style="position:absolute;left:16px;top:16px;display:flex;align-items:center;gap:9px;background:rgba(255,255,255,0.94);backdrop-filter:blur(6px);border:1px solid #E4E7EF;border-radius:11px;padding:8px 14px;box-shadow:0 8px 24px -12px rgba(16,20,34,0.4);z-index:14;">
+        <span style="width:18px;height:18px;border-radius:50%;background:#DB9B2C;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;">☀</span>
+        <span style="font-size:12.5px;font-weight:600;color:#161A2E;">{{sunChip}}</span>
+      </div>
+    </sc-if>
+
+    <!-- ZOOM (always) -->
+    <div style="position:absolute;right:16px;bottom:16px;display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+      <button onClick="{{toggleDark}}" title="Basculer clair / sombre" style="background:{{ui.panel}};border:1px solid {{ui.border}};color:{{ui.text}};width:42px;height:42px;border-radius:11px;cursor:pointer;font-size:15px;box-shadow:0 8px 24px -12px rgba(16,20,34,0.4);">{{darkGlyph}}</button>
+      <div style="display:flex;flex-direction:column;background:{{ui.panel}};border:1px solid {{ui.border}};border-radius:11px;overflow:hidden;box-shadow:0 8px 24px -12px rgba(16,20,34,0.4);">
+        <button onClick="{{zoomIn}}" style="border:none;background:transparent;color:{{ui.text}};width:42px;height:42px;font-size:20px;cursor:pointer;border-bottom:1px solid {{ui.border}};">+</button>
+        <button onClick="{{zoomOut}}" style="border:none;background:transparent;color:{{ui.text}};width:42px;height:42px;font-size:20px;cursor:pointer;">−</button>
+      </div>
+    </div>
+
+    <!-- HINT -->
+    <sc-if value="{{mapChrome}}" hint-placeholder-val="{{true}}">
+      <div style="position:absolute;left:16px;bottom:16px;background:{{ui.panel}};border:1px solid {{ui.border}};border-radius:9px;padding:7px 12px;font-size:12px;color:{{ui.sub}};">{{zoomHint}}</div>
+    </sc-if>
+
+    <!-- TOP-RIGHT CONTEXT CARD -->
+    <sc-if value="{{selected}}" hint-placeholder-val="{{null}}">
+      <div style="position:absolute;right:16px;top:16px;width:312px;max-width:calc(100% - 32px);background:{{ui.panel}};border:1px solid {{ui.border}};border-radius:14px;box-shadow:0 18px 40px -14px rgba(16,20,34,0.5);animation:vtCard .18s ease;z-index:20;">
+
+        <!-- PARCEL · INFO -->
+        <sc-if value="{{parcelInfo}}" hint-placeholder-val="{{false}}">
+          <div style="padding:15px 16px 16px;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+              <div>
+                <div style="font-family:'Spline Sans Mono',monospace;font-size:15px;font-weight:500;color:{{ui.text}};">{{selRef}}</div>
+                <div style="font-size:12px;color:{{ui.sub}};margin-top:1px;">{{selSection}}</div>
+              </div>
+              <button onClick="{{clearSel}}" style="border:none;background:{{ui.inputBg}};color:{{ui.sub}};width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:15px;flex-shrink:0;">×</button>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:7px;margin:12px 0 12px;">
+              <span style="font-family:'Spline Sans Mono',monospace;font-size:26px;font-weight:500;color:{{ui.text}};letter-spacing:-0.01em;">{{headline}}</span>
+              <span style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;">Surface</span>
+            </div>
+            <div style="border-top:1px solid {{ui.border}};">
+              <sc-for list="{{dataRows}}" as="r" hint-placeholder-count="6">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid {{ui.hair}};">
+                  <span style="font-size:12.5px;color:{{ui.sub}};">{{r.k}}</span>
+                  <span style="font-family:'Spline Sans Mono',monospace;font-size:12.5px;color:{{ui.text}};">{{r.v}}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin:9px 0 13px;font-size:10.5px;color:#98A0B0;">
+              <span style="width:6px;height:6px;border-radius:50%;background:#2F6E8F;flex-shrink:0;"></span>
+              <span>Sources · Cadastre · PLU · DVF 03/2025</span>
+            </div>
+            <button onClick="{{openSun}}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid #E6CF97;background:#FBF2DD;color:#8A5E10;font-family:'Archivo',sans-serif;font-size:13px;font-weight:700;padding:10px;border-radius:9px;cursor:pointer;margin-bottom:8px;" style-hover="background:#F5E7C4;">
+              <span style="font-size:14px;line-height:1;">☀</span> Mesurer l'ensoleillement
+            </button>
+            <a href="{{analyseHref}}" style="display:block;text-align:center;background:#2F3B6E;color:#FFFFFF;font-family:'Archivo',sans-serif;font-size:13.5px;font-weight:600;padding:11px;border-radius:9px;text-decoration:none;margin-bottom:8px;" style-hover="background:#222B52;">Analyser ce terrain →</a>
+            <button onClick="{{addIt}}" style="{{addBtnStyle}}">{{addLabel}}</button>
+          </div>
+        </sc-if>
+
+        <!-- PARCEL · SUN CONTROLS -->
+        <sc-if value="{{sunMode}}" hint-placeholder-val="{{false}}">
+          <div style="padding:15px 16px 16px;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;">
+              <div>
+                <div style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;">Ensoleillement</div>
+                <div style="font-family:'Spline Sans Mono',monospace;font-size:14px;font-weight:500;color:{{ui.text}};margin-top:2px;">{{selRef}}</div>
+              </div>
+              <button onClick="{{clearSel}}" style="border:none;background:{{ui.inputBg}};color:{{ui.sub}};width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:15px;flex-shrink:0;">×</button>
+            </div>
+            <button onClick="{{closeSun}}" style="display:inline-flex;align-items:center;gap:6px;border:none;background:transparent;color:#2F3B6E;font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;padding:0;margin-bottom:13px;">← Infos du terrain</button>
+            <div style="display:flex;align-items:center;gap:8px;background:#FBF2DD;border:1px solid #EFE1BE;border-radius:9px;padding:9px 12px;margin-bottom:14px;">
+              <span style="width:7px;height:7px;border-radius:50%;background:#DB9B2C;flex-shrink:0;"></span>
+              <span style="font-size:11.5px;font-weight:600;color:#8A5E10;line-height:1.35;">Ombres portées affichées sur la carte</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;">
+              <span style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;">Heure solaire</span>
+              <span style="font-family:'Spline Sans Mono',monospace;font-size:19px;font-weight:500;color:{{ui.text}};">{{heureDisp}}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px;">
+              <button onClick="{{togglePlay}}" style="{{playStyle}}">{{playGlyph}}</button>
+              <input type="range" min="4" max="21" step="0.1" value="{{hour}}" onChange="{{onHour}}" style="flex:1;accent-color:#DB9B2C;cursor:pointer;">
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <span style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;">Date</span>
+              <span style="font-family:'Spline Sans Mono',monospace;font-size:13px;color:{{ui.text}};">{{dateDisp}}</span>
+            </div>
+            <input type="range" min="1" max="365" step="1" value="{{doy}}" onChange="{{onDate}}" style="width:100%;accent-color:#2F3B6E;cursor:pointer;margin-bottom:12px;">
+            <div style="display:flex;gap:6px;margin-bottom:13px;">
+              <button onClick="{{presetHiver}}" style="{{presetHiverStyle}}">Solstice hiver</button>
+              <button onClick="{{presetEqui}}" style="{{presetEquiStyle}}">Équinoxe</button>
+              <button onClick="{{presetEte}}" style="{{presetEteStyle}}">Solstice été</button>
+            </div>
+            <div style="border-top:1px solid {{ui.border}};padding-top:11px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">
+              <div><div style="font-size:9px;text-transform:uppercase;color:#98A0B0;letter-spacing:0.04em;">Lever</div><div style="font-family:'Spline Sans Mono',monospace;font-size:12.5px;color:{{ui.text}};">{{leverDisp}}</div></div>
+              <div><div style="font-size:9px;text-transform:uppercase;color:#98A0B0;letter-spacing:0.04em;">Coucher</div><div style="font-family:'Spline Sans Mono',monospace;font-size:12.5px;color:{{ui.text}};">{{coucherDisp}}</div></div>
+              <div><div style="font-size:9px;text-transform:uppercase;color:#98A0B0;letter-spacing:0.04em;">Durée</div><div style="font-family:'Spline Sans Mono',monospace;font-size:12.5px;color:#2F3B6E;font-weight:500;">{{dureeDisp}}</div></div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- PIN · SAVED TERRAIN -->
+        <sc-if value="{{pinInfo}}" hint-placeholder-val="{{false}}">
+          <div style="padding:15px 16px 16px;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+              <div>
+                <div style="font-size:15px;font-weight:700;color:{{ui.text}};line-height:1.25;">{{pinName}}</div>
+                <div style="font-size:12.5px;color:{{ui.sub}};margin-top:1px;">{{pinCommune}}</div>
+              </div>
+              <button onClick="{{clearSel}}" style="border:none;background:{{ui.inputBg}};color:{{ui.sub}};width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:15px;flex-shrink:0;">×</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;margin:13px 0 14px;">
+              <div><div style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;">Score</div><div style="font-family:'Spline Sans Mono',monospace;font-size:17px;color:{{ui.text}};">{{pinScore}}</div></div>
+              <span style="{{pinBadge}}"><span style="{{pinDot}}"></span>{{pinStatut}}</span>
+            </div>
+            <a href="Dashboard portefeuille.dc.html" style="display:block;text-align:center;background:#2F3B6E;color:#FFFFFF;font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;padding:10px;border-radius:9px;text-decoration:none;" style-hover="background:#222B52;">Ouvrir la fiche →</a>
+          </div>
+        </sc-if>
+
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:820},&quot;latitude&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:45.9,&quot;min&quot;:42,&quot;max&quot;:50,&quot;step&quot;:0.1,&quot;unit&quot;:&quot;°&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Ensoleillement&quot;},&quot;parcelZoom&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1.6,&quot;min&quot;:1.2,&quot;max&quot;:2.6,&quot;step&quot;:0.1,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Carte&quot;}}">
+class Component extends DCLogic {
+  state = { dark:false, zoom:0.82, tx:0, ty:0, query:'', searchOpen:false, selected:null, sunMode:false, hour:13, doy:172, playing:false, added:false, ready:false };
+
+  STATUS = { 'À étudier':'#98A0B0', 'Prometteur':'#2E7D5B', 'Réservé':'#DB9B2C', 'Écarté':'#C0432E' };
+  STBG = { 'À étudier':'#ECEEF2', 'Prometteur':'#E7F2EC', 'Réservé':'#FBF2DD', 'Écarté':'#F8E7E2' };
+  ZONAGE = ['Zone UC','Zone UB','Zone AU','Zone UD'];
+  EMPRISE = ['30 %','40 %','25 %','35 %'];
+  HAUT = ['9 m','7 m','12 m','8 m'];
+  EXPO = ['Sud','Sud-Ouest','Ouest','Sud-Est'];
+  VIAB = ['Viabilisé','En bordure','À raccorder'];
+
+  PINS = [
+    { id:1, name:'Chemin des Vignes', commune:'Annecy-le-Vieux', score:84, statut:'Prometteur', x:540, y:230 },
+    { id:2, name:'Route du Lac', commune:'Sevrier', score:81, statut:'Prometteur', x:860, y:560 },
+    { id:4, name:'Clos des Tilleuls', commune:'Poisy', score:77, statut:'Réservé', x:360, y:470 },
+    { id:6, name:'Plateau des Glaisins', commune:'Annecy', score:88, statut:'Prometteur', x:470, y:350 },
+    { id:8, name:'Coteau de Vieugy', commune:'Seynod', score:70, statut:'À étudier', x:720, y:690 },
+    { id:9, name:'Chemin de Quintal', commune:'Quintal', score:79, statut:'Réservé', x:300, y:640 },
+    { id:5, name:'Impasse du Verger', commune:'Argonay', score:63, statut:'À étudier', x:640, y:430 },
+    { id:10, name:'Les Balcons du Semnoz', commune:'Seynod', score:75, statut:'À étudier', x:560, y:600 }
+  ];
+  SUGG = [
+    { label:'Annecy (74000)', x:360, y:360 },
+    { label:'Annecy-le-Vieux (74940)', x:540, y:230 },
+    { label:'Poisy (74330)', x:360, y:470 },
+    { label:'Sevrier (74320)', x:820, y:560 },
+    { label:'Seynod (74600)', x:700, y:660 }
+  ];
+
+  BUILDINGS_REMOVED = true;
+
+  buildMap() {
+    const rnd = s => { const x = Math.sin(s*91.7)*43758.5; return x - Math.floor(x); };
+    const vroads = [], hroads = [];
+    for (let i=1;i<12;i++){ const x=i*108+(rnd(i)*30-15); vroads.push({ x1:x.toFixed(0), y1:0, x2:(x+rnd(i+4)*50-25).toFixed(0), y2:860 }); }
+    for (let j=1;j<8;j++){ const y=j*112+(rnd(j+20)*30-15); hroads.push({ x1:0, y1:y.toFixed(0), x2:1280, y2:(y+rnd(j+9)*50-25).toFixed(0) }); }
+    const mains = [ { d:'M-40,360 C300,310 620,430 940,360 C1080,332 1220,350 1320,344' }, { d:'M320,-40 C360,250 280,540 380,900' } ];
+    const parks = [ { points:'120,560 220,540 272,602 232,694 128,702 86,632' }, { points:'560,92 662,82 704,150 654,212 560,202 528,142' } ];
+    const lakePts = '1160,110 1232,250 1212,430 1118,604 1006,724 968,648 1036,470 1078,300 1108,176';
+    const parcels = [];
+    for (let c=0;c<6;c++) for (let r=0;r<4;r++){ parcels.push({ id:c*4+r, x:392+c*76+rnd(c*r+1)*8, y:332+r*70+rnd(c+r+2)*6, w:60+rnd(c+1)*10, h:52+rnd(r+3)*7 }); }
+    const labels = [ { x:200, y:320, text:'ANNECY', size:17 }, { x:500, y:170, text:'Annecy-le-Vieux', size:13 }, { x:300, y:520, text:'Poisy', size:13 }, { x:700, y:700, text:'Seynod', size:13 }, { x:1020, y:470, text:"Lac d'Annecy", size:15 } ];
+    return { vroads, hroads, mains, parks, lakePts, parcels, labels };
+  }
+
+  componentDidMount() {
+    const el = document.getElementById('vtmap');
+    this._cx = el ? el.clientWidth/2 : 460;
+    this._cy = el ? el.clientHeight/2 : 360;
+    this.setState({ tx:this._cx - 560*0.82, ty:this._cy - 380*0.82, ready:true });
+    this._key = e => { if (e.key==='Escape'){ if (this.state.sunMode) this.setState({ sunMode:false }); else this.setState({ selected:null, searchOpen:false }); } };
+    window.addEventListener('keydown', this._key);
+    try { const q = new URLSearchParams(location.search).get('vq'); if (q){ const hit = this.SUGG.find(s => s.label === q) || this.SUGG.find(s => s.label.toLowerCase().includes(q.toLowerCase())); if (hit) setTimeout(() => this.go(hit), 80); else this.setState({ query: q, searchOpen: true }); } } catch (e) {}
+  }
+  componentWillUnmount() { window.removeEventListener('keydown', this._key); if (this._t) clearInterval(this._t); }
+
+  zoomBy(f) {
+    const oz = this.state.zoom, nz = Math.max(0.5, Math.min(5, oz*f));
+    const cx = this._cx || 460, cy = this._cy || 360;
+    this.setState(s => ({ zoom:nz, tx:cx-(cx-s.tx)*(nz/oz), ty:cy-(cy-s.ty)*(nz/oz) }));
+  }
+  go(p) {
+    const z = 2.7, cx = this._cx || 460, cy = this._cy || 360;
+    this.setState({ zoom:z, tx:cx-p.x*z, ty:cy-p.y*z, searchOpen:false, query:p.label });
+  }
+
+  d2r(d){ return d*Math.PI/180; }
+  decl(N){ return 23.45*Math.sin(this.d2r(360*(284+N)/365)); }
+  solar(N,hour){
+    const phi=this.d2r(this.LAT), dl=this.d2r(this.decl(N)), H=this.d2r(15*(hour-12));
+    const sinAlt=Math.sin(phi)*Math.sin(dl)+Math.cos(phi)*Math.cos(dl)*Math.cos(H);
+    const alt=Math.asin(Math.max(-1,Math.min(1,sinAlt)));
+    let cosAz=(Math.sin(dl)-Math.sin(phi)*sinAlt)/(Math.cos(phi)*Math.cos(alt)||1e-6);
+    cosAz=Math.max(-1,Math.min(1,cosAz));
+    let az=Math.acos(cosAz)*180/Math.PI; if (hour>12) az=360-az;
+    return { alt:alt*180/Math.PI, az };
+  }
+  dayInfo(N){ const phi=this.d2r(this.LAT), dl=this.d2r(this.decl(N)); let c=Math.max(-1,Math.min(1,-Math.tan(phi)*Math.tan(dl))); const H0=Math.acos(c)*180/Math.PI; return { lever:12-H0/15, coucher:12+H0/15, len:2*H0/15 }; }
+  hm(h){ const x=((h%24)+24)%24, hh=Math.floor(x), mm=Math.round((x-hh)*60); return (hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm; }
+  dateFromDoy(N){ const d=new Date(2025,0,1); d.setDate(N); return d.toLocaleDateString('fr-FR',{ day:'numeric', month:'long' }); }
+  hull(pts){ pts=pts.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]); const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]); const lo=[],up=[]; for (const p of pts){ while (lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],p)<=0) lo.pop(); lo.push(p); } for (let i=pts.length-1;i>=0;i--){ const p=pts[i]; while (up.length>=2&&cr(up[up.length-2],up[up.length-1],p)<=0) up.pop(); up.push(p); } lo.pop(); up.pop(); return lo.concat(up); }
+
+  compass(az){ const d=['nord','nord-est','est','sud-est','sud','sud-ouest','ouest','nord-ouest']; return d[Math.round((((az%360)+360)%360)/45)%8]; }
+  mapShadow(sun){
+    const up=sun.alt>0, azR=this.d2r(sun.az);
+    const sdir=[-Math.sin(azR), Math.cos(azR)];
+    const baseL = up ? 1/Math.max(Math.tan(this.d2r(sun.alt)),0.14)*9 : 0;
+    const shade = (up && sun.alt>2) ? this._map.parcels.map((pc,i)=>{
+      const bw=pc.w*0.46, bh=pc.h*0.44, bx=pc.x+pc.w*0.27, by=pc.y+pc.h*0.30;
+      const L=Math.min(72, baseL*(0.8+(i%3)*0.3));
+      const c=[[bx,by],[bx+bw,by],[bx+bw,by+bh],[bx,by+bh]];
+      const proj=c.map(p=>[p[0]+sdir[0]*L, p[1]+sdir[1]*L]);
+      const poly=this.hull(c.concat(proj)).map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+      return { shadow:poly, bx:bx.toFixed(1), by:by.toFixed(1), bw:bw.toFixed(1), bh:bh.toFixed(1) };
+    }) : [];
+    let tintFill='#FFFFFF', tintOp=0;
+    if (sun.alt<-3){ tintFill='#0E1430'; tintOp=0.4; }
+    else if (sun.alt<2){ tintFill='#E8853A'; tintOp=0.16; }
+    else if (sun.alt<14){ tintFill='#F3C879'; tintOp=0.09; }
+    const dir = this.compass(sun.az);
+    const prep = (dir==='est'||dir==='ouest') ? "à l'" : 'au ';
+    const chip = up ? `Soleil ${prep}${dir} · ${Math.round(sun.alt)}° · ${this.hm(this.state.hour)}` : `Soleil sous l'horizon · ${this.hm(this.state.hour)}`;
+    return { shade, tintFill, tintOp, sunChip:chip };
+  }
+
+  parcelData(id){
+    const surface = 520 + (id*47 % 620);
+    const zi = id % 4;
+    return { ref:'AB '+(140+id), section:'Section AB · Poisy', surface, zonage:this.ZONAGE[zi], emprise:this.EMPRISE[zi], hauteur:this.HAUT[zi], expo:this.EXPO[(id+1)%4], viab:this.VIAB[id%3], prix:surface*(300+(id%5)*18) };
+  }
+
+  togglePlay(){
+    if (this.state.playing){ clearInterval(this._t); this._t=null; this.setState({ playing:false }); return; }
+    this.setState({ playing:true });
+    this._t = setInterval(()=>this.setState(s=>{ let h=s.hour+0.12; if (h>21) h=4; return { hour:Math.round(h*100)/100 }; }), 70);
+  }
+  selectParcel(id){ const pd=this.parcelData(id); this.setState({ selected:{ kind:'parcel', id, ...pd }, sunMode:this.state.sunMode, added:false }); }
+  selectPin(p){ this.setState({ selected:{ kind:'pin', ...p }, sunMode:false }); }
+  openSun(){ this.setState({ sunMode:true }); }
+  closeSun(){ if (this._t){ clearInterval(this._t); this._t=null; } this.setState({ sunMode:false, playing:false }); }
+
+  renderVals(){
+    this.LAT = this.props.latitude ?? 45.9;
+    const parcelZoom = this.props.parcelZoom ?? 1.6;
+    if (!this._map) this._map = this.buildMap();
+    const S = this.state, M = this._map;
+
+    const pal = S.dark
+      ? { land:'#141A2E', water:'#22416B', park:'#22392E', roadMinor:'#39456E', roadMajor:'#4E5C96', parcelFill:'#222A44', parcelLine:'#3C467A', text:'#9BA8D0', label:'#B6C0E0' }
+      : { land:'#E9ECF2', water:'#BBD0E6', park:'#D7E3D2', roadMinor:'#FFFFFF', roadMajor:'#FFFFFF', parcelFill:'#F2F5FA', parcelLine:'#C4CCDB', text:'#6C7488', label:'#5B6480' };
+    const ui = S.dark
+      ? { pageBg:'#0F1426', panel:'#171C30', border:'#2A3252', hair:'#232B46', text:'#EAECF2', sub:'#9BA8D0', inputBg:'#222B44' }
+      : { pageBg:'#F5F6FA', panel:'#FFFFFF', border:'#DADEE8', hair:'#EFF1F6', text:'#161A2E', sub:'#6C7488', inputBg:'#F5F6FA' };
+
+    const ringCol = S.dark ? '#0F1426' : '#FFFFFF';
+    const pins = this.PINS.map(p => ({ x:p.x, y:p.y, color:this.STATUS[p.statut], ring:ringCol, onClick:()=>this.selectPin(p) }));
+
+    const showParcels = S.zoom >= parcelZoom, showLabels = S.zoom < 2.4;
+    const selId = (S.selected && S.selected.kind==='parcel') ? S.selected.id : -1;
+    const parcels = showParcels ? M.parcels.map(pc => { const on = pc.id===selId; return { x:pc.x.toFixed(1), y:pc.y.toFixed(1), w:pc.w.toFixed(1), h:pc.h.toFixed(1), fill: on?'rgba(219,155,44,0.9)':pal.parcelFill, stroke: on?'#B07F1C':pal.parcelLine, sw: on?2.2:1.4, onClick:()=>this.selectParcel(pc.id) }; }) : [];
+    const labels = showLabels ? M.labels : [];
+
+    const suggestions = this.SUGG.filter(s => !S.query || s.label.toLowerCase().includes(S.query.toLowerCase()) || S.query.length<2).map(s => ({ label:s.label, go:()=>this.go(s) }));
+
+    const sun = this.solar(S.doy, S.hour), di = this.dayInfo(S.doy);
+    const shadow = S.sunMode ? this.mapShadow(sun) : { shade:[], tintFill:'#FFFFFF', tintOp:0, sunChip:'' };
+
+    const preset = on => `flex:1;border:1px solid ${on?'#2F3B6E':'#DADEE8'};background:${on?'#EEF0F8':'#FFFFFF'};color:${on?'#2F3B6E':'#4C5468'};font-family:'Archivo',sans-serif;font-size:11px;font-weight:600;padding:7px 4px;border-radius:8px;cursor:pointer;`;
+
+    const sel = S.selected || {};
+    const isParcel = sel.kind==='parcel', isPin = sel.kind==='pin';
+    let dataRows = [], headline = '';
+    if (isParcel){
+      dataRows = [
+        { k:'Zonage PLU', v:sel.zonage },
+        { k:'Emprise au sol', v:sel.emprise },
+        { k:'Hauteur max', v:sel.hauteur },
+        { k:'Viabilisation', v:sel.viab },
+        { k:'Prix estimé', v: sel.prix.toLocaleString('fr-FR')+' €' },
+        { k:'Exposition', v:sel.expo }
+      ];
+      headline = sel.surface.toLocaleString('fr-FR')+' m²';
+    }
+
+    return {
+      pal, ui, mapBg: pal.land,
+      darkGlyph: S.dark?'☀':'☾', toggleDark:()=>this.setState({ dark:!S.dark }),
+      mapTransform:`translate(${S.tx}px, ${S.ty}px) scale(${S.zoom})`,
+      mapCursor: 'grab',
+      vroads:M.vroads, hroads:M.hroads, mains:M.mains, parks:M.parks, lakePts:M.lakePts,
+      parcels, labels, pins: S.sunMode ? [] : pins, mapChrome: !S.sunMode,
+      query:S.query, onQuery:e=>this.setState({ query:e.target.value, searchOpen:true }),
+      onFocus:()=>this.setState({ searchOpen:true }), searchOpen:S.searchOpen, suggestions,
+      zoomIn:()=>this.zoomBy(1.4), zoomOut:()=>this.zoomBy(1/1.4),
+      zoomHint: showParcels ? "Cliquez une parcelle pour l'analyser" : 'Zoomez pour afficher les parcelles',
+      onDown:e=>{ this._drag={ sx:e.clientX, sy:e.clientY, tx:S.tx, ty:S.ty }; },
+      onMove:e=>{ if (!this._drag) return; this.setState({ tx:this._drag.tx+(e.clientX-this._drag.sx), ty:this._drag.ty+(e.clientY-this._drag.sy) }); },
+      onUp:()=>{ this._drag=null; },
+
+      selected:S.selected, clearSel:()=>this.setState({ selected:null, sunMode:false }),
+      flatOn: true, sunMode:S.sunMode,
+      parcelInfo: isParcel && !S.sunMode, pinInfo: isPin && !S.sunMode,
+      selRef: sel.ref || '', selSection: sel.section || '', headline, dataRows,
+      analyseHref: isParcel ? ('Positionnement.dc.html?vfrom=explorer&vname=' + encodeURIComponent(sel.ref)) : 'Positionnement.dc.html',
+      openSun:()=>this.openSun(), closeSun:()=>this.closeSun(),
+      addIt:()=>this.setState({ added:true }), addLabel: S.added ? 'Ajouté à mes terrains ✓' : '+ Ajouter à mes terrains',
+      addBtnStyle: S.added
+        ? "width:100%;border:1px solid #BFE0CC;background:#E7F2EC;color:#2E7D5B;font-family:'Archivo',sans-serif;font-size:13px;font-weight:700;padding:10px;border-radius:9px;cursor:default;"
+        : `width:100%;border:1px solid ${ui.border};background:${ui.panel};color:${ui.text};font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;padding:10px;border-radius:9px;cursor:pointer;`,
+
+      pinName: sel.name || '', pinCommune: sel.commune || '', pinScore: (sel.score!=null ? sel.score+' / 100' : ''), pinStatut: sel.statut || '',
+      pinBadge: isPin ? `display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:${this.STATUS[sel.statut]};background:${this.STBG[sel.statut]};border-radius:999px;padding:3px 10px;` : '',
+      pinDot: isPin ? `width:7px;height:7px;border-radius:50%;background:${this.STATUS[sel.statut]};` : '',
+
+      ...shadow,
+
+      heureDisp:this.hm(S.hour), hour:S.hour, onHour:e=>{ if (this._t){ clearInterval(this._t); this._t=null; } this.setState({ hour:+e.target.value, playing:false }); },
+      togglePlay:()=>this.togglePlay(), playGlyph:S.playing?'❚❚':'▶', playStyle:`width:34px;height:34px;flex-shrink:0;border:none;border-radius:9px;background:${S.playing?'#DB9B2C':'#2F3B6E'};color:#FFFFFF;font-size:12px;cursor:pointer;`,
+      doy:S.doy, onDate:e=>this.setState({ doy:+e.target.value }), dateDisp:this.dateFromDoy(S.doy),
+      presetHiver:()=>this.setState({ doy:355 }), presetEqui:()=>this.setState({ doy:80 }), presetEte:()=>this.setState({ doy:172 }),
+      presetHiverStyle:preset(S.doy===355), presetEquiStyle:preset(S.doy===80), presetEteStyle:preset(S.doy===172),
+      leverDisp:this.hm(di.lever), coucherDisp:this.hm(di.coucher), dureeDisp:this.hm(di.len).replace(':','h')
+    };
+  }
+}
+</script>
+</body>
+</html>

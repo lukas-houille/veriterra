@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:#F5F6FA;}
+</style>
+</helmet>
+
+<div data-screen-label="Profil" style="min-height:100vh;background:#F5F6FA;font-family:'Archivo',system-ui,sans-serif;color:#161A2E;">
+
+  <!-- SHELL TOP BAR -->
+  <header style="position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:20px;height:58px;padding:0 22px;background:#FFFFFF;border-bottom:1px solid #DADEE8;">
+    <a href="Explorer.dc.html" style="display:flex;align-items:center;gap:11px;text-decoration:none;color:inherit;">
+      <svg width="30" height="30" viewBox="0 0 152 152" fill="none" aria-hidden="true">
+        <defs><clipPath id="pnav"><rect x="22" y="22" width="108" height="108" rx="10"></rect></clipPath></defs>
+        <rect x="22" y="22" width="108" height="108" rx="10" fill="#EAECF4"></rect>
+        <g clip-path="url(#pnav)"><rect x="63" y="65" width="37" height="65" fill="#DB9B2C"></rect><rect x="22" y="22" width="41" height="56" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="22" y="78" width="41" height="52" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="63" y="22" width="37" height="43" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="63" y="65" width="37" height="65" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="100" y="22" width="30" height="37" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="100" y="59" width="30" height="39" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="100" y="98" width="30" height="32" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect></g>
+        <rect x="22" y="22" width="108" height="108" rx="10" fill="none" stroke="#2F3B6E" stroke-width="3"></rect>
+      </svg>
+      <span style="font-size:20px;font-weight:700;letter-spacing:-0.02em;">Veriterra</span>
+    </a>
+    <nav style="display:flex;gap:4px;margin-left:14px;">
+      <a href="Explorer.dc.html" style="font-size:14px;font-weight:500;color:#6C7488;padding:7px 13px;border-radius:8px;text-decoration:none;" style-hover="background:#F5F6FA;">Explorer</a>
+      <a href="Dashboard portefeuille.dc.html" style="font-size:14px;font-weight:500;color:#6C7488;padding:7px 13px;border-radius:8px;text-decoration:none;" style-hover="background:#F5F6FA;">Mes terrains</a>
+    </nav>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:14px;">
+      <a href="Profil.dc.html" title="Mon profil" style="width:34px;height:34px;border-radius:50%;background:#2F3B6E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;text-decoration:none;box-shadow:0 0 0 3px #DDE2F1;">CL</a>
+    </div>
+  </header>
+
+  <!-- CONTENT -->
+  <div style="max-width:900px;margin:0 auto;padding:26px 22px 48px;">
+
+    <!-- profile header -->
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+      <div style="width:58px;height:58px;border-radius:50%;background:#2F3B6E;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;flex-shrink:0;">CL</div>
+      <div>
+        <h1 style="margin:0 0 3px;font-size:24px;font-weight:800;letter-spacing:-0.02em;">Camille Lefèvre</h1>
+        <div style="font-size:13.5px;color:#6C7488;">Vos réglages orientent le score et le tri de chaque terrain.</div>
+      </div>
+    </div>
+
+    <!-- SECTION 1 : MON PROJET -->
+    <div style="background:#FFFFFF;border:1px solid #DADEE8;border-radius:14px;padding:22px 24px;margin-bottom:18px;box-shadow:0 1px 2px rgba(22,26,46,0.04);">
+      <div style="margin-bottom:20px;">
+        <h2 style="margin:0 0 3px;font-size:17px;font-weight:700;letter-spacing:-0.01em;">Mon projet</h2>
+        <div style="font-size:13px;color:#6C7488;">Ce que vous cherchez, et jusqu'où.</div>
+      </div>
+
+      <div style="margin-bottom:22px;">
+        <div style="font-size:12px;font-weight:600;color:#4C5468;margin-bottom:10px;">Objectif du projet</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <sc-for list="{{projetOpts}}" as="o" hint-placeholder-count="3"><button onClick="{{o.pick}}" style="{{o.style}}">{{o.label}}</button></sc-for>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:22px;margin-bottom:22px;">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#4C5468;margin-bottom:10px;">Commune ou secteur</div>
+          <input value="{{commune}}" onChange="{{onCommune}}" style="width:100%;border:1px solid #DADEE8;border-radius:10px;padding:11px 13px;font-family:'Archivo',sans-serif;font-size:14px;color:#161A2E;outline:none;">
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><span style="font-size:12px;font-weight:600;color:#4C5468;">Rayon de recherche</span><span style="font-family:'Spline Sans Mono',monospace;font-size:13.5px;color:#2F3B6E;font-weight:500;">{{rayon}} km</span></div>
+          <input type="range" min="1" max="50" step="1" value="{{rayon}}" onChange="{{onRayon}}" style="width:100%;accent-color:#2F3B6E;cursor:pointer;margin-top:8px;">
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><span style="font-size:12px;font-weight:600;color:#4C5468;">Budget maximum</span><span style="font-family:'Spline Sans Mono',monospace;font-size:13.5px;color:#2F3B6E;font-weight:500;">{{budgetDisp}}</span></div>
+          <input type="range" min="50000" max="600000" step="10000" value="{{budget}}" onChange="{{onBudget}}" style="width:100%;accent-color:#2F3B6E;cursor:pointer;margin-top:8px;">
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><span style="font-size:12px;font-weight:600;color:#4C5468;">Surface minimale</span><span style="font-family:'Spline Sans Mono',monospace;font-size:13.5px;color:#2F3B6E;font-weight:500;">{{surfaceDisp}}</span></div>
+          <input type="range" min="200" max="2000" step="50" value="{{surfaceMin}}" onChange="{{onSurface}}" style="width:100%;accent-color:#2F3B6E;cursor:pointer;margin-top:8px;">
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#4C5468;margin-bottom:10px;">Où en êtes-vous ?</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <sc-for list="{{avancementOpts}}" as="o" hint-placeholder-count="3"><button onClick="{{o.pick}}" style="{{o.style}}">{{o.label}}</button></sc-for>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 2 : PONDÉRATION -->
+    <div style="background:#FFFFFF;border:1px solid #DADEE8;border-radius:14px;padding:22px 24px;box-shadow:0 1px 2px rgba(22,26,46,0.04);">
+      <div style="margin-bottom:20px;">
+        <h2 style="margin:0 0 3px;font-size:17px;font-weight:700;letter-spacing:-0.01em;">Pondération des critères de note</h2>
+        <div style="font-size:13px;color:#6C7488;">Ajustez l'importance de chaque critère ; le score de vos terrains est recalculé en conséquence.</div>
+      </div>
+
+      <sc-for list="{{weightRows}}" as="w" hint-placeholder-count="6">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:15px;">
+          <div style="width:158px;display:flex;align-items:center;gap:9px;flex-shrink:0;"><span style="{{w.dotStyle}}"></span><span style="font-size:13.5px;font-weight:600;color:#161A2E;">{{w.label}}</span></div>
+          <input type="range" min="0" max="100" step="1" value="{{w.value}}" onChange="{{w.onChange}}" style="flex:1;accent-color:#2F3B6E;cursor:pointer;min-width:120px;">
+          <span style="font-family:'Spline Sans Mono',monospace;font-size:13.5px;font-weight:500;color:#161A2E;width:46px;text-align:right;flex-shrink:0;">{{w.pct}}</span>
+        </div>
+      </sc-for>
+
+      <div style="margin-top:20px;">
+        <div style="display:flex;height:12px;border-radius:6px;overflow:hidden;border:1px solid #EFF1F6;">
+          <sc-for list="{{distrib}}" as="d" hint-placeholder-count="6"><div style="{{d.style}}"></div></sc-for>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px 18px;margin-top:12px;">
+          <sc-for list="{{legend}}" as="l" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#4C5468;"><span style="{{l.dotStyle}}"></span>{{l.label}}</div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACTIONS -->
+    <div style="display:flex;align-items:center;gap:12px;margin-top:22px;">
+      <button onClick="{{save}}" style="{{saveStyle}}">{{saveLabel}}</button>
+      <button onClick="{{reset}}" style="border:1px solid #DADEE8;background:#FFF;color:#4C5468;font-family:'Archivo',sans-serif;font-size:14px;font-weight:600;padding:11px 18px;border-radius:11px;cursor:pointer;">Réinitialiser les pondérations</button>
+      <sc-if value="{{saved}}" hint-placeholder-val="{{false}}">
+        <span style="display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:#2E7D5B;"><span style="width:18px;height:18px;border-radius:50%;background:#E7F2EC;display:inline-flex;align-items:center;justify-content:center;font-size:11px;">✓</span>Modifications enregistrées</span>
+      </sc-if>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:960,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  state = {
+    projet: 'Résidence principale', commune: 'Annecy et alentours', rayon: 15,
+    budget: 280000, surfaceMin: 600, avancement: 'Je cherche activement',
+    weights: { ensoleillement: 90, prix: 80, constructibilite: 70, risques: 60, acces: 50, cadre: 55 },
+    saved: false
+  };
+
+  PROJETS = ['Résidence principale', 'Résidence secondaire', 'Investissement locatif'];
+  AVANC = ['Je me renseigne', 'Je cherche activement', 'Je suis prêt à acheter'];
+  CRIT = [
+    { key: 'ensoleillement', label: 'Ensoleillement', color: '#DB9B2C' },
+    { key: 'prix', label: 'Prix', color: '#2F3B6E' },
+    { key: 'constructibilite', label: 'Constructibilité', color: '#5A6BA8' },
+    { key: 'risques', label: 'Risques', color: '#51619F' },
+    { key: 'acces', label: 'Accès et réseaux', color: '#8E9CD8' },
+    { key: 'cadre', label: 'Cadre de vie', color: '#2E7D5B' }
+  ];
+  DEFAULT_W = { ensoleillement: 90, prix: 80, constructibilite: 70, risques: 60, acces: 50, cadre: 55 };
+
+  fmt(n) { return n.toLocaleString('fr-FR'); }
+  pill(label, sel, onClick) {
+    return { label, pick: onClick, style: `border:1px solid ${sel ? '#2F3B6E' : '#DADEE8'};background:${sel ? '#EEF0F8' : '#FFF'};color:${sel ? '#2F3B6E' : '#4C5468'};font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;padding:9px 14px;border-radius:10px;cursor:pointer;` };
+  }
+  setWeight(key, val) { this.setState(s => ({ weights: { ...s.weights, [key]: val }, saved: false })); }
+
+  renderVals() {
+    const S = this.state;
+    const total = this.CRIT.reduce((a, c) => a + (S.weights[c.key] || 0), 0) || 1;
+
+    return {
+      projetOpts: this.PROJETS.map(p => this.pill(p, S.projet === p, () => this.setState({ projet: p, saved: false }))),
+      avancementOpts: this.AVANC.map(p => this.pill(p, S.avancement === p, () => this.setState({ avancement: p, saved: false }))),
+      commune: S.commune, onCommune: e => this.setState({ commune: e.target.value, saved: false }),
+      rayon: S.rayon, onRayon: e => this.setState({ rayon: +e.target.value, saved: false }),
+      budget: S.budget, onBudget: e => this.setState({ budget: +e.target.value, saved: false }), budgetDisp: this.fmt(S.budget) + ' €',
+      surfaceMin: S.surfaceMin, onSurface: e => this.setState({ surfaceMin: +e.target.value, saved: false }), surfaceDisp: this.fmt(S.surfaceMin) + ' m²',
+
+      weightRows: this.CRIT.map(c => ({
+        label: c.label, value: S.weights[c.key],
+        pct: Math.round(S.weights[c.key] / total * 100) + ' %',
+        dotStyle: `width:9px;height:9px;border-radius:50%;background:${c.color};flex-shrink:0;`,
+        onChange: e => this.setWeight(c.key, +e.target.value)
+      })),
+      distrib: this.CRIT.map(c => ({ style: `width:${(S.weights[c.key] / total * 100).toFixed(2)}%;height:100%;background:${c.color};` })),
+      legend: this.CRIT.map(c => ({ label: c.label, dotStyle: `width:9px;height:9px;border-radius:50%;background:${c.color};` })),
+
+      save: () => this.setState({ saved: true }),
+      reset: () => this.setState({ weights: { ...this.DEFAULT_W }, saved: false }),
+      saved: S.saved,
+      saveLabel: S.saved ? 'Enregistré' : 'Enregistrer les modifications',
+      saveStyle: `border:none;background:${S.saved ? '#2E7D5B' : '#2F3B6E'};color:#FFF;font-family:'Archivo',sans-serif;font-size:14px;font-weight:600;padding:11px 20px;border-radius:11px;cursor:pointer;`
+    };
+  }
+}
+</script>
+</body>
+</html>

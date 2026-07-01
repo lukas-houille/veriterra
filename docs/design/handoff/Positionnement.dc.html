@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+</style>
+</helmet>
+
+<div style="height:100vh;display:flex;flex-direction:column;font-family:'Archivo',system-ui,sans-serif;background:#0F1426;color:#161A2E;">
+
+  <header style="position:relative;z-index:20;display:flex;align-items:center;gap:14px;height:56px;padding:0 20px;background:#FFFFFF;border-bottom:1px solid #DADEE8;flex-shrink:0;">
+    <a href="{{backHref}}" title="Retour" style="display:flex;align-items:center;gap:9px;text-decoration:none;color:#2F3B6E;">
+      <span style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;border:1px solid #DADEE8;background:#F5F6FA;font-size:16px;">←</span>
+      <span style="font-size:13.5px;font-weight:600;">{{backLabel}}</span>
+    </a>
+    <div style="width:1px;height:26px;background:#EFF1F6;"></div>
+    <div>
+      <div style="font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#98A0B0;">Positionnement · Ensoleillement</div>
+      <div style="font-size:16px;font-weight:700;letter-spacing:-0.01em;color:#161A2E;line-height:1.2;max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{terrainName}}</div>
+    </div>
+    <a href="Dashboard portefeuille.dc.html" style="margin-left:auto;display:flex;align-items:center;gap:9px;text-decoration:none;color:inherit;">
+      <svg width="26" height="26" viewBox="0 0 152 152" fill="none" aria-hidden="true">
+        <defs><clipPath id="navlogo2"><rect x="22" y="22" width="108" height="108" rx="10"></rect></clipPath></defs>
+        <rect x="22" y="22" width="108" height="108" rx="10" fill="#EAECF4"></rect>
+        <g clip-path="url(#navlogo2)"><rect x="63" y="65" width="37" height="65" fill="#DB9B2C"></rect><rect x="22" y="22" width="41" height="56" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="22" y="78" width="41" height="52" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="63" y="22" width="37" height="43" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="63" y="65" width="37" height="65" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="100" y="22" width="30" height="37" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="100" y="59" width="30" height="39" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect><rect x="100" y="98" width="30" height="32" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect></g>
+        <rect x="22" y="22" width="108" height="108" rx="10" fill="none" stroke="#2F3B6E" stroke-width="3"></rect>
+      </svg>
+      <span style="font-size:16px;font-weight:700;letter-spacing:-0.02em;color:#161A2E;">Veriterra</span>
+    </a>
+  </header>
+
+  <div style="position:relative;flex:1;overflow:hidden;background:#0F1426;">
+    <svg viewBox="0 0 560 430" preserveAspectRatio="xMidYMid slice" width="100%" height="100%" style="position:absolute;inset:0;">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{{skyTop}}"></stop><stop offset="1" stop-color="{{skyBot}}"></stop></linearGradient>
+        <radialGradient id="sunGlow"><stop offset="0" stop-color="{{sunGlow}}" stop-opacity="0.85"></stop><stop offset="1" stop-color="{{sunGlow}}" stop-opacity="0"></stop></radialGradient>
+      </defs>
+      <rect x="0" y="0" width="560" height="430" fill="url(#sky)"></rect>
+      <sc-if value="{{sunUp}}" hint-placeholder-val="{{true}}">
+        <circle cx="{{sunX}}" cy="{{sunY}}" r="50" fill="url(#sunGlow)"></circle>
+        <circle cx="{{sunX}}" cy="{{sunY}}" r="13" fill="{{sunColor}}"></circle>
+      </sc-if>
+      <polygon points="{{groundPts}}" fill="#D9E2D4"></polygon>
+      <polygon points="{{parcelPts}}" fill="#DB9B2C" fill-opacity="0.13" stroke="#DB9B2C" stroke-width="2" stroke-dasharray="5 4"></polygon>
+      <sc-for list="{{shadows}}" as="sh" hint-placeholder-count="3"><polygon points="{{sh}}" fill="#16203F" fill-opacity="0.22"></polygon></sc-for>
+      <sc-for list="{{buildings}}" as="b" hint-placeholder-count="3"><g><polygon points="{{b.left}}" fill="#C7CFE0" stroke="#9AA4BE" stroke-width="0.75"></polygon><polygon points="{{b.right}}" fill="#AEB8D0" stroke="#9AA4BE" stroke-width="0.75"></polygon><polygon points="{{b.top}}" fill="#EAEDF4" stroke="#9AA4BE" stroke-width="0.75"></polygon></g></sc-for>
+      <ellipse cx="{{treeShX}}" cy="{{treeShY}}" rx="{{treeShRx}}" ry="{{treeShRy}}" fill="#16203F" fill-opacity="0.18"></ellipse>
+      <rect x="{{treeTrunkX}}" y="{{treeTrunkY}}" width="5" height="22" rx="2" fill="#7C6A58"></rect>
+      <circle cx="{{treeX}}" cy="{{treeY}}" r="20" fill="#6F926B"></circle>
+    </svg>
+
+    <!-- top-right control tile -->
+    <div style="position:absolute;right:16px;top:16px;width:248px;max-width:calc(100% - 32px);background:rgba(255,255,255,0.94);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.6);border-radius:14px;padding:16px;box-shadow:0 14px 34px -14px rgba(16,20,34,0.55);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <span style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;">Heure solaire</span>
+        <span style="font-family:'Spline Sans Mono',monospace;font-size:19px;font-weight:500;color:#161A2E;">{{heureDisp}}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <button onClick="{{togglePlay}}" style="{{playStyle}}">{{playGlyph}}</button>
+        <input type="range" min="4" max="21" step="0.1" value="{{hour}}" onChange="{{onHour}}" style="flex:1;accent-color:#DB9B2C;cursor:pointer;">
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;">Date</span>
+        <span style="font-family:'Spline Sans Mono',monospace;font-size:13px;color:#161A2E;">{{dateDisp}}</span>
+      </div>
+      <input type="range" min="1" max="365" step="1" value="{{doy}}" onChange="{{onDate}}" style="width:100%;accent-color:#2F3B6E;cursor:pointer;margin-bottom:12px;">
+      <div style="display:flex;gap:6px;margin-bottom:12px;">
+        <button onClick="{{presetHiver}}" style="{{presetHiverStyle}}">Solstice hiver</button>
+        <button onClick="{{presetEqui}}" style="{{presetEquiStyle}}">Équinoxe</button>
+        <button onClick="{{presetEte}}" style="{{presetEteStyle}}">Solstice été</button>
+      </div>
+      <div style="border-top:1px solid #EFF1F6;padding-top:11px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">
+        <div><div style="font-size:9px;text-transform:uppercase;color:#98A0B0;letter-spacing:0.04em;">Lever</div><div style="font-family:'Spline Sans Mono',monospace;font-size:12.5px;">{{leverDisp}}</div></div>
+        <div><div style="font-size:9px;text-transform:uppercase;color:#98A0B0;letter-spacing:0.04em;">Coucher</div><div style="font-family:'Spline Sans Mono',monospace;font-size:12.5px;">{{coucherDisp}}</div></div>
+        <div><div style="font-size:9px;text-transform:uppercase;color:#98A0B0;letter-spacing:0.04em;">Durée</div><div style="font-family:'Spline Sans Mono',monospace;font-size:12.5px;color:#2F3B6E;font-weight:500;">{{dureeDisp}}</div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1200,&quot;height&quot;:820}}">
+class Component extends DCLogic {
+  state = { hour: 13, doy: 172, playing: false };
+  LAT = 45.9;
+  BUILDINGS = [{ x: 3.0, y: 2.8, w: 3.2, d: 2.6, h: 2.7 }, { x: 7.0, y: 1.0, w: 1.9, d: 2.0, h: 6.2 }, { x: 0.6, y: 5.2, w: 2.2, d: 1.8, h: 3.4 }];
+  TREE = { x: 1.7, y: 1.9, ch: 3.4 };
+  PARCEL = { x0: 2.2, y0: 2.2, x1: 6.7, y1: 6.2 };
+
+  componentWillUnmount() { if (this._t) clearInterval(this._t); }
+  togglePlay() {
+    if (this.state.playing) { clearInterval(this._t); this._t = null; this.setState({ playing: false }); return; }
+    this.setState({ playing: true });
+    this._t = setInterval(() => this.setState(s => { let h = s.hour + 0.12; if (h > 21) h = 4; return { hour: Math.round(h * 100) / 100 }; }), 70);
+  }
+  d2r(d) { return d * Math.PI / 180; }
+  decl(N) { return 23.45 * Math.sin(this.d2r(360 * (284 + N) / 365)); }
+  solar(N, hour) {
+    const phi = this.d2r(this.LAT), dl = this.d2r(this.decl(N)), H = this.d2r(15 * (hour - 12));
+    const sinAlt = Math.sin(phi) * Math.sin(dl) + Math.cos(phi) * Math.cos(dl) * Math.cos(H);
+    const alt = Math.asin(Math.max(-1, Math.min(1, sinAlt)));
+    let cosAz = (Math.sin(dl) - Math.sin(phi) * sinAlt) / (Math.cos(phi) * Math.cos(alt) || 1e-6);
+    cosAz = Math.max(-1, Math.min(1, cosAz));
+    let az = Math.acos(cosAz) * 180 / Math.PI; if (hour > 12) az = 360 - az;
+    return { alt: alt * 180 / Math.PI, az };
+  }
+  dayInfo(N) { const phi = this.d2r(this.LAT), dl = this.d2r(this.decl(N)); let c = Math.max(-1, Math.min(1, -Math.tan(phi) * Math.tan(dl))); const H0 = Math.acos(c) * 180 / Math.PI; return { lever: 12 - H0 / 15, coucher: 12 + H0 / 15, len: 2 * H0 / 15 }; }
+  hm(h) { const x = ((h % 24) + 24) % 24, hh = Math.floor(x), mm = Math.round((x - hh) * 60); return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm; }
+  dateFromDoy(N) { const d = new Date(2025, 0, 1); d.setDate(N); return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }); }
+  iso(x, y, z) { const s = 26, hz = 22, OX = 268, OY = 96; return [OX + (x - y) * 0.866 * s, OY + (x + y) * 0.5 * s - z * hz]; }
+  scr(w) { return w.map(p => { const s = this.iso(p[0], p[1], p[2] || 0); return s[0].toFixed(1) + ',' + s[1].toFixed(1); }).join(' '); }
+  hull(pts) { pts = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]); const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]); const lo = [], up = []; for (const p of pts) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); } for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); } lo.pop(); up.pop(); return lo.concat(up); }
+
+  renderVals() {
+    const S = this.state, sun = this.solar(S.doy, S.hour), di = this.dayInfo(S.doy);
+    const params = (typeof location !== 'undefined') ? new URLSearchParams(location.search) : new URLSearchParams();
+    const fromParam = params.get('vfrom') || 'terrains';
+    const terrainName = params.get('vname') || 'Clos des Tilleuls';
+    const backHref = fromParam === 'explorer' ? 'Explorer.dc.html' : 'Dashboard portefeuille.dc.html';
+    const backLabel = fromParam === 'explorer' ? 'Explorer' : 'Mes terrains';
+    const altR = this.d2r(sun.alt), azR = this.d2r(sun.az), up = sun.alt > 0;
+    const shadowPt = (x, y, z) => { const t = Math.min(z / Math.max(Math.tan(altR), 0.06), 64); return [x - t * Math.sin(azR), y - t * Math.cos(azR)]; };
+
+    const groundPts = this.scr([[0, 0, 0], [10, 0, 0], [10, 7, 0], [0, 7, 0]]);
+    const P = this.PARCEL, parcelPts = this.scr([[P.x0, P.y0, 0], [P.x1, P.y0, 0], [P.x1, P.y1, 0], [P.x0, P.y1, 0]]);
+    const order = this.BUILDINGS.map(b => ({ b, dep: (b.x + b.w / 2) + (b.y + b.d / 2) })).sort((a, z) => a.dep - z.dep);
+    const buildings = order.map(({ b }) => {
+      const x0 = b.x, y0 = b.y, x1 = b.x + b.w, y1 = b.y + b.d, h = b.h;
+      return { top: this.scr([[x0, y0, h], [x1, y0, h], [x1, y1, h], [x0, y1, h]]), left: this.scr([[x0, y0, 0], [x1, y0, 0], [x1, y0, h], [x0, y0, h]]), right: this.scr([[x1, y0, 0], [x1, y1, 0], [x1, y1, h], [x1, y0, h]]) };
+    });
+    let shadows = [];
+    if (up && sun.alt > 3) shadows = this.BUILDINGS.map(b => {
+      const x0 = b.x, y0 = b.y, x1 = b.x + b.w, y1 = b.y + b.d, h = b.h;
+      const base = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+      const all = base.concat(base.map(p => shadowPt(p[0], p[1], h)));
+      return this.hull(all).map(p => { const s = this.iso(p[0], p[1], 0); return s[0].toFixed(1) + ',' + s[1].toFixed(1); }).join(' ');
+    });
+    const T = this.TREE, tc = this.iso(T.x, T.y, T.ch), ttr = this.iso(T.x, T.y, 0);
+    let treeShX = ttr[0], treeShY = ttr[1], treeShRx = 4, treeShRy = 2;
+    if (up && sun.alt > 3) { const sp = shadowPt(T.x, T.y, T.ch), ss = this.iso(sp[0], sp[1], 0); treeShX = (ss[0] + ttr[0]) / 2; treeShY = (ss[1] + ttr[1]) / 2; treeShRx = 22; treeShRy = 9; }
+
+    const sunX = 280 + (sun.az - 180) / 115 * 250, sunY = 250 - Math.sin(Math.max(0, altR)) * 235;
+    const sunColor = sun.alt < 8 ? '#E0822C' : sun.alt < 22 ? '#E8AB3C' : '#FBE08A', sunGlow = sun.alt < 12 ? '#E89A40' : '#FBE08A';
+    let skyTop, skyBot;
+    if (sun.alt < -4) { skyTop = '#101630'; skyBot = '#26304E'; } else if (sun.alt < 8) { skyTop = '#3C4A72'; skyBot = '#D98A4E'; } else if (sun.alt < 22) { skyTop = '#7E97C4'; skyBot = '#E6C79A'; } else { skyTop = '#9FBDE6'; skyBot = '#D9E6F0'; }
+
+    const preset = on => `flex:1;border:1px solid ${on ? '#2F3B6E' : '#DADEE8'};background:${on ? '#EEF0F8' : '#FFF'};color:${on ? '#2F3B6E' : '#4C5468'};font-family:'Archivo',sans-serif;font-size:11px;font-weight:600;padding:7px 4px;border-radius:8px;cursor:pointer;`;
+
+    return {
+      groundPts, parcelPts, buildings, shadows,
+      sunUp: up, sunX: sunX.toFixed(1), sunY: sunY.toFixed(1), sunColor, sunGlow, skyTop, skyBot,
+      treeX: tc[0].toFixed(1), treeY: tc[1].toFixed(1), treeTrunkX: (ttr[0] - 2.5).toFixed(1), treeTrunkY: (ttr[1] - 22).toFixed(1),
+      treeShX: treeShX.toFixed(1), treeShY: treeShY.toFixed(1), treeShRx, treeShRy,
+      hour: S.hour, onHour: e => { if (S.playing) { clearInterval(this._t); this._t = null; } this.setState({ hour: +e.target.value, playing: false }); },
+      heureDisp: this.hm(S.hour), togglePlay: () => this.togglePlay(), playGlyph: S.playing ? '❚❚' : '▶',
+      playStyle: `width:38px;height:38px;flex-shrink:0;border:none;border-radius:9px;background:${S.playing ? '#DB9B2C' : '#2F3B6E'};color:#FFF;font-size:13px;cursor:pointer;`,
+      presetHiver: () => this.setState({ doy: 355 }), presetEqui: () => this.setState({ doy: 80 }), presetEte: () => this.setState({ doy: 172 }),
+      presetHiverStyle: preset(S.doy === 355), presetEquiStyle: preset(S.doy === 80), presetEteStyle: preset(S.doy === 172),
+      doy: S.doy, onDate: e => this.setState({ doy: +e.target.value }),
+      backHref, backLabel, terrainName,
+      dateDisp: this.dateFromDoy(S.doy),
+      leverDisp: this.hm(di.lever), coucherDisp: this.hm(di.coucher), dureeDisp: this.hm(di.len).replace(':', 'h')
+    };
+  }
+}
+</script>
+</body>
+</html>

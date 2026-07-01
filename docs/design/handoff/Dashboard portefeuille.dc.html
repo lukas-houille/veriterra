@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:#F5F6FA;}
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-thumb{background:#D2D7E2;border-radius:6px;}
+  @keyframes vtFadeIn{from{opacity:0;}to{opacity:1;}}
+  @keyframes vtPop{from{opacity:0;transform:translateY(14px) scale(0.985);}to{opacity:1;transform:translateY(0) scale(1);}}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:#F5F6FA;font-family:'Archivo',system-ui,sans-serif;color:#161A2E;">
+
+  <!-- TOP BAR -->
+  <header style="position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:20px;height:58px;padding:0 22px;background:#FFFFFF;border-bottom:1px solid #DADEE8;">
+    <div style="display:flex;align-items:center;gap:11px;">
+      <svg width="30" height="30" viewBox="0 0 152 152" fill="none" aria-hidden="true">
+        <defs><clipPath id="navlogo"><rect x="22" y="22" width="108" height="108" rx="10"></rect></clipPath></defs>
+        <rect x="22" y="22" width="108" height="108" rx="10" fill="#EAECF4"></rect>
+        <g clip-path="url(#navlogo)">
+          <rect x="63" y="65" width="37" height="65" fill="#DB9B2C"></rect>
+          <rect x="22" y="22" width="41" height="56" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect>
+          <rect x="22" y="78" width="41" height="52" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect>
+          <rect x="63" y="22" width="37" height="43" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect>
+          <rect x="63" y="65" width="37" height="65" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect>
+          <rect x="100" y="22" width="30" height="37" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect>
+          <rect x="100" y="59" width="30" height="39" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect>
+          <rect x="100" y="98" width="30" height="32" fill="none" stroke="#2F3B6E" stroke-width="2.4"></rect>
+        </g>
+        <rect x="22" y="22" width="108" height="108" rx="10" fill="none" stroke="#2F3B6E" stroke-width="3"></rect>
+      </svg>
+      <span style="font-size:20px;font-weight:700;letter-spacing:-0.02em;">Veriterra</span>
+    </div>
+    <nav style="display:flex;gap:4px;margin-left:14px;">
+      <a href="Explorer.dc.html" style="font-size:14px;font-weight:500;color:#6C7488;padding:7px 13px;border-radius:8px;text-decoration:none;" style-hover="background:#F5F6FA;">Explorer</a>
+      <span style="font-size:14px;font-weight:600;color:#2F3B6E;background:#EEF0F8;padding:7px 13px;border-radius:8px;">Mes terrains</span>
+    </nav>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:14px;">
+      <a href="Profil.dc.html" title="Mon profil" style="width:34px;height:34px;border-radius:50%;background:#222B52;color:#FFF;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;text-decoration:none;">CL</a>
+    </div>
+  </header>
+
+  <!-- TITLE + TOOLBAR -->
+  <div style="padding:22px 22px 0;">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+      <div>
+        <h1 style="margin:0 0 3px;font-size:25px;font-weight:700;letter-spacing:-0.02em;">Mes terrains</h1>
+        <div style="font-size:13.5px;color:#6C7488;"><span style="font-family:'Spline Sans Mono',monospace;color:#2F3B6E;font-weight:500;">{{count}}</span> terrains suivis</div>
+      </div>
+      <div style="position:relative;">
+        <sc-if value="{{addClosed}}" hint-placeholder-val="{{true}}">
+          <button onClick="{{openAdd}}" style="display:flex;align-items:center;gap:8px;border:none;background:#2F3B6E;color:#FFF;font-family:'Archivo',sans-serif;font-size:13.5px;font-weight:600;padding:11px 16px;border-radius:10px;cursor:pointer;" style-hover="background:#222B52;"><span style="font-size:16px;line-height:1;">+</span>Ajouter un terrain</button>
+        </sc-if>
+        <sc-if value="{{addOpen}}" hint-placeholder-val="{{false}}">
+          <div style="width:340px;max-width:78vw;">
+            <div style="display:flex;align-items:center;gap:9px;background:#FFF;border:1.5px solid #2F3B6E;border-radius:10px;padding:0 12px;height:44px;box-shadow:0 8px 24px -12px rgba(16,20,34,0.4);">
+              <span style="color:#98A0B0;font-size:15px;">⌕</span>
+              <input value="{{addQuery}}" onChange="{{onAddQuery}}" placeholder="Rechercher une adresse à explorer" style="border:none;background:transparent;outline:none;font-family:'Archivo',sans-serif;font-size:14px;color:#161A2E;width:100%;">
+              <button onClick="{{closeAdd}}" style="border:none;background:#F5F6FA;color:#6C7488;width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:14px;flex-shrink:0;">×</button>
+            </div>
+            <div style="position:absolute;right:0;margin-top:6px;width:340px;max-width:78vw;background:#FFF;border:1px solid #DADEE8;border-radius:10px;overflow:hidden;box-shadow:0 12px 30px -10px rgba(16,20,34,0.45);z-index:5;">
+              <sc-for list="{{addSugg}}" as="s" hint-placeholder-count="5">
+                <a href="{{s.href}}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;text-decoration:none;color:#161A2E;font-family:'Archivo',sans-serif;" style-hover="background:#F5F6FA;">
+                  <span style="color:#98A0B0;">⌖</span><span style="font-size:13.5px;font-weight:500;">{{s.label}}</span><span style="margin-left:auto;color:#98A0B0;font-size:15px;">→</span>
+                </a>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;background:#FFFFFF;border:1px solid #DADEE8;border-radius:12px;">
+      <div style="display:flex;align-items:center;gap:8px;background:#F5F6FA;border:1px solid #DADEE8;border-radius:8px;padding:0 12px;height:38px;min-width:210px;">
+        <span style="color:#98A0B0;font-size:15px;">⌕</span>
+        <input value="{{query}}" onChange="{{onQuery}}" placeholder="Rechercher une adresse, commune" style="border:none;background:transparent;outline:none;font-family:'Archivo',sans-serif;font-size:13.5px;color:#161A2E;width:100%;">
+      </div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;">
+        <sc-for list="{{chips}}" as="chip" hint-placeholder-count="4">
+          <button onClick="{{chip.toggle}}" style="{{chip.chipStyle}}">
+            <span style="{{chip.dotStyle}}"></span>{{chip.label}}<span style="opacity:0.6;font-family:'Spline Sans Mono',monospace;font-size:11px;">{{chip.count}}</span>
+          </button>
+        </sc-for>
+      </div>
+      <div style="display:flex;align-items:center;gap:9px;padding:0 4px;">
+        <span style="font-size:12px;color:#6C7488;white-space:nowrap;">Score ≥</span>
+        <input type="range" min="0" max="90" step="5" value="{{minScore}}" onChange="{{onMinScore}}" style="width:96px;accent-color:#2F3B6E;cursor:pointer;">
+        <span style="font-family:'Spline Sans Mono',monospace;font-size:12px;color:#2F3B6E;font-weight:500;width:22px;">{{minScore}}</span>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:12px;color:#6C7488;white-space:nowrap;">Pins :</span>
+        <div style="display:flex;background:#F5F6FA;border:1px solid #DADEE8;border-radius:8px;padding:3px;">
+          <button onClick="{{setStatut}}" style="{{statutBtnStyle}}">Statut</button>
+          <button onClick="{{setScore}}" style="{{scoreBtnStyle}}">Score</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN SPLIT -->
+  <div style="padding:16px 22px 28px;display:flex;gap:18px;{{splitFlex}}">
+    <div style="{{tableWrapStyle}}">
+      <div style="background:#FFFFFF;border:1px solid #DADEE8;border-radius:12px;overflow:hidden;min-width:720px;">
+        <div style="display:flex;align-items:center;gap:12px;padding:0 16px;height:42px;background:#FAFBFD;border-bottom:1px solid #DADEE8;font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#6C7488;">
+          <button onClick="{{sortName}}" style="flex:1;min-width:170px;text-align:left;border:none;background:none;font:inherit;color:inherit;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em;">Terrain {{arrowName}}</button>
+          <button onClick="{{sortSurface}}" style="width:92px;text-align:right;border:none;background:none;font:inherit;color:inherit;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em;">Surface {{arrowSurface}}</button>
+          <button onClick="{{sortPrix}}" style="width:128px;text-align:right;border:none;background:none;font:inherit;color:inherit;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em;">Prix {{arrowPrix}}</button>
+          <button onClick="{{sortScore}}" style="width:126px;text-align:left;border:none;background:none;font:inherit;color:inherit;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em;">Score {{arrowScore}}</button>
+          <div style="width:118px;">Statut</div>
+          <div style="width:64px;text-align:center;">Risque</div>
+          <button onClick="{{sortMaj}}" style="width:74px;text-align:right;border:none;background:none;font:inherit;color:inherit;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em;">Maj {{arrowMaj}}</button>
+        </div>
+        <sc-for list="{{rows}}" as="row" hint-placeholder-count="8">
+          <div onClick="{{row.open}}" onMouseEnter="{{row.enter}}" onMouseLeave="{{row.leave}}" style="{{row.rowStyle}}">
+            <div style="flex:1;min-width:170px;">
+              <div style="font-size:14px;font-weight:600;color:#161A2E;line-height:1.25;">{{row.name}}</div>
+              <div style="font-size:12px;color:#6C7488;">{{row.commune}}</div>
+            </div>
+            <div style="width:92px;text-align:right;font-family:'Spline Sans Mono',monospace;font-size:12.5px;color:#343B4D;">{{row.surfaceDisp}}</div>
+            <div style="width:128px;text-align:right;">
+              <div style="font-family:'Spline Sans Mono',monospace;font-size:13px;font-weight:500;color:#161A2E;">{{row.prixDisp}}</div>
+              <div style="font-family:'Spline Sans Mono',monospace;font-size:11px;color:#98A0B0;">{{row.prixM2Disp}}</div>
+            </div>
+            <div style="width:126px;display:flex;align-items:center;gap:8px;">
+              <div style="flex:1;height:6px;border-radius:3px;background:#EAECF2;overflow:hidden;"><div style="{{row.barStyle}}"></div></div>
+              <span style="font-family:'Spline Sans Mono',monospace;font-size:12.5px;font-weight:500;width:20px;color:#161A2E;">{{row.score}}</span>
+            </div>
+            <div style="width:118px;"><span style="{{row.statusBadge}}"><span style="{{row.statusDot}}"></span>{{row.statut}}</span></div>
+            <div style="width:64px;display:flex;justify-content:center;"><span style="{{row.riskStyle}}" title="{{row.riskLabel}}">{{row.riskGlyph}}</span></div>
+            <div style="width:74px;text-align:right;font-family:'Spline Sans Mono',monospace;font-size:12px;color:#6C7488;">{{row.maj}}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="{{mapStyle}}">
+      <div style="position:relative;width:100%;height:100%;border:1px solid #DADEE8;border-radius:12px;overflow:hidden;background:#E6EAF2;">
+        <svg viewBox="0 0 320 240" preserveAspectRatio="none" width="100%" height="100%" style="position:absolute;inset:0;" aria-hidden="true">
+          <rect width="320" height="240" fill="#E6EAF2"></rect>
+          <path d="M0,0 H148 Q150,52 110,66 Q60,82 0,80 Z" fill="#DCE6DA"></path>
+          <path d="M205,0 H320 V58 Q270,64 250,40 Q235,18 205,0 Z" fill="#DCE6DA"></path>
+          <path d="M-5,150 C70,134 130,176 210,150 C270,132 300,150 325,144" stroke="#C2D3E6" stroke-width="11" fill="none" stroke-linecap="round"></path>
+          <path d="M55,-5 L80,245" stroke="#F1F4FA" stroke-width="6" fill="none"></path>
+          <path d="M-5,95 L325,120" stroke="#F1F4FA" stroke-width="5" fill="none"></path>
+          <path d="M235,-5 L210,245" stroke="#F1F4FA" stroke-width="5" fill="none"></path>
+          <g stroke="#D7DDEA" stroke-width="1" fill="none">
+            <rect x="92" y="40" width="40" height="34"></rect><rect x="132" y="40" width="34" height="34"></rect>
+            <rect x="120" y="150" width="46" height="40"></rect><rect x="250" y="160" width="40" height="36"></rect>
+            <rect x="20" y="170" width="38" height="40"></rect>
+          </g>
+        </svg>
+        <sc-for list="{{pins}}" as="pin" hint-placeholder-count="8">
+          <button onClick="{{pin.open}}" onMouseEnter="{{pin.enter}}" onMouseLeave="{{pin.leave}}" style="{{pin.wrapStyle}}" title="{{pin.name}}">
+            <span style="{{pin.dotStyle}}"></span>
+          </button>
+        </sc-for>
+        <div style="position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,0.94);border:1px solid #DADEE8;border-radius:10px;padding:10px 12px;backdrop-filter:blur(4px);">
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#6C7488;margin-bottom:7px;">{{legendTitle}}</div>
+          <sc-if value="{{statutMode}}" hint-placeholder-val="{{true}}">
+            <div style="display:flex;flex-direction:column;gap:5px;">
+              <sc-for list="{{legendItems}}" as="li" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#343B4D;"><span style="{{li.dotStyle}}"></span>{{li.label}}</div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{scoreMode}}" hint-placeholder-val="{{false}}">
+            <div>
+              <div style="width:150px;height:9px;border-radius:5px;background:linear-gradient(90deg,#BFC5D2,#8E9CD8,#51619F,#2F3B6E);"></div>
+              <div style="display:flex;justify-content:space-between;font-family:'Spline Sans Mono',monospace;font-size:10px;color:#6C7488;margin-top:4px;"><span>40</span><span>100</span></div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ FICHE MODALE ============ -->
+  <sc-if value="{{fiche}}" hint-placeholder-val="{{null}}">
+    <div onClick="{{ficheClose}}" style="position:fixed;inset:0;z-index:50;background:rgba(16,20,34,0.5);display:flex;align-items:flex-start;justify-content:center;padding:36px 18px;overflow-y:auto;animation:vtFadeIn .15s ease;">
+      <div onClick="{{ficheStop}}" style="width:100%;max-width:940px;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 30px 70px -20px rgba(16,20,34,0.55);animation:vtPop .22s cubic-bezier(.2,.7,.3,1);">
+
+        <!-- HERO -->
+        <div style="position:relative;height:184px;background:linear-gradient(168deg,#A6B4C8 0%,#8A9AA1 48%,#6E8066 100%);overflow:hidden;">
+          <svg viewBox="0 0 940 184" preserveAspectRatio="none" width="100%" height="100%" style="position:absolute;inset:0;opacity:0.5;" aria-hidden="true">
+            <path d="M0,150 Q235,110 470,140 T940,128" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="1.5" fill="none"></path>
+            <path d="M0,166 Q235,128 470,156 T940,146" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="1.5" fill="none"></path>
+            <path d="M0,134 Q235,92 470,124 T940,110" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="1.5" fill="none"></path>
+          </svg>
+          <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,20,34,0.18) 0%,rgba(16,20,34,0) 32%,rgba(16,20,34,0.30) 60%,rgba(16,20,34,0.80) 100%);"></div>
+          <span style="position:absolute;top:12px;left:14px;font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:0.06em;color:#FFFFFF;background:rgba(16,20,34,0.32);padding:4px 9px;border-radius:6px;">Photo du terrain</span>
+          <button onClick="{{ficheClose}}" style="position:absolute;top:12px;right:12px;width:30px;height:30px;border-radius:8px;border:none;background:rgba(255,255,255,0.92);color:#161A2E;font-size:17px;line-height:1;cursor:pointer;" style-hover="background:#FFFFFF;">×</button>
+          <div style="position:absolute;left:24px;right:24px;bottom:16px;">
+            <span style="{{fiche.statusBadge}}"><span style="{{fiche.statusDot}}"></span>{{fiche.statut}}</span>
+            <h2 style="margin:8px 0 2px;font-size:27px;font-weight:800;letter-spacing:-0.02em;color:#FFFFFF;">{{fiche.name}}</h2>
+            <div style="font-size:13.5px;color:rgba(255,255,255,0.88);">{{fiche.address}}</div>
+          </div>
+        </div>
+
+        <!-- FACTS BAR -->
+        <div style="display:flex;align-items:center;gap:26px;flex-wrap:wrap;padding:18px 24px;border-bottom:1px solid #EFF1F6;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="position:relative;width:54px;height:54px;flex-shrink:0;">
+              <svg width="54" height="54" viewBox="0 0 60 60"><circle cx="30" cy="30" r="24" fill="none" stroke="#EAECF2" stroke-width="6"></circle><circle cx="30" cy="30" r="24" fill="none" stroke="{{fiche.scoreColor}}" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="{{fiche.scoreDash}}" transform="rotate(-90 30 30)"></circle></svg>
+              <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;">{{fiche.score}}</div>
+            </div>
+            <div><div style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;">Score global</div><div style="font-size:13px;color:#4C5468;font-weight:600;">sur 100</div></div>
+          </div>
+          <div style="width:1px;height:38px;background:#EFF1F6;"></div>
+          <div><div style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;margin-bottom:3px;">Surface</div><div style="font-family:'Spline Sans Mono',monospace;font-size:14px;">{{fiche.surfaceDisp}}</div></div>
+          <div><div style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;margin-bottom:3px;">Prix</div><div style="font-family:'Spline Sans Mono',monospace;font-size:14px;">{{fiche.prixDisp}}</div></div>
+          <div><div style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;margin-bottom:3px;">Prix au m²</div><div style="font-family:'Spline Sans Mono',monospace;font-size:14px;">{{fiche.prixM2Disp}}</div></div>
+          <div><div style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#98A0B0;margin-bottom:3px;">Réf. cadastrale</div><div style="font-family:'Spline Sans Mono',monospace;font-size:14px;">{{fiche.cadastre}}</div></div>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:9px;">
+            <select value="{{fiche.statut}}" onChange="{{changeStatut}}" style="font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;color:#161A2E;background:#F5F6FA;border:1px solid #DADEE8;border-radius:8px;padding:8px 10px;cursor:pointer;">
+              <option>À étudier</option><option>Prometteur</option><option>Réservé</option><option>Écarté</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="padding:18px 24px 26px;">
+          <!-- ALERTS -->
+          <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:16px;">
+            <sc-for list="{{ficheAlerts}}" as="al" hint-placeholder-count="1">
+              <div style="{{al.style}}">
+                <span style="{{al.iconStyle}}">{{al.glyph}}</span>
+                <div style="flex:1;"><div style="font-size:13px;font-weight:600;">{{al.label}}</div><div style="font-family:'Spline Sans Mono',monospace;font-size:10.5px;opacity:0.75;margin-top:2px;">{{al.source}}</div></div>
+                <span style="{{al.tagStyle}}">{{al.tag}}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- TABS -->
+          <div style="display:flex;gap:2px;border-bottom:1px solid #DADEE8;overflow-x:auto;margin-bottom:18px;">
+            <sc-for list="{{ficheTabs}}" as="tab" hint-placeholder-count="5">
+              <button onClick="{{tab.onClick}}" style="{{tab.style}}">{{tab.label}}</button>
+            </sc-for>
+          </div>
+
+          <!-- CONTENT -->
+          <div style="display:flex;gap:18px;{{ficheContentFlex}}">
+            <div style="flex:1;min-width:0;">
+              <div style="{{ficheGrid}}">
+                <sc-for list="{{ficheBlocks}}" as="b" hint-placeholder-count="4">
+                  <div style="{{b.cardStyle}}">
+                    <div style="font-size:10.5px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:#98A0B0;margin-bottom:9px;">{{b.label}}</div>
+                    <sc-if value="{{b.available}}" hint-placeholder-val="{{true}}">
+                      <div>
+                        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:11px;"><span style="{{b.valueStyle}}">{{b.value}}</span><span style="{{b.trendStyle}}">{{b.trend}}</span></div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid #EFF1F6;padding-top:9px;">
+                          <span style="font-family:'Spline Sans Mono',monospace;font-size:11px;color:#6C7488;">{{b.meta}}</span>
+                          <span style="display:inline-flex;align-items:center;gap:6px;" title="{{b.confLabel}}"><span style="font-size:10px;color:#98A0B0;">{{b.conf}}</span><span style="display:inline-flex;gap:3px;"><span style="{{b.dot1}}"></span><span style="{{b.dot2}}"></span><span style="{{b.dot3}}"></span></span></span>
+                        </div>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{b.unavailable}}" hint-placeholder-val="{{false}}">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><span style="font-size:13px;color:#98A0B0;font-style:italic;">Donnée indisponible</span><button style="border:1px solid #C7CEDB;background:#FFF;color:#4C5468;font-family:'Archivo',sans-serif;font-size:11.5px;font-weight:600;padding:5px 10px;border-radius:7px;cursor:pointer;">Demander</button></div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+                <a href="{{fiche.sunHref}}" style="border:none;background:#2F3B6E;color:#FFF;font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;padding:10px 16px;border-radius:9px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;text-decoration:none;" style-hover="background:#222B52;">Positionnement 3D <span style="color:#E5B14A;">☀</span></a>
+                <button style="border:1px solid #DADEE8;background:#FFF;color:#161A2E;font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;padding:10px 16px;border-radius:9px;cursor:pointer;" style-hover="background:#F5F6FA;">Exporter la synthèse</button>
+              </div>
+            </div>
+
+            <sc-if value="{{ficheShowSide}}" hint-placeholder-val="{{true}}">
+              <div style="{{ficheSideStyle}}">
+                <div style="border:1px solid #DADEE8;border-radius:12px;overflow:hidden;">
+                  <div style="position:relative;height:150px;background:#E6EAF2;">
+                    <svg viewBox="0 0 320 240" preserveAspectRatio="none" width="100%" height="100%" style="position:absolute;inset:0;" aria-hidden="true">
+                      <rect width="320" height="240" fill="#E6EAF2"></rect>
+                      <path d="M-5,150 C70,134 130,176 210,150 C270,132 300,150 325,144" stroke="#C2D3E6" stroke-width="11" fill="none" stroke-linecap="round"></path>
+                      <path d="M150,-5 L168,245" stroke="#F1F4FA" stroke-width="6" fill="none"></path>
+                      <path d="M-5,110 L325,128" stroke="#F1F4FA" stroke-width="5" fill="none"></path>
+                      <g stroke="#D2D9E6" stroke-width="1" fill="none"><rect x="120" y="86" width="46" height="40"></rect><rect x="166" y="86" width="40" height="40"></rect><rect x="120" y="126" width="46" height="36"></rect></g>
+                      <rect x="138" y="104" width="30" height="40" fill="#DB9B2C" fill-opacity="0.92"></rect>
+                    </svg>
+                    <span style="position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:#2F3B6E;box-shadow:0 0 0 3px #fff,0 1px 4px rgba(22,26,46,.5);"></span>
+                    <span style="position:absolute;right:10px;bottom:10px;font-family:'Spline Sans Mono',monospace;font-size:10px;color:#4C5468;background:rgba(255,255,255,0.9);padding:3px 7px;border-radius:6px;">Localisation</span>
+                  </div>
+                </div>
+                <div style="border:1px solid #DADEE8;border-radius:12px;padding:14px;">
+                  <div style="font-size:10.5px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:#98A0B0;margin-bottom:4px;">Score par catégorie</div>
+                  <svg viewBox="0 0 220 196" width="100%" style="display:block;">
+                    <sc-for list="{{ficheRadarRings}}" as="r" hint-placeholder-count="4"><polygon points="{{r.points}}" fill="none" stroke="#E6E9F1" stroke-width="1"></polygon></sc-for>
+                    <sc-for list="{{ficheRadarAxes}}" as="ax" hint-placeholder-count="6"><line x1="110" y1="92" x2="{{ax.x2}}" y2="{{ax.y2}}" stroke="#E6E9F1" stroke-width="1"></line></sc-for>
+                    <polygon points="{{ficheRadarData}}" fill="#2F3B6E" fill-opacity="0.16" stroke="#2F3B6E" stroke-width="2" stroke-linejoin="round"></polygon>
+                    <sc-for list="{{ficheRadarLabels}}" as="l" hint-placeholder-count="6"><text x="{{l.x}}" y="{{l.y}}" text-anchor="{{l.anchor}}" font-family="Archivo, sans-serif" font-size="10" font-weight="600" fill="#4C5468">{{l.text}}</text></sc-for>
+                  </svg>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:860}}">
+class Component extends DCLogic {
+  state = {
+    query: '', statuses: [], minScore: 0, colorMode: 'statut',
+    sortKey: 'score', sortDir: 'desc', hoverId: null, isNarrow: false,
+    ficheId: null, ficheTab: 'synthese', statutOverrides: {},
+    addOpen: false, addQuery: ''
+  };
+
+  STATUS = {
+    'À étudier': { color: '#98A0B0', bg: '#ECEEF2' },
+    'Prometteur': { color: '#2E7D5B', bg: '#E7F2EC' },
+    'Réservé': { color: '#DB9B2C', bg: '#FBF2DD' },
+    'Écarté': { color: '#C0432E', bg: '#F8E7E2' }
+  };
+
+  ADDR = ['Annecy (74000)', 'Annecy-le-Vieux (74940)', 'Poisy (74330)', 'Sevrier (74320)', 'Seynod (74600)', 'Argonay (74370)', 'Cran-Gevrier (74960)', 'Quintal (74600)'];
+
+  FTABS = [
+    { id: 'synthese', label: 'Synthèse' }, { id: 'urbanisme', label: 'Urbanisme' },
+    { id: 'risques', label: 'Risques' }, { id: 'marche', label: 'Marché' }, { id: 'acces', label: 'Accès et réseaux' }
+  ];
+
+  TERRAINS = [
+    { id: 1, name: 'Chemin des Vignes', commune: 'Annecy-le-Vieux', surface: 720, prix: 312000, score: 84, statut: 'Prometteur', risk: null, soleil: 'Bon', maj: '03/2025', majN: 202503, mx: 30, my: 30 },
+    { id: 2, name: 'Route du Lac', commune: 'Sevrier', surface: 540, prix: 268000, score: 81, statut: 'Prometteur', risk: null, soleil: 'Excellent', maj: '02/2025', majN: 202502, mx: 20, my: 54 },
+    { id: 3, name: 'Les Hauts de Brogny', commune: 'Annecy', surface: 610, prix: 245000, score: 72, statut: 'À étudier', risk: { label: 'Nuisance sonore, à vérifier', level: 'moyen' }, soleil: 'Moyen', maj: '11/2024', majN: 202411, mx: 49, my: 22 },
+    { id: 4, name: 'Clos des Tilleuls', commune: 'Poisy', surface: 880, prix: 298000, score: 77, statut: 'Réservé', risk: null, soleil: 'Bon', maj: '01/2025', majN: 202501, mx: 63, my: 42 },
+    { id: 5, name: 'Impasse du Verger', commune: 'Argonay', surface: 450, prix: 215000, score: 63, statut: 'À étudier', risk: { label: 'Zone inondable, aléa moyen (PPRi)', level: 'moyen' }, soleil: 'Moyen', maj: '03/2025', majN: 202503, mx: 40, my: 64 },
+    { id: 6, name: 'Plateau des Glaisins', commune: 'Annecy', surface: 1020, prix: 410000, score: 88, statut: 'Prometteur', risk: null, soleil: 'Excellent', maj: '02/2025', majN: 202502, mx: 55, my: 17 },
+    { id: 7, name: 'Rue de la Mavéria', commune: 'Cran-Gevrier', surface: 380, prix: 189000, score: 58, statut: 'Écarté', risk: { label: 'Partie inconstructible au PLU', level: 'fort' }, soleil: 'Faible', maj: '09/2024', majN: 202409, mx: 33, my: 76 },
+    { id: 8, name: 'Coteau de Vieugy', commune: 'Seynod', surface: 690, prix: 256000, score: 70, statut: 'À étudier', risk: null, soleil: 'Bon', maj: '12/2024', majN: 202412, mx: 71, my: 60 },
+    { id: 9, name: 'Chemin de Quintal', commune: 'Quintal', surface: 1150, prix: 289000, score: 79, statut: 'Réservé', risk: null, soleil: 'Excellent', maj: '03/2025', majN: 202503, mx: 80, my: 33 },
+    { id: 10, name: 'Les Balcons du Semnoz', commune: 'Seynod', surface: 800, prix: 335000, score: 75, statut: 'À étudier', risk: { label: 'Pente forte, terrassement', level: 'moyen' }, soleil: 'Moyen', maj: '01/2025', majN: 202501, mx: 60, my: 73 }
+  ];
+
+  componentDidMount() {
+    this._onResize = () => this.setState({ isNarrow: window.innerWidth < 980 });
+    this._onResize();
+    window.addEventListener('resize', this._onResize);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._onResize); }
+
+  effStatut(t) { return this.state.statutOverrides[t.id] || t.statut; }
+  scoreColor(s) { return s >= 85 ? '#2F3B6E' : s >= 75 ? '#51619F' : s >= 65 ? '#8E9CD8' : '#BFC5D2'; }
+  fmt(n) { return n.toLocaleString('fr-FR'); }
+  clamp(v) { return Math.max(38, Math.min(97, Math.round(v))); }
+  setSort(k) { this.setState(s => ({ sortKey: k, sortDir: s.sortKey === k ? (s.sortDir === 'asc' ? 'desc' : 'asc') : 'desc' })); }
+  toggleStatus(st) { this.setState(s => ({ statuses: s.statuses.includes(st) ? s.statuses.filter(x => x !== st) : [...s.statuses, st] })); }
+
+  dots(conf) {
+    const fill = conf === 'élevée' ? 3 : conf === 'moyenne' ? 2 : 1;
+    const d = on => `width:7px;height:7px;border-radius:50%;background:${on ? '#2F3B6E' : '#DADEE8'};`;
+    return { dot1: d(fill >= 1), dot2: d(fill >= 2), dot3: d(fill >= 3) };
+  }
+  block(b) {
+    if (b.unavailable) return { label: b.label, available: false, unavailable: true, cardStyle: 'background:#FBFBFD;border:1px dashed #C7CEDB;border-radius:12px;padding:15px 17px;' };
+    const dd = this.dots(b.conf);
+    return {
+      label: b.label, available: true, unavailable: false,
+      cardStyle: 'background:#FFFFFF;border:1px solid #DADEE8;border-radius:12px;padding:15px 17px;',
+      value: b.value, valueStyle: 'font-family:\'Spline Sans Mono\',monospace;font-size:18px;font-weight:500;color:#161A2E;',
+      trend: b.trend || '', trendStyle: b.trend ? `font-size:11.5px;font-weight:600;color:${b.trendUp ? '#2E7D5B' : '#C0432E'};` : 'display:none;',
+      meta: (b.source || '') + (b.date ? ' · ' + b.date : ''),
+      conf: b.conf.charAt(0).toUpperCase() + b.conf.slice(1), confLabel: 'Confiance ' + b.conf, ...dd
+    };
+  }
+
+  radar(vals) {
+    const cx = 110, cy = 92, R = 56, n = vals.length;
+    const ang = i => (-90 + i * (360 / n)) * Math.PI / 180;
+    const pt = (i, f) => [cx + Math.cos(ang(i)) * R * f, cy + Math.sin(ang(i)) * R * f];
+    const poly = f => vals.map((_, i) => pt(i, f).map(v => v.toFixed(1)).join(',')).join(' ');
+    return {
+      rings: [0.25, 0.5, 0.75, 1].map(f => ({ points: poly(f) })),
+      axes: vals.map((_, i) => { const [x, y] = pt(i, 1); return { x2: x.toFixed(1), y2: y.toFixed(1) }; }),
+      data: vals.map((c, i) => pt(i, c.value / 100).map(v => v.toFixed(1)).join(',')).join(' '),
+      labels: vals.map((c, i) => { const [x, y] = pt(i, 1.22); return { x: x.toFixed(1), y: (y + 3).toFixed(1), text: c.label, anchor: x < cx - 6 ? 'end' : x > cx + 6 ? 'start' : 'middle' }; })
+    };
+  }
+
+  buildFiche(t) {
+    const stat = this.effStatut(t), m = this.STATUS[stat];
+    const prixM2 = Math.round(t.prix / t.surface);
+    const soleilMap = { Excellent: 88, Bon: 78, Moyen: 64, Faible: 50 };
+    const radarVals = [
+      { label: 'Constr.', value: this.clamp(t.score + ((t.id % 3) - 1) * 6 + 4) },
+      { label: 'Risques', value: t.risk ? (t.risk.level === 'fort' ? 46 : 63) : 84 },
+      { label: 'Prix', value: this.clamp(t.score - 2 + (((t.id * 7) % 10) - 5)) },
+      { label: 'Soleil', value: soleilMap[t.soleil] || 70 },
+      { label: 'Accès', value: this.clamp(70 + ((t.id * 5) % 24)) },
+      { label: 'Envt.', value: this.clamp(t.score - 4 + (((t.id * 3) % 12) - 6)) }
+    ];
+    const tabs = {
+      synthese: [
+        { label: 'Constructibilité', value: 'Zone UC', source: 'PLU ' + t.commune, date: '2021', conf: 'élevée' },
+        { label: 'Prix au m²', value: prixM2 + ' €/m²', trend: prixM2 > 320 ? 'au-dessus médiane' : 'sous médiane', trendUp: prixM2 <= 320, source: 'DVF', date: '2024', conf: 'moyenne' },
+        { label: 'Ensoleillement', value: t.soleil, source: 'Veriterra 3D', date: '03/2025', conf: 'élevée' },
+        { label: 'Risque principal', value: t.risk ? t.risk.label : 'Aucun risque majeur', source: 'Géorisques', date: '2023', conf: 'élevée' }
+      ],
+      urbanisme: [
+        { label: 'Zonage PLU', value: 'Zone UC', source: 'PLU ' + t.commune, date: '2021', conf: 'élevée' },
+        { label: 'Emprise au sol max', value: '30 %', source: 'Règlement UC', date: '2021', conf: 'élevée' },
+        { label: 'Hauteur max', value: '9 m (R+1+combles)', source: 'Règlement UC', date: '2021', conf: 'élevée' },
+        { label: 'Recul voirie', value: '5 m', source: 'Règlement UC', date: '2021', conf: 'moyenne' },
+        { label: 'Servitudes', unavailable: true },
+        { label: 'Certificat d\'urbanisme', unavailable: true }
+      ],
+      risques: [
+        t.risk ? { label: 'Risque identifié', value: t.risk.label, source: 'Géorisques', date: '2022', conf: 'élevée' } : { label: 'Risques naturels', value: 'Aucun majeur', source: 'Géorisques', date: '2023', conf: 'élevée' },
+        { label: 'Inondation (PPRi)', value: 'Hors zone', source: 'Géorisques', date: '2023', conf: 'élevée' },
+        { label: 'Sismicité', value: 'Zone 4 (moyenne)', source: 'BRGM', date: '2020', conf: 'élevée' },
+        { label: 'Radon', value: 'Potentiel moyen', source: 'IRSN', date: '2021', conf: 'moyenne' },
+        { label: 'Sols pollués (BASOL)', value: 'Aucun recensé', source: 'BASOL', date: '2024', conf: 'élevée' }
+      ],
+      marche: [
+        { label: 'Prix affiché', value: this.fmt(t.prix) + ' €', source: 'Annonce', date: '02/2025', conf: 'élevée' },
+        { label: 'Prix au m²', value: prixM2 + ' €/m²', source: 'Calcul', date: '', conf: 'élevée' },
+        { label: 'Médiane du secteur', value: '320 €/m²', source: 'DVF', date: '2024', conf: 'moyenne' },
+        { label: 'Évolution 5 ans', value: '+14 %', trend: 'hausse', trendUp: true, source: 'DVF', date: '2024', conf: 'moyenne' },
+        { label: 'Ventes comparables', value: '6 (< 1 km)', source: 'DVF', date: '2022-2024', conf: 'moyenne' },
+        { label: 'Délai de vente moyen', unavailable: true }
+      ],
+      acces: [
+        { label: 'Eau potable', value: 'Raccordable', source: 'Mairie', date: '2024', conf: 'élevée' },
+        { label: 'Électricité', value: 'Raccordable', source: 'Enedis', date: '2024', conf: 'élevée' },
+        { label: 'Assainissement', value: 'Collectif', source: 'Mairie', date: '2024', conf: 'élevée' },
+        { label: 'Fibre', value: 'Éligible', source: 'ARCEP', date: '2025', conf: 'élevée' },
+        { label: 'Accès routier', value: 'Voie communale', source: 'Cadastre', date: '2025', conf: 'élevée' },
+        { label: 'Transports', value: 'Bus à 350 m', source: 'Réseau local', date: '2024', conf: 'moyenne' }
+      ]
+    };
+    const alerts = t.risk
+      ? [{ level: t.risk.level, label: t.risk.label, source: 'Géorisques · 2022', tag: t.risk.level === 'fort' ? 'Risque' : 'À vérifier' }]
+      : [{ level: 'ok', label: 'Aucun risque majeur signalé', source: 'Géorisques · 2023', tag: 'OK' }];
+    return {
+      name: t.name, commune: t.commune, address: '412 chemin · ' + t.commune,
+      statut: stat,
+      statusBadge: `display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#FFFFFF;background:${m.color};border-radius:999px;padding:4px 12px;`,
+      statusDot: 'width:8px;height:8px;border-radius:50%;background:#FFFFFF;',
+      surfaceDisp: this.fmt(t.surface) + ' m²', prixDisp: this.fmt(t.prix) + ' €', prixM2Disp: this.fmt(prixM2) + ' €/m²',
+      cadastre: 'AB ' + (140 + t.id), score: t.score, scoreColor: this.scoreColor(t.score),
+      scoreDash: (150.8 * (1 - t.score / 100)).toFixed(1),
+      tabs, radarVals, alerts,
+      sunHref: 'Positionnement.dc.html?vfrom=terrains&vname=' + encodeURIComponent(t.name)
+    };
+  }
+
+  renderVals() {
+    const S = this.state, dir = S.sortDir === 'asc' ? 1 : -1;
+    const q = S.query.trim().toLowerCase();
+    let list = this.TERRAINS.filter(t =>
+      (!q || (t.name + ' ' + t.commune).toLowerCase().includes(q)) &&
+      (S.statuses.length === 0 || S.statuses.includes(this.effStatut(t))) &&
+      t.score >= S.minScore
+    );
+    list = [...list].sort((a, b) => {
+      if (S.sortKey === 'name') return a.name.localeCompare(b.name) * dir;
+      const k = S.sortKey === 'prixM2' ? 'prix' : S.sortKey === 'maj' ? 'majN' : S.sortKey;
+      return (a[k] - b[k]) * dir;
+    });
+
+    const rows = list.map(t => {
+      const stat = this.effStatut(t), m = this.STATUS[stat], hov = t.id === S.hoverId;
+      return {
+        ...t, statut: stat,
+        surfaceDisp: this.fmt(t.surface) + ' m²', prixDisp: this.fmt(t.prix) + ' €',
+        prixM2Disp: this.fmt(Math.round(t.prix / t.surface)) + ' €/m²',
+        rowStyle: `display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid #EFF1F6;cursor:pointer;transition:background .12s;background:${hov ? '#F7F8FB' : '#FFFFFF'};`,
+        barStyle: `width:${t.score}%;height:100%;border-radius:3px;background:${this.scoreColor(t.score)};`,
+        statusBadge: `display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:${m.color};background:${m.bg};border-radius:999px;padding:3px 10px;white-space:nowrap;`,
+        statusDot: `width:7px;height:7px;border-radius:50%;background:${m.color};`,
+        riskGlyph: t.risk ? '▲' : '–',
+        riskStyle: t.risk ? `color:${t.risk.level === 'fort' ? '#C0432E' : '#DB9B2C'};font-size:11px;` : 'color:#C2C8D4;font-size:13px;',
+        riskLabel: t.risk ? t.risk.label : 'Aucun risque signalé',
+        open: () => this.setState({ ficheId: t.id, ficheTab: 'synthese' }),
+        enter: () => this.setState({ hoverId: t.id }),
+        leave: () => this.setState(s => s.hoverId === t.id ? { hoverId: null } : null)
+      };
+    });
+
+    const pins = list.map(t => {
+      const m = this.STATUS[this.effStatut(t)];
+      const color = S.colorMode === 'statut' ? m.color : this.scoreColor(t.score);
+      const hov = t.id === S.hoverId, sz = hov ? 19 : 14;
+      return {
+        id: t.id, name: t.name,
+        wrapStyle: `position:absolute;left:${t.mx}%;top:${t.my}%;transform:translate(-50%,-50%);border:none;background:none;padding:6px;cursor:pointer;z-index:${hov ? 6 : 2};`,
+        dotStyle: `display:block;width:${sz}px;height:${sz}px;border-radius:50%;background:${color};box-shadow:0 0 0 2.5px #fff,0 1px 3px rgba(22,26,46,.4)${hov ? ',0 0 0 7px ' + color + '33' : ''};transition:all .12s;`,
+        open: () => this.setState({ ficheId: t.id, ficheTab: 'synthese' }),
+        enter: () => this.setState({ hoverId: t.id }),
+        leave: () => this.setState(s => s.hoverId === t.id ? { hoverId: null } : null)
+      };
+    });
+
+    const chips = Object.keys(this.STATUS).map(st => {
+      const active = S.statuses.includes(st), color = this.STATUS[st].color;
+      return {
+        label: st, count: this.TERRAINS.filter(t => this.effStatut(t) === st).length, toggle: () => this.toggleStatus(st),
+        chipStyle: `display:inline-flex;align-items:center;gap:6px;font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:8px;cursor:pointer;border:1px solid ${active ? color : '#DADEE8'};background:${active ? color + '18' : '#FFFFFF'};color:${active ? color : '#4C5468'};`,
+        dotStyle: `width:8px;height:8px;border-radius:50%;background:${color};`
+      };
+    });
+
+    const seg = on => `border:none;font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:6px;cursor:pointer;background:${on ? '#FFFFFF' : 'transparent'};color:${on ? '#2F3B6E' : '#6C7488'};box-shadow:${on ? '0 1px 2px rgba(22,26,46,.12)' : 'none'};`;
+    const ar = k => S.sortKey === k ? (S.sortDir === 'asc' ? '↑' : '↓') : '';
+
+    // FICHE
+    const ft = this.TERRAINS.find(t => t.id === S.ficheId);
+    let fiche = null, ficheTabs = [], ficheBlocks = [], rd = null, ficheAlerts = [];
+    if (ft) {
+      fiche = this.buildFiche(ft);
+      ficheTabs = this.FTABS.map(tb => ({
+        label: tb.label, onClick: () => this.setState({ ficheTab: tb.id }),
+        style: `border:none;background:none;font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;padding:10px 13px;cursor:pointer;white-space:nowrap;color:${S.ficheTab === tb.id ? '#2F3B6E' : '#6C7488'};box-shadow:${S.ficheTab === tb.id ? 'inset 0 -2px 0 #2F3B6E' : 'none'};`
+      }));
+      ficheBlocks = fiche.tabs[S.ficheTab].map(b => this.block(b));
+      rd = this.radar(fiche.radarVals);
+      ficheAlerts = fiche.alerts.map(a => {
+        const c = a.level === 'fort' ? { fg: '#8F2E1E', ic: '#C0432E', bg: '#F8E7E2', bd: '#EAC3B9', tg: '#C0432E', tb: '#F1D3CB', g: '▲' }
+          : a.level === 'moyen' ? { fg: '#7A5410', ic: '#DB9B2C', bg: '#FBF2DD', bd: '#EFD79A', tg: '#8A5E10', tb: '#F3E4BF', g: '▲' }
+          : { fg: '#1B5E43', ic: '#2E7D5B', bg: '#E7F2EC', bd: '#C4DDD0', tg: '#2E7D5B', tb: '#D2EADD', g: '✓' };
+        return {
+          label: a.label, source: a.source, tag: a.tag, glyph: c.g,
+          style: `display:flex;align-items:center;gap:12px;border-radius:11px;padding:12px 15px;background:${c.bg};border:1px solid ${c.bd};color:${c.fg};`,
+          iconStyle: `color:${c.ic};font-size:12px;`,
+          tagStyle: `font-family:'Spline Sans Mono',monospace;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:${c.tg};background:${c.tb};padding:4px 9px;border-radius:6px;white-space:nowrap;`
+        };
+      });
+    }
+    const showSide = S.ficheTab === 'synthese';
+
+    return {
+      rows, pins, chips, count: rows.length,
+      query: S.query, onQuery: e => this.setState({ query: e.target.value }),
+      addOpen: S.addOpen, addClosed: !S.addOpen,
+      openAdd: () => this.setState({ addOpen: true }), closeAdd: () => this.setState({ addOpen: false, addQuery: '' }),
+      addQuery: S.addQuery, onAddQuery: e => this.setState({ addQuery: e.target.value }),
+      addSugg: this.ADDR.filter(a => !S.addQuery || a.toLowerCase().includes(S.addQuery.toLowerCase())).map(a => ({ label: a, href: 'Explorer.dc.html?vq=' + encodeURIComponent(a) })),
+      minScore: S.minScore, onMinScore: e => this.setState({ minScore: +e.target.value }),
+      setStatut: () => this.setState({ colorMode: 'statut' }), setScore: () => this.setState({ colorMode: 'score' }),
+      statutBtnStyle: seg(S.colorMode === 'statut'), scoreBtnStyle: seg(S.colorMode === 'score'),
+      sortName: () => this.setSort('name'), sortSurface: () => this.setSort('surface'), sortPrix: () => this.setSort('prixM2'), sortScore: () => this.setSort('score'), sortMaj: () => this.setSort('maj'),
+      arrowName: ar('name'), arrowSurface: ar('surface'), arrowPrix: ar('prixM2'), arrowScore: ar('score'), arrowMaj: ar('maj'),
+      statutMode: S.colorMode === 'statut', scoreMode: S.colorMode === 'score',
+      legendItems: Object.keys(this.STATUS).map(st => ({ label: st, dotStyle: `width:9px;height:9px;border-radius:50%;background:${this.STATUS[st].color};` })),
+      legendTitle: S.colorMode === 'statut' ? 'Statut' : 'Score',
+      splitFlex: S.isNarrow ? 'flex-direction:column;align-items:stretch;' : 'flex-direction:row;align-items:flex-start;',
+      tableWrapStyle: S.isNarrow ? 'width:100%;overflow-x:auto;' : 'flex:1 1 58%;min-width:0;overflow-x:auto;',
+      mapStyle: S.isNarrow ? 'width:100%;height:320px;' : 'flex:0 0 41%;position:sticky;top:78px;height:calc(100vh - 200px);min-height:440px;',
+      fiche, ficheTabs, ficheBlocks, ficheAlerts,
+      ficheClose: () => this.setState({ ficheId: null }), ficheStop: e => e.stopPropagation(),
+      changeStatut: e => { const v = e.target.value; this.setState(s => ({ statutOverrides: { ...s.statutOverrides, [s.ficheId]: v } })); },
+      ficheShowSide: showSide,
+      ficheRadarRings: rd ? rd.rings : [], ficheRadarAxes: rd ? rd.axes : [], ficheRadarData: rd ? rd.data : '', ficheRadarLabels: rd ? rd.labels : [],
+      ficheContentFlex: S.isNarrow ? 'flex-direction:column;' : 'flex-direction:row;align-items:flex-start;',
+      ficheGrid: `display:grid;grid-template-columns:${S.isNarrow ? '1fr' : '1fr 1fr'};gap:13px;`,
+      ficheSideStyle: S.isNarrow ? 'width:100%;display:flex;flex-direction:column;gap:13px;' : 'flex:0 0 264px;display:flex;flex-direction:column;gap:13px;'
+    };
+  }
+}
+</script>
+</body>
+</html>

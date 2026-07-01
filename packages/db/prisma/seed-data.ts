@@ -9,6 +9,20 @@ export const ORG_A_ID = '00000000-0000-0000-0000-0000000000aa';
 export const ORG_B_ID = '00000000-0000-0000-0000-0000000000bb';
 export const USER_A_ID = '00000000-0000-0000-0000-0000000000a1';
 export const USER_B_ID = '00000000-0000-0000-0000-0000000000b1';
+export const TERRAIN_A_ID = '00000000-0000-0000-0000-0000000000a2';
+export const TERRAIN_B_ID = '00000000-0000-0000-0000-0000000000b2';
+export const PARCELLE_A_ID = '00000000-0000-0000-0000-0000000000a3';
+export const PARCELLE_B_ID = '00000000-0000-0000-0000-0000000000b3';
+
+// Petits carrés GeoJSON (WGS84) autour de Lyon, un par tenant.
+const POLY_A = {
+  type: 'Polygon',
+  coordinates: [[[4.83, 45.75], [4.831, 45.75], [4.831, 45.751], [4.83, 45.751], [4.83, 45.75]]],
+};
+const POLY_B = {
+  type: 'Polygon',
+  coordinates: [[[4.84, 45.76], [4.841, 45.76], [4.841, 45.761], [4.84, 45.761], [4.84, 45.76]]],
+};
 
 export async function seed(): Promise<void> {
   await admin.organisation.upsert({
@@ -43,4 +57,69 @@ export async function seed(): Promise<void> {
     update: { role: 'OWNER' },
     create: { userId: USER_B_ID, organisationId: ORG_B_ID, role: 'OWNER' },
   });
+
+  // Terrains + parcelles (Tranche 1), un par tenant, pour les tests d'isolation.
+  await admin.terrain.upsert({
+    where: { id: TERRAIN_A_ID },
+    update: {},
+    create: {
+      id: TERRAIN_A_ID,
+      organisationId: ORG_A_ID,
+      label: 'Terrain A',
+      address: '1 rue A, Lyon',
+      inseeCode: '69381',
+    },
+  });
+  await admin.terrain.upsert({
+    where: { id: TERRAIN_B_ID },
+    update: {},
+    create: {
+      id: TERRAIN_B_ID,
+      organisationId: ORG_B_ID,
+      label: 'Terrain B',
+      address: '2 rue B, Lyon',
+      inseeCode: '69382',
+    },
+  });
+
+  await admin.terrainParcelle.upsert({
+    where: { id: PARCELLE_A_ID },
+    update: {},
+    create: {
+      id: PARCELLE_A_ID,
+      organisationId: ORG_A_ID,
+      terrainId: TERRAIN_A_ID,
+      idu: '69381000AA0001',
+      commune: 'Lyon',
+      section: 'AA',
+      numero: '0001',
+      surfaceM2: 500,
+      geojson: POLY_A,
+      source: 'seed',
+    },
+  });
+  await admin.terrainParcelle.upsert({
+    where: { id: PARCELLE_B_ID },
+    update: {},
+    create: {
+      id: PARCELLE_B_ID,
+      organisationId: ORG_B_ID,
+      terrainId: TERRAIN_B_ID,
+      idu: '69382000BB0001',
+      commune: 'Lyon',
+      section: 'BB',
+      numero: '0001',
+      surfaceM2: 700,
+      geojson: POLY_B,
+      source: 'seed',
+    },
+  });
+
+  // Peuple la colonne géométrie PostGIS depuis le GeoJSON (ST_Multi pour coller au type
+  // MultiPolygon, ST_SetSRID pour garantir le SRID 4326 de la colonne). Idempotent.
+  await admin.$executeRaw`
+    UPDATE "TerrainParcelle"
+    SET geom = ST_SetSRID(ST_Multi(ST_GeomFromGeoJSON(geojson::text)), 4326)
+    WHERE id IN (${PARCELLE_A_ID}::uuid, ${PARCELLE_B_ID}::uuid) AND geom IS NULL
+  `;
 }

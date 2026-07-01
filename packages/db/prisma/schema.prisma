@@ -28,11 +28,13 @@ enum Role {
 /// Tenant racine. Une organisation par utilisateur en Tranche 0 (créée en silence à
 /// la première connexion). Le partage multi-membres viendra plus tard, sans migration.
 model Organisation {
-  id          String       @id @default(uuid()) @db.Uuid
+  id          String            @id @default(uuid()) @db.Uuid
   name        String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
   memberships Membership[]
+  terrains    Terrain[]
+  parcelles   TerrainParcelle[]
 }
 
 /// Identité globale, liée au sujet OIDC (Pocket ID). Clé de jointure = `oidcSubject`
@@ -62,4 +64,59 @@ model Membership {
 
   @@unique([userId, organisationId])
   @@index([organisationId])
+}
+
+/// Statut d'un terrain dans le portefeuille (aligné sur `StatusPin` de @veriterra/ui).
+/// Le pipeline complet de statuts (US-5.1) viendra en Tranche 5.
+enum TerrainStatus {
+  A_ETUDIER
+  PROMETTEUR
+  RESERVE
+  ECARTE
+}
+
+/// Fiche terrain (Tranche 1). Table scopée au tenant (`organisationId`) : protégée par RLS.
+model Terrain {
+  id             String        @id @default(uuid()) @db.Uuid
+  organisationId String        @db.Uuid
+  label          String
+  address        String
+  inseeCode      String
+  prixDemande    Decimal?      @db.Decimal(12, 2)
+  lienAnnonce    String?
+  notes          String?
+  status         TerrainStatus @default(A_ETUDIER)
+  createdById    String?       @db.Uuid
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organisation Organisation      @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  parcelles    TerrainParcelle[]
+
+  @@index([organisationId])
+}
+
+/// Parcelle cadastrale rattachée à un terrain (embarquée, pas de table Parcelle globale).
+/// Données faisant autorité re-récupérées côté serveur par `idu` (source + date).
+/// `geom` est la géométrie PostGIS (SRID 4326) ; on lit `geojson` pour l'affichage.
+model TerrainParcelle {
+  id             String                                       @id @default(uuid()) @db.Uuid
+  organisationId String                                       @db.Uuid
+  terrainId      String                                       @db.Uuid
+  idu            String
+  commune        String
+  section        String
+  numero         String
+  surfaceM2      Int
+  geojson        Json
+  geom           Unsupported("geometry(MultiPolygon, 4326)")?
+  source         String
+  fetchedAt      DateTime                                     @default(now())
+
+  terrain      Terrain      @relation(fields: [terrainId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@index([organisationId])
+  @@index([terrainId])
+  @@index([idu])
 }

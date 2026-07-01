@@ -1,7 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { admin, prisma } from '../src/client';
 import { forOrg } from '../src/rls';
-import { ORG_A_ID, ORG_B_ID, USER_A_ID, USER_B_ID, seed } from '../prisma/seed-data';
+import {
+  ORG_A_ID,
+  ORG_B_ID,
+  TERRAIN_A_ID,
+  TERRAIN_B_ID,
+  USER_A_ID,
+  USER_B_ID,
+  seed,
+} from '../prisma/seed-data';
 
 // The hard invariant (US-0.2): tenant isolation is enforced by Postgres RLS, exercised
 // here through the RESTRICTED app role (`forOrg` uses the `veriterra_app` connection). The
@@ -47,6 +55,34 @@ describe('RLS tenant isolation', () => {
     await expect(
       db.membership.create({
         data: { userId: USER_B_ID, organisationId: ORG_A_ID, role: 'MEMBER' },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('org B sees only its own terrains (Terrain RLS)', async () => {
+    const db = forOrg(ORG_B_ID);
+    const terrains = await db.terrain.findMany();
+    expect(terrains.map((t) => t.id)).toEqual([TERRAIN_B_ID]);
+  });
+
+  it("org B cannot read org A's terrain by id", async () => {
+    const db = forOrg(ORG_B_ID);
+    const t = await db.terrain.findUnique({ where: { id: TERRAIN_A_ID } });
+    expect(t).toBeNull();
+  });
+
+  it('org B sees only its own parcelles (TerrainParcelle RLS)', async () => {
+    const db = forOrg(ORG_B_ID);
+    const parcelles = await db.terrainParcelle.findMany();
+    expect(parcelles).toHaveLength(1);
+    expect(parcelles.every((p) => p.organisationId === ORG_B_ID)).toBe(true);
+  });
+
+  it('WITH CHECK blocks creating a terrain stamped with another org', async () => {
+    const db = forOrg(ORG_B_ID);
+    await expect(
+      db.terrain.create({
+        data: { organisationId: ORG_A_ID, label: 'x', address: 'x', inseeCode: '00000' },
       }),
     ).rejects.toThrow();
   });

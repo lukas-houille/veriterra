@@ -215,8 +215,9 @@ Pilule. `danger` : fond `#F8E7E2`, texte `#C0432E`, bordure `#EAC3B9`, point 7px
 
 ## 10. Fichiers de référence
 
-- `docs/design-system.md` — ce document.
-- `veriterra-theme.css` — variables CSS shadcn + `@theme` Tailwind v4.
-- `Logo Veriterra final.dc.html` — logo (lockups clair/sombre, app icon, export SVG).
-- `Identité Veriterra.dc.html` — charte visuelle initiale (note : palette à actualiser en indigo, ce document fait foi pour les tokens).
-- Écrans produit (dashboard, fiche terrain, comparateur, vue soleil, mode visite) : à venir, ils montreront les composants en contexte.
+- `docs/design-system.md` : ce document (spécification).
+- `packages/ui/src/styles/theme.css` : variables CSS shadcn + `@theme` Tailwind v4. Source de vérité des tokens, importée par l'app (`app/src/app/globals.css`) et par le build CSS du package.
+- `@veriterra/ui` (`packages/ui`) : implémentation React des composants. Vague 1 livrée (§6 Button, Card, Badge, Input, Tabs ; §7 ConfidenceDots, DataBlock, UnavailableState, ScoreGauge, AlertChip, StatusPin). Vague 2 à venir (Select, Dialog, Sheet, Tooltip, Table, RadarScore).
+- `Logo Veriterra final.dc.html` : logo (lockups clair/sombre, app icon, export SVG).
+- `Identité Veriterra.dc.html` : charte visuelle initiale (palette actualisée en indigo, ce document fait foi pour les tokens).
+- Écrans produit (dashboard, fiche terrain, comparateur, vue soleil, mode visite) : à venir (Tranche 1+), ils montreront les composants en contexte.

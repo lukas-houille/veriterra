@@ -6,7 +6,7 @@
 
 **Tranche 0 — Socle : FAITE, mergée (PR #1-3) et DÉPLOYÉE en prod** via Arcane sur `veriterra.lukas-houille.com` (image GHCR, Caddy TLS, `migrate` one-shot exit 0). Couvre US-0.1 (auth OIDC Pocket ID), US-0.2 (multi-tenant + RLS + test d'isolation), US-0.3 (stack déployable).
 
-**Tranche design system — `@veriterra/ui` : FAITE (en attente de revue + merge).** Branche `feat/design-system-ui`.
+**Tranche design system — `@veriterra/ui` : FAITE et mergée (PR #4).** CI verte (dont e2e OIDC), revue en contexte neuf GO.
 
 Bibliothèque de composants du design system Veriterra, construite comme **package syncable vers claude.ai/design** (le run `/design-sync` viendra ensuite). 11 composants (core + signature), tokens déplacés dans le package (source de vérité unique), polices vendorisées en `@font-face`. Voir la section dédiée plus bas.
 
@@ -88,8 +88,17 @@ Suivis tracés (non bloquants) : M5 secrets app avec défauts `change-me` (fail-
 
 ## Prochaine étape
 
-- Pousser `feat/design-system-ui`, ouvrir la PR, CI verte, merge.
-- **Lancer `/design-sync`** : le dépôt est désormais syncable. Écrire `.design-sync/config.json` (`pkg: @veriterra/ui`, `globalName`, `cssEntry: dist/veriterra.css`, `tokensGlob`, `extraFonts` vers les woff2, `buildCmd`), lancer le convertisseur + validate, authoring/grading des previews, upload vers claude.ai/design.
-- **2e vague de composants** : `Select`, `Dialog`, `Sheet`, `Tooltip`, `Table`, `RadarScore`.
-- Puis **Tranche 1** (créer un terrain de bout en bout : BAN, cadastre, clic parcelle, fiche, dashboard carte minimale), en habillant avec `@veriterra/ui`. Premières colonnes geometry PostGIS (modèle prêt) ; toute nouvelle table tenant DOIT activer RLS (garde M3).
-- Durcissements prod : secret/rôle `veriterra_app`, `POSTGRES_PASSWORD`/`AUTH_SECRET` forts, image Docker slim (standalone), headers de sécurité, rate limiting, fail-fast sur `AUTH_SECRET`.
+**Tranche 1 — Créer un terrain de bout en bout : PLANIFIÉE ET VALIDÉE** (US-1.1 → US-1.5 + US-5.2). Livrée en 2 PR :
+- **PR 1a (cœur)** : recherche adresse BAN → cadastre sur ortho → clic parcelle (surlignage + attributs, multi-sélection) → création de fiche persistée → dashboard carte. Stories US-1.1, US-1.2, US-1.3, US-5.2.
+- **PR 1b (confort)** : préchargement non bloquant (squelettes par bloc, job d'enrichissement stub) + outils de mesure (distance, surface, dénivelé, recul). Stories US-1.4, US-1.5.
+
+Décisions validées avec le porteur :
+- **Parcelles embarquées** : `Terrain` (org, RLS) + `TerrainParcelle` (org, RLS, géométrie + attributs cadastraux). Premières colonnes geometry PostGIS. Enum `TerrainStatus` (`A_ETUDIER|PROMETTEUR|RESERVE|ECARTE`) aligné sur `StatusPin`.
+- **Client direct + persistance serveur** : le navigateur appelle les API publiques pour l'UX ; le serveur re-fetch chaque parcelle par `idu` (autorité, source + date) et persiste ; cache géo Redis réutilisable.
+- Sources : BAN (adresse), IGN Géoplateforme WMTS (ortho) + API Carto Cadastre (parcelle), RGE ALTI (dénivelé), Turf.js (mesures). Endpoints à re-vérifier à l'implémentation (migration IGN → Géoplateforme).
+- **RLS obligatoire** sur `Terrain`/`TerrainParcelle` (garde M3), accès via `forOrg`/`withOrg`, ne jamais faire confiance à la géométrie envoyée par le client. Job `enrichTerrain` **stub** en Tranche 1 (vraie logique en Tranche 2).
+
+Autres chantiers (selon priorité) :
+- **`/design-sync`** : le dépôt est syncable. Écrire `.design-sync/config.json` (`pkg: @veriterra/ui`, `cssEntry: dist/veriterra.css`, `extraFonts`, `buildCmd`), convertisseur + validate + authoring/grading + upload. Opération lourde (budget frais recommandé).
+- **2e vague de composants** `@veriterra/ui` : `Select`, `Dialog`, `Sheet`, `Tooltip`, `Table`, `RadarScore`.
+- **Durcissement prod** (service public) : `AUTH_SECRET` fort (signature JWT, prioritaire), `POSTGRES_PASSWORD` fort, rotation du rôle `veriterra_app` ; puis image Docker slim, headers de sécurité, rate limiting, fail-fast sur `AUTH_SECRET` placeholder.

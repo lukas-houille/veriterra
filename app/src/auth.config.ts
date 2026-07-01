@@ -24,8 +24,9 @@ export const authConfig = {
     },
   ],
   callbacks: {
-    // Default-deny: a request is authorized only if a session user is present.
-    authorized({ auth }) {
+    // Landing publique à la racine ; tout le reste est default-deny (session requise).
+    authorized({ auth, request }) {
+      if (request.nextUrl.pathname === '/') return true;
       return !!auth?.user;
     },
     // Surface the tenant context baked into the token (by the Node `jwt` callback) onto

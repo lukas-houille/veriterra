@@ -138,7 +138,7 @@ export default function NouveauTerrainPage() {
             </p>
           </div>
           <Button asChild variant="ghost">
-            <Link href="/">Retour au tableau de bord</Link>
+            <Link href="/dashboard">Retour au tableau de bord</Link>
           </Button>
         </div>
 

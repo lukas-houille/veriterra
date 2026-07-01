@@ -20,7 +20,14 @@ Format : `US-x.y` — En tant que … je veux … afin de …, suivi des critèr
 - `docker compose up` lève app, worker, Postgres+PostGIS, Redis.
 - Health checks verts.
 
-## Epic 1 — Fiche terrain et localisation
+## Epic 1 — Projet, exploration et fiche terrain
+
+L'exploration est la feature phare. Le parcours : définir mon projet (onboarding court) puis explorer des terrains et les ajouter à la liste du projet.
+
+**US-1.0 [MVP] Projet et onboarding court.** En tant qu'acheteur, je définis mon projet afin que tout soit noté et filtré selon mon besoin.
+- À la première connexion, un onboarding court (une étape) : budget max, fourchette de m² cible, type de maison (plain-pied, R+1, R+2, R+3). Tous les champs sont optionnels et l'étape est passable (un projet par défaut est créé).
+- Le projet est rattaché à l'organisation (RLS). Un flag de consentement de partage (opt-in, faux par défaut) est prévu dès maintenant pour la future marketplace.
+- Le projet est modifiable ensuite. Le score et les filtres deviennent relatifs au projet (effet complet en Tranche 3).
 
 **US-1.1 [MVP] Recherche d'adresse.** Je saisis une adresse afin de centrer la carte.
 - Autocomplétion via la BAN.
@@ -31,10 +38,10 @@ Format : `US-x.y` — En tant que … je veux … afin de …, suivi des critèr
 - Au clic, la parcelle est surlignée, ses attributs s'affichent (identifiant, surface, commune).
 - Possibilité de sélectionner plusieurs parcelles (rare mais supporté), surface agrégée.
 
-**US-1.3 [MVP] Création de terrain.** Je crée une fiche terrain afin de la suivre.
-- Une fiche est créée avec la ou les parcelles, l'adresse, la date.
+**US-1.3 [MVP] Ajout d'un terrain au projet.** Je crée une fiche terrain afin de la suivre dans mon projet.
+- Une fiche est créée avec la ou les parcelles, l'adresse, la date, rattachée au projet courant.
 - Champs manuels disponibles : prix demandé, lien annonce, notes.
-- La création lance l'enrichissement en arrière-plan.
+- La création lance l'enrichissement en arrière-plan (Tranche 2).
 
 **US-1.4 [MVP] Préchargement non bloquant.** Je vois d'abord les infos rapides afin de ne pas attendre.
 - Les données rapides (contour, surface, commune, libellé de zone) s'affichent immédiatement.
@@ -46,6 +53,14 @@ Format : `US-x.y` — En tant que … je veux … afin de …, suivi des critèr
 - Mesure de surface (polygone, aire en m²).
 - Mesure de dénivelé entre deux points (différence d'altitude et pente en %, depuis le RGE ALTI).
 - Mesure de recul (distance la plus courte d'un point à la limite de parcelle).
+
+**US-1.6 [MVP] Recherche par surface approchée.** En explorant près d'une adresse sans la connaître exactement, je veux trouver les parcelles proches d'une surface cible afin de repérer les bons candidats.
+- Saisie d'une surface cible et d'une tolérance ±X m² ; dans la zone explorée, les parcelles dont la contenance est dans l'intervalle sont mises en avant.
+- Résultats cliquables pour ajouter au projet.
+
+**US-1.7 [V2] Terrains constructibles sans bâtiment et contact mairie.** En explorant, je veux repérer les terrains nus constructibles et contacter la mairie afin d'identifier le propriétaire.
+- Filtre des parcelles constructibles (zone PLU) et sans bâtiment (croisement du bâti cadastre / BD TOPO Bâtiment).
+- Bouton "Contacter la mairie" qui prépare un mail pré-rempli (demande d'identité du propriétaire) vers l'email de la mairie, trouvé via l'Annuaire de l'Administration ; état "email mairie indisponible" géré proprement.
 
 ## Epic 2 — Enrichissement automatique
 

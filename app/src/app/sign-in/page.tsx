@@ -14,7 +14,7 @@ export default function SignInPage() {
         <form
           action={async () => {
             'use server';
-            await signIn('pocket-id', { redirectTo: '/' });
+            await signIn('pocket-id', { redirectTo: '/dashboard' });
           }}
         >
           <Button type="submit" className="w-full">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Button,
@@ -40,6 +40,38 @@ export default function OnboardingPage() {
   const [typeMaison, setTypeMaison] = useState<MaisonType | ''>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasProjet, setHasProjet] = useState(false);
+
+  // Cette page sert aussi d'édition (lien "Mon projet" du tableau de bord). On précharge donc
+  // le projet existant : sans cela, un enregistrement écraserait tous les champs avec null.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch('/api/projet');
+        if (!res.ok) return;
+        const { projet } = (await res.json()) as {
+          projet: {
+            budgetMax: number | null;
+            surfaceMinM2: number | null;
+            surfaceMaxM2: number | null;
+            typeMaison: MaisonType | null;
+          } | null;
+        };
+        if (cancelled || !projet) return;
+        setHasProjet(true);
+        if (projet.budgetMax != null) setBudgetMax(String(projet.budgetMax));
+        if (projet.surfaceMinM2 != null) setSurfaceMin(String(projet.surfaceMinM2));
+        if (projet.surfaceMaxM2 != null) setSurfaceMax(String(projet.surfaceMaxM2));
+        if (projet.typeMaison != null) setTypeMaison(projet.typeMaison);
+      } catch {
+        // Préremplissage best-effort : en cas d'échec, on garde le formulaire vide.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function save(skip: boolean) {
     setSubmitting(true);
@@ -166,9 +198,22 @@ export default function OnboardingPage() {
         </CardContent>
 
         <CardFooter className="flex items-center justify-between gap-3">
-          <Button type="button" variant="ghost" disabled={submitting} onClick={() => void save(true)}>
-            Passer
-          </Button>
+          {hasProjet ? (
+            // En édition, "Passer" n'a pas de sens et écraserait le projet : on revient au tableau
+            // de bord sans rien enregistrer.
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={submitting}
+              onClick={() => router.push('/dashboard')}
+            >
+              Annuler
+            </Button>
+          ) : (
+            <Button type="button" variant="ghost" disabled={submitting} onClick={() => void save(true)}>
+              Passer
+            </Button>
+          )}
           <Button type="button" disabled={submitting} onClick={() => void save(false)}>
             {submitting ? 'Enregistrement...' : 'Enregistrer et continuer'}
           </Button>

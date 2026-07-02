@@ -61,7 +61,7 @@ services:
 
   # One-shot : applique les migrations (extension, rôle, RLS, tables) au démarrage.
   migrate:
-    image: ghcr.io/lukas-houille/veriterra:843d47d04e55d59b76f9499c47e9cde131b30f79
+    image: ghcr.io/lukas-houille/veriterra:50fa94f914d74f8aa53af51a0fe68eeda7699d2b
     command: pnpm --filter @veriterra/db run deploy
     env_file: .env
     restart: 'no'
@@ -72,7 +72,7 @@ services:
         condition: service_healthy
 
   veriterra:
-    image: ghcr.io/lukas-houille/veriterra:843d47d04e55d59b76f9499c47e9cde131b30f79
+    image: ghcr.io/lukas-houille/veriterra:50fa94f914d74f8aa53af51a0fe68eeda7699d2b
     command: pnpm --filter @veriterra/app run start
     env_file: .env
     restart: unless-stopped
@@ -104,7 +104,7 @@ services:
         condition: service_completed_successfully
 
   worker:
-    image: ghcr.io/lukas-houille/veriterra:843d47d04e55d59b76f9499c47e9cde131b30f79
+    image: ghcr.io/lukas-houille/veriterra:50fa94f914d74f8aa53af51a0fe68eeda7699d2b
     command: pnpm --filter @veriterra/worker run start
     env_file: .env
     restart: unless-stopped

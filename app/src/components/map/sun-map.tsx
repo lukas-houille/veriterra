@@ -7,13 +7,16 @@ import type { FeatureCollection } from 'geojson';
 import { applyVeriterraPlanTint, basemapStyle } from './map-style';
 import { parcellesCentroid } from '@/lib/geo/centroid';
 import { allShadows, sunPosition, type ShadowBuilding, type SunPos } from '@/lib/sun/shadows';
+import { ambienceForAltitude, type Ambience } from '@/lib/sun/ambience';
 import type { GeoJsonGeometry } from '@/lib/geo/types';
 
-// Onglet « Soleil » (US-4.1, MVP) : vue 3D pitchée de la parcelle, bâtiments voisins extrudés
-// (BD TOPO) et OMBRES PORTÉES AU SOL calculées (Turf) qui bougent avec la date et l'heure. Îlot
-// strictement client : MapLibre n'est instancié que dans un effet, détruit au démontage (l'onglet
-// est démonté par Radix quand il est inactif, donc coût nul ailleurs). Relief, ombres
-// bâtiment-sur-bâtiment et timelapse sont hors périmètre (US-4.2/4.3).
+// Vue « Soleil » (US-4.1/4.2) : vue 3D pitchée de la parcelle drapée sur le relief (MNT Terrarium,
+// exagéré 1,2x), bâtiments voisins extrudés (BD TOPO) et OMBRES PORTÉES AU SOL (Turf) qui bougent
+// avec la date et l'heure, sous une AMBIANCE jour/nuit (ciel, teinte des façades et des ombres,
+// voile). Les ombres sont une projection SIMPLIFIÉE sur plan horizontal (longueur = hauteur/tan),
+// affichées drapées sur le relief mais non calculées pente par pente. L'ambiance est un voile
+// visuel, pas de la donnée (règles 1 et 3) ; la physique des ombres est inchangée. Îlot strictement
+// client. Source des bâtiments injectée par URL, donc réutilisable hors fiche (explorer).
 
 interface Batiment {
   id: string;
@@ -32,6 +35,7 @@ const SUB = '#6C7488';
 const SHADOW_SOURCE = 'sun-shadows';
 const BUILDING_SOURCE = 'sun-buildings';
 const PARCELLE_SOURCE = 'sun-parcelle';
+const TERRAIN_SOURCE = 'sun-terrain-dem';
 
 const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
@@ -110,6 +114,20 @@ function installLayers(map: MaplibreMap, parcelles: Array<{ geojson: GeoJsonGeom
       },
     });
   }
+
+  // Relief : MNT mondial Terrarium (AWS Open Data, libre, CORS *). Le bâti et les ombres au sol
+  // reposent alors sur le relief réel (US-4.2), ce qui lève la confusion du sol plat.
+  if (!map.getSource(TERRAIN_SOURCE)) {
+    map.addSource(TERRAIN_SOURCE, {
+      type: 'raster-dem',
+      tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+      encoding: 'terrarium',
+      tileSize: 256,
+      maxzoom: 15,
+      attribution: 'Relief : Terrarium (Mapzen, AWS Open Data)',
+    });
+  }
+  map.setTerrain({ source: TERRAIN_SOURCE, exaggeration: 1.2 });
 }
 
 const controlPanel: CSSProperties = {
@@ -140,11 +158,15 @@ function localDate(dateStr: string, minutes: number): Date {
 }
 
 export function SunMap({
-  terrainId,
+  buildingsUrl,
   parcelles,
+  fill = false,
 }: {
-  terrainId: string;
+  /** URL renvoyant { batiments } (fiche : route terrain scopée ; explorer : route bbox). */
+  buildingsUrl: string;
   parcelles: Array<{ geojson: GeoJsonGeometry }>;
+  /** Remplit la hauteur du parent (modale plein écran) au lieu des 520px de l'onglet. */
+  fill?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
@@ -164,6 +186,10 @@ export function SunMap({
   const sun: SunPos | null = useMemo(
     () => (centroid ? sunPosition(localDate(dateStr, minutes), centroid.lat, centroid.lon) : null),
     [centroid, dateStr, minutes],
+  );
+  const ambience: Ambience | null = useMemo(
+    () => (sun ? ambienceForAltitude(sun.altitudeDeg) : null),
+    [sun],
   );
 
   const parcellesRef = useRef(parcelles);
@@ -197,12 +223,12 @@ export function SunMap({
     // (patron des cartes existantes : montage unique, réinjection des données via les effets suivants).
   }, []);
 
-  // Chargement des bâtiments BD TOPO (route serveur scopée tenant).
+  // Chargement des bâtiments BD TOPO depuis l'URL injectée (route serveur, source publique IGN).
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`/api/terrains/${terrainId}/buildings`)
+    fetch(buildingsUrl)
       .then(async (res) => {
         if (!res.ok) throw new Error(`code ${res.status}`);
         return (await res.json()) as { batiments?: Batiment[] };
@@ -219,7 +245,7 @@ export function SunMap({
     return () => {
       cancelled = true;
     };
-  }, [terrainId]);
+  }, [buildingsUrl]);
 
   // Injecte les bâtiments dans la carte quand ils arrivent.
   useEffect(() => {
@@ -247,12 +273,48 @@ export function SunMap({
     });
   }, [shadowResult, mapReady]);
 
+  // Ambiance jour/nuit : ciel, teinte des façades et des ombres selon la hauteur du soleil.
+  // Uniquement des uniformes (coût quasi nul), sûrs à réappliquer à chaque pas du curseur.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !ambience) return;
+    map.setSky(ambience.sky);
+    map.setPaintProperty('sun-buildings-3d', 'fill-extrusion-color', ambience.buildingColor);
+    map.setPaintProperty('sun-shadow-fill', 'fill-color', ambience.shadowColor);
+    map.setPaintProperty('sun-shadow-fill', 'fill-opacity', ambience.shadowOpacity);
+  }, [ambience, mapReady]);
+
   const daylight = sun != null && sun.altitudeDeg > 0.5;
   const timeLabel = `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
 
   return (
-    <div style={{ position: 'relative', height: '520px', width: '100%', borderRadius: '12px', overflow: 'hidden', border: `1px solid ${BORDER}` }}>
+    <div
+      style={{
+        position: 'relative',
+        height: fill ? '100%' : '520px',
+        width: '100%',
+        borderRadius: fill ? 0 : '12px',
+        overflow: 'hidden',
+        border: fill ? 'none' : `1px solid ${BORDER}`,
+      }}
+    >
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} aria-label="Vue 3D de l'ensoleillement" />
+
+      {/* Voile d'ambiance (réchauffe le jour/crépuscule, assombrit la nuit). Sous le panneau. */}
+      {ambience && ambience.overlay.opacity > 0.001 ? (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 5,
+            pointerEvents: 'none',
+            background: ambience.overlay.color,
+            opacity: ambience.overlay.opacity,
+            mixBlendMode: ambience.overlay.blend,
+          }}
+        />
+      ) : null}
 
       <div style={controlPanel}>
         <span style={{ fontSize: '10px', letterSpacing: '0.06em', textTransform: 'uppercase', color: SUB, fontWeight: 700 }}>
@@ -297,7 +359,7 @@ export function SunMap({
         ) : (
           <p style={{ margin: 0, fontSize: '11.5px', color: SUB }}>
             {buildings.length} bâtiment{buildings.length > 1 ? 's' : ''} voisin{buildings.length > 1 ? 's' : ''} (BD TOPO)
-            {shadowResult.sansHauteur > 0 ? `, dont ${shadowResult.sansHauteur} sans hauteur connue (non ombrés)` : ''}. Ombres au sol des bâtiments ; relief à venir.
+            {shadowResult.sansHauteur > 0 ? `, dont ${shadowResult.sansHauteur} sans hauteur connue (non ombrés)` : ''}. Ombres projetées au sol (méthode simplifiée), drapées sur le relief (MNT Terrarium, exagéré 1,2x).
           </p>
         )}
       </div>

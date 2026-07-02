@@ -144,7 +144,17 @@ function installOverlays(
       id: 'selection-fill',
       type: 'fill',
       source: SELECTION_SOURCE,
-      paint: { 'fill-color': AMBER, 'fill-opacity': 0.35 },
+      paint: { 'fill-color': AMBER, 'fill-opacity': 0.4 },
+    });
+  }
+  // Liseré de contraste (casing) sombre SOUS le trait ambre : la sélection reste lisible sur
+  // l'orthophoto satellite (fonds verts/bruns saturés) où l'ambre seul se noyait.
+  if (!map.getLayer('selection-casing')) {
+    map.addLayer({
+      id: 'selection-casing',
+      type: 'line',
+      source: SELECTION_SOURCE,
+      paint: { 'line-color': '#161A2E', 'line-width': 4.5, 'line-opacity': 0.55 },
     });
   }
   if (!map.getLayer('selection-line')) {
@@ -152,7 +162,7 @@ function installOverlays(
       id: 'selection-line',
       type: 'line',
       source: SELECTION_SOURCE,
-      paint: { 'line-color': AMBER, 'line-width': 2 },
+      paint: { 'line-color': AMBER, 'line-width': 2.5 },
     });
   }
 

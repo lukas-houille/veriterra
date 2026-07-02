@@ -20,9 +20,12 @@ import {
 import type { PrixDvfData, RisquesData } from '@veriterra/enrichment';
 import { auth } from '@/auth';
 import { getTerrain, getTerrainEnrichment } from '@/modules/terrains/service';
+import { listDocuments } from '@/modules/terrains/documents';
+import { maxUploadMbForDisplay } from '@/lib/storage/s3';
 import type { EnrichmentBlockView } from '@/modules/terrains/types';
 import { EditTerrainForm } from './edit-terrain-form';
 import { EnrichmentActions } from './enrichment-actions';
+import { DocumentsPanel } from './documents-panel';
 
 // Fiche terrain (US-1.3 données rapides + amorce US-1.4 progressive disclosure).
 // Composant serveur : appelle directement le service (pas d'aller-retour HTTP), l'isolation
@@ -327,6 +330,8 @@ export default async function TerrainPage({
   }
 
   const enrichment = await getTerrainEnrichment(session.user.orgId, id);
+  const documents = await listDocuments(session.user.orgId, id);
+  const maxUploadMb = maxUploadMbForDisplay();
 
   const statusPin = STATUS_PIN[terrain.status] ?? 'à étudier';
   const statusLabel = STATUS_LABEL[terrain.status] ?? terrain.status;
@@ -381,6 +386,7 @@ export default async function TerrainPage({
           <TabsList>
             <TabsTrigger value="apercu">Aperçu</TabsTrigger>
             <TabsTrigger value="enrichissement">Enrichissement</TabsTrigger>
+            <TabsTrigger value="documents">Documents</TabsTrigger>
           </TabsList>
 
           {/* ----- Onglet Aperçu : données rapides sourcées ----- */}
@@ -513,6 +519,17 @@ export default async function TerrainPage({
                   </div>
                 ))}
               </div>
+            </div>
+          </TabsContent>
+
+          {/* ----- Onglet Documents : photos et pièces jointes (US-5.3, US-5.8) ----- */}
+          <TabsContent value="documents">
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground">
+                Photos et documents rattachés au terrain (étude de sol, bornage, certificat
+                d'urbanisme, devis, diagnostic). Chaque pièce porte sa provenance et sa date.
+              </p>
+              <DocumentsPanel terrainId={terrain.id} documents={documents} maxUploadMb={maxUploadMb} />
             </div>
           </TabsContent>
         </Tabs>

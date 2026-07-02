@@ -35,6 +35,22 @@ services:
       timeout: 5s
       retries: 5
 
+  # Stockage objet (pièces jointes des terrains). API sur 9000, console sur 9001.
+  # Pas de healthcheck : l'image minio/minio est minimale (pas de curl/mc) ; l'app crée le
+  # bucket paresseusement au premier upload (ensureBucket), donc aucun dépendant ne le gate.
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - miniodata:/data
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+
   # One-shot: applies migrations (extension, roles, RLS, tables) as the privileged role.
   migrate:
     build:
@@ -58,6 +74,9 @@ services:
       DATABASE_URL: postgresql://veriterra_app:veriterra_app@db:5432/${POSTGRES_DB}?schema=public
       DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
       REDIS_URL: redis://redis:6379
+      # Depuis le réseau compose, MinIO est joignable par son nom de service (le .env cible
+      # localhost:9000 pour un `pnpm dev` lancé sur l'hôte).
+      S3_ENDPOINT: http://minio:9000
     ports:
       - '3000:3000'
     healthcheck:
@@ -106,3 +125,4 @@ services:
 
 volumes:
   pgdata:
+  miniodata:

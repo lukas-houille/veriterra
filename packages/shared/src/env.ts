@@ -30,3 +30,46 @@ export function loadServerEnv(source: NodeJS.ProcessEnv = process.env): ServerEn
   }
   return parsed.data;
 }
+
+/**
+ * Object storage (MinIO / S3, self-hosted) used for terrain attachments. Optional: the app
+ * boots without it and only fails (with a readable error) the moment an upload/download is
+ * attempted while unconfigured, so non-storage tests and environments stay green. All values
+ * are server-side secrets; they are never exposed to the browser.
+ */
+const storageEnvSchema = z.object({
+  S3_ENDPOINT: z.string().min(1),
+  S3_REGION: z.string().min(1).default('us-east-1'),
+  S3_BUCKET: z.string().min(1),
+  S3_ACCESS_KEY_ID: z.string().min(1),
+  S3_SECRET_ACCESS_KEY: z.string().min(1),
+  // MinIO addresses buckets by path (endpoint/bucket/key), not virtual-host style.
+  S3_FORCE_PATH_STYLE: z
+    .string()
+    .optional()
+    .transform((v) => v !== 'false')
+    .pipe(z.boolean()),
+  // Taille maximale d'un fichier déposé (Mo). Bornée aussi côté route (défense en profondeur).
+  S3_MAX_UPLOAD_MB: z.coerce.number().int().positive().default(25),
+});
+
+export type StorageEnv = z.infer<typeof storageEnvSchema>;
+
+/**
+ * Returns the object-storage config, or `null` when storage is not configured (the required
+ * S3 variables are absent). Throws a readable error only when storage is partially configured
+ * (some variables set, others missing) so a misconfiguration surfaces loudly instead of
+ * silently disabling uploads.
+ */
+export function loadStorageEnv(source: NodeJS.ProcessEnv = process.env): StorageEnv | null {
+  const required = [source.S3_ENDPOINT, source.S3_BUCKET, source.S3_ACCESS_KEY_ID, source.S3_SECRET_ACCESS_KEY];
+  const anyPresent = required.some((v) => v != null && v !== '');
+  if (!anyPresent) return null;
+
+  const parsed = storageEnvSchema.safeParse(source);
+  if (!parsed.success) {
+    const fields = parsed.error.flatten().fieldErrors;
+    throw new Error(`Invalid object-storage environment: ${JSON.stringify(fields)}`);
+  }
+  return parsed.data;
+}

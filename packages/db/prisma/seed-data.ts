@@ -17,6 +17,8 @@ export const PROJET_A_ID = '00000000-0000-0000-0000-0000000000a4';
 export const PROJET_B_ID = '00000000-0000-0000-0000-0000000000b4';
 export const ENRICHMENT_A_ID = '00000000-0000-0000-0000-0000000000a5';
 export const ENRICHMENT_B_ID = '00000000-0000-0000-0000-0000000000b5';
+export const DOCUMENT_A_ID = '00000000-0000-0000-0000-0000000000a6';
+export const DOCUMENT_B_ID = '00000000-0000-0000-0000-0000000000b6';
 
 // Petits carrés GeoJSON (WGS84) autour de Lyon, un par tenant.
 const POLY_A = {
@@ -173,6 +175,41 @@ export async function seed(): Promise<void> {
       source: 'Géorisques',
       confidence: 'ELEVEE',
       data: { items: [] },
+    },
+  });
+
+  // Pièces jointes (photos/documents), une par tenant, pour les tests d'isolation.
+  await admin.terrainDocument.upsert({
+    where: { id: DOCUMENT_A_ID },
+    update: {},
+    create: {
+      id: DOCUMENT_A_ID,
+      organisationId: ORG_A_ID,
+      terrainId: TERRAIN_A_ID,
+      kind: 'DOCUMENT',
+      docType: 'ETUDE_SOL',
+      label: 'Étude de sol A',
+      filename: 'etude-a.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 1234,
+      storageKey: `org/${ORG_A_ID}/terrain/${TERRAIN_A_ID}/${DOCUMENT_A_ID}`,
+      uploadedById: USER_A_ID,
+    },
+  });
+  await admin.terrainDocument.upsert({
+    where: { id: DOCUMENT_B_ID },
+    update: {},
+    create: {
+      id: DOCUMENT_B_ID,
+      organisationId: ORG_B_ID,
+      terrainId: TERRAIN_B_ID,
+      kind: 'PHOTO',
+      label: 'Photo terrain B',
+      filename: 'photo-b.jpg',
+      contentType: 'image/jpeg',
+      sizeBytes: 4321,
+      storageKey: `org/${ORG_B_ID}/terrain/${TERRAIN_B_ID}/${DOCUMENT_B_ID}`,
+      uploadedById: USER_B_ID,
     },
   });
 }

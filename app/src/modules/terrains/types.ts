@@ -73,6 +73,33 @@ export interface EnrichmentView {
   anyPending: boolean;
 }
 
+/** Catégories métier d'un document, alignées sur l'enum Prisma `DocumentType`. */
+export const DOCUMENT_TYPES = [
+  'ETUDE_SOL',
+  'BORNAGE',
+  'CERTIFICAT_URBANISME',
+  'DEVIS',
+  'DIAGNOSTIC',
+  'AUTRE',
+] as const;
+export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number];
+
+/** Nature d'une pièce jointe (photo affichée en grille, document listé), enum Prisma `DocumentKind`. */
+export type DocumentKindValue = 'PHOTO' | 'DOCUMENT';
+
+/** Une pièce jointe telle que consommée par la fiche (métadonnées + provenance). */
+export interface DocumentSummary {
+  id: string;
+  kind: DocumentKindValue;
+  docType: DocumentTypeValue | null;
+  label: string | null;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedByName: string | null;
+  createdAt: string; // ISO 8601
+}
+
 /** Vue d'un terrain servie par l'API (données rapides + contours des parcelles). */
 export interface TerrainSummary {
   id: string;

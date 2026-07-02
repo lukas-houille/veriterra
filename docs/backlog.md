@@ -149,10 +149,11 @@ L'exploration est la feature phare. Le parcours : définir mon projet (onboardin
 
 ## Epic 4 — Analyse solaire
 
-**US-4.1 [MVP] Soleil interactif.** Je veux voir le soleil et les ombres afin de juger l'ensoleillement.
-- Curseurs date et heure, position du soleil affichée.
-- Journée animée (timelapse).
-- Ombres temps réel du relief et des bâtiments BD TOPO, vue 3D, fluide y compris sur mobile (2.5D allégée sur mobile).
+**US-4.1 [MVP] Soleil interactif. PARTIELLE (MVP livré : ombres des bâtiments).** Je veux voir le soleil et les ombres afin de juger l'ensoleillement.
+- Curseurs date et heure, position du soleil affichée. **LIVRÉ** (`feat/analyse-solaire`) : onglet Soleil, vue 3D pitchée, curseurs date/heure, position du soleil (azimut/hauteur), via SunCalc.
+- Ombres des bâtiments voisins **au sol** (BD TOPO, hauteur autoritative) projetées via Turf, bâtiment sans hauteur exclu et signalé (règle 3). **LIVRÉ**.
+- Journée animée (timelapse). **RESTE À FAIRE** (US-4.2/4.3).
+- Ombres temps réel du **relief** et **des bâtiments** (bâtiment-sur-bâtiment), vue 3D fluide y compris sur mobile (2.5D allégée). **RESTE À FAIRE** : relief (tuiles DEM depuis RGE ALTI, chaîne de tuilage à décider), ombres 3D bâtiment-sur-bâtiment (nécessiterait deck.gl), repli mobile.
 
 **US-4.2 [V2] Halo annuel aux solstices.** Je veux l'enveloppe d'ombrage annuelle afin de voir les périodes extrêmes.
 - Calculé côté serveur, rendu par durée d'ombre (heatmap), calques solstice été et hiver superposables.

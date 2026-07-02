@@ -30,6 +30,25 @@ export interface RisquesData {
   items: RiskItem[];
 }
 
+/** Une vente de terrain comparable (DVF), pour la transparence des chiffres (règle 1). */
+export interface DvfComparable {
+  date: string; // AAAA-MM-JJ
+  prixM2: number; // euros par m²
+  surfaceM2: number;
+  valeur: number; // valeur foncière totale de la mutation
+}
+
+/** Payload du bloc PRIX_DVF. Valeurs nulles = pas d'estimation possible (voir `note`, règle 3). */
+export interface PrixDvfData {
+  estimationM2: number | null; // médiane €/m² des ventes de terrain du secteur
+  fourchetteBasseM2: number | null; // 1er quartile
+  fourchetteHauteM2: number | null; // 3e quartile
+  nbComparables: number;
+  dernieresVentes: DvfComparable[];
+  /** Raison d'indisponibilité (hors couverture, comparables insuffisants), jamais un chiffre inventé. */
+  note: string | null;
+}
+
 /** Statut de synthèse d'un bloc, aligné sur l'enum Prisma EnrichmentStatus. */
 export type BlockStatus = 'OK' | 'UNAVAILABLE' | 'ERROR';
 

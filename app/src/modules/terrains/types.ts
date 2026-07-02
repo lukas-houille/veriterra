@@ -1,5 +1,5 @@
 import type { GeoJsonGeometry } from '@/lib/geo/types';
-import type { RisquesData } from '@veriterra/enrichment';
+import type { PrixDvfData, RisquesData } from '@veriterra/enrichment';
 
 /**
  * Parcelle envoyée par le client à la création. La donnée provient de la requête
@@ -61,8 +61,8 @@ export interface EnrichmentBlockView {
   sourceUrl: string | null;
   confidence: 'ELEVEE' | 'MOYENNE' | 'FAIBLE' | null;
   fetchedAt: string | null; // ISO 8601
-  /** Payload normalisé. En Tranche 2 slice 1, seul le type RISQUES existe (RisquesData). */
-  data: RisquesData | null;
+  /** Payload normalisé, selon le type de bloc (discriminé par `type`). */
+  data: RisquesData | PrixDvfData | null;
   error: string | null;
 }
 

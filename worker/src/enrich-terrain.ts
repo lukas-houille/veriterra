@@ -1,10 +1,18 @@
-import { forOrg, Prisma } from '@veriterra/db';
+import { forOrg, Prisma, type ConfidenceLevel, type EnrichmentStatus, type EnrichmentType } from '@veriterra/db';
 import type {
   EnrichBlockOutcome,
   EnrichTerrainJobData,
   EnrichTerrainJobResult,
 } from '@veriterra/shared';
-import { getRisquesGeorisquesCached, summarizeRisques } from '@veriterra/enrichment';
+import {
+  DVF_SOURCE,
+  DVF_SOURCE_URL,
+  getPrixDvfCached,
+  getRisquesGeorisquesCached,
+  summarizePrixDvf,
+  summarizeRisques,
+  type DvfSection,
+} from '@veriterra/enrichment';
 
 const GEORISQUES_URL = 'https://www.georisques.gouv.fr/';
 
@@ -37,86 +45,150 @@ type TenantDb = ReturnType<typeof forOrg>;
 type TerrainWithParcelles = {
   id: string;
   inseeCode: string;
-  parcelles: Array<{ geojson: unknown }>;
+  parcelles: Array<{ geojson: unknown; idu: string }>;
 };
 
-/**
- * Bloc RISQUES (Géorisques) : récupère, synthétise et upsert. Une panne transitoire totale
- * (source injoignable) écrit un bloc ERROR et RELANCE pour que BullMQ rejoue avec backoff, au
- * lieu de figer un faux "aucun risque" terminal. Une vraie absence de couverture reste un
- * UNAVAILABLE terminal légitime. Les erreurs DB se propagent aussi (réessai).
- */
+/** Résultat interne d'un enrichissement de bloc : issue affichée + faut-il réessayer le job. */
+interface BlockRun {
+  outcome: EnrichBlockOutcome;
+  retry: boolean;
+}
+
+interface BlockFields {
+  status: EnrichmentStatus;
+  data?: Prisma.InputJsonValue | typeof Prisma.DbNull;
+  source: string;
+  sourceUrl: string;
+  confidence?: ConfidenceLevel | null;
+  error?: string | null;
+}
+
+/** Upsert d'un bloc (un par terrain+type), provenance et fraîcheur systématiques. */
+function upsertBlock(
+  db: TenantDb,
+  orgId: string,
+  terrainId: string,
+  type: EnrichmentType,
+  fields: BlockFields,
+) {
+  const common = {
+    status: fields.status,
+    data: fields.data ?? Prisma.DbNull,
+    source: fields.source,
+    sourceUrl: fields.sourceUrl,
+    confidence: fields.confidence ?? null,
+    error: fields.error ?? null,
+    fetchedAt: new Date(),
+  };
+  return db.enrichmentBlock.upsert({
+    where: { terrainId_type: { terrainId, type } },
+    create: { organisationId: orgId, terrainId, type, ...common },
+    update: common,
+  });
+}
+
+/** Bloc RISQUES (Géorisques). Ne throw pas : signale le besoin de réessai via `retry`. */
 async function enrichRisques(
   db: TenantDb,
-  organisationId: string,
+  orgId: string,
   terrain: TerrainWithParcelles,
   force: boolean,
-): Promise<EnrichBlockOutcome> {
-  const type = 'RISQUES' as const;
-
-  let centroid: { lon: number; lat: number } | null = null;
-  for (const p of terrain.parcelles) {
-    centroid = centroidOf(p.geojson);
-    if (centroid) break;
-  }
-  if (!centroid) {
-    await db.enrichmentBlock.upsert({
-      where: { terrainId_type: { terrainId: terrain.id, type } },
-      create: { organisationId, terrainId: terrain.id, type, status: 'UNAVAILABLE', source: 'Géorisques', sourceUrl: GEORISQUES_URL },
-      update: { status: 'UNAVAILABLE', data: Prisma.DbNull, error: null, fetchedAt: new Date() },
+): Promise<BlockRun> {
+  const type: EnrichmentType = 'RISQUES';
+  try {
+    let centroid: { lon: number; lat: number } | null = null;
+    for (const p of terrain.parcelles) {
+      centroid = centroidOf(p.geojson);
+      if (centroid) break;
+    }
+    if (!centroid) {
+      await upsertBlock(db, orgId, terrain.id, type, { status: 'UNAVAILABLE', source: 'Géorisques', sourceUrl: GEORISQUES_URL });
+      return { outcome: { type, status: 'UNAVAILABLE' }, retry: false };
+    }
+    const { data, transientError } = await getRisquesGeorisquesCached(
+      { lon: centroid.lon, lat: centroid.lat, codeInsee: terrain.inseeCode },
+      { force },
+    );
+    const { status, confidence } = summarizeRisques(data);
+    if (transientError) {
+      if (status === 'UNAVAILABLE') {
+        await upsertBlock(db, orgId, terrain.id, type, { status: 'ERROR', source: 'Géorisques', sourceUrl: GEORISQUES_URL, error: 'Géorisques injoignable' });
+        return { outcome: { type, status: 'ERROR' }, retry: true };
+      }
+      // Panne partielle : on garde ce qu'on a obtenu mais on relance pour compléter au prochain essai.
+      await upsertBlock(db, orgId, terrain.id, type, { status, data: data as unknown as Prisma.InputJsonValue, source: 'Géorisques', sourceUrl: GEORISQUES_URL, confidence });
+      return { outcome: { type, status }, retry: true };
+    }
+    await upsertBlock(db, orgId, terrain.id, type, {
+      status,
+      data: data as unknown as Prisma.InputJsonValue,
+      source: 'Géorisques',
+      sourceUrl: GEORISQUES_URL,
+      confidence,
     });
-    return { type, status: 'UNAVAILABLE' };
+    return { outcome: { type, status }, retry: false };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'erreur inconnue';
+    await upsertBlock(db, orgId, terrain.id, type, { status: 'ERROR', source: 'Géorisques', sourceUrl: GEORISQUES_URL, error: message }).catch(() => undefined);
+    return { outcome: { type, status: 'ERROR' }, retry: true };
   }
+}
 
-  const { data, transientError } = await getRisquesGeorisquesCached(
-    { lon: centroid.lon, lat: centroid.lat, codeInsee: terrain.inseeCode },
-    { force },
-  );
-  const { status, confidence } = summarizeRisques(data);
-
-  if (status === 'UNAVAILABLE' && transientError) {
-    const message = 'Géorisques injoignable';
-    await db.enrichmentBlock
-      .upsert({
-        where: { terrainId_type: { terrainId: terrain.id, type } },
-        create: { organisationId, terrainId: terrain.id, type, status: 'ERROR', source: 'Géorisques', sourceUrl: GEORISQUES_URL, error: message },
-        update: { status: 'ERROR', error: message, fetchedAt: new Date() },
-      })
-      .catch(() => undefined);
-    throw new Error(`${message}, réessai programmé (terrain ${terrain.id})`);
+/** Sections DVF (commune INSEE + préfixe/section) déduites des IDU des parcelles. */
+function dvfSections(terrain: TerrainWithParcelles): DvfSection[] {
+  const out: DvfSection[] = [];
+  for (const p of terrain.parcelles) {
+    if (p.idu && p.idu.length >= 10) {
+      out.push({ commune: p.idu.slice(0, 5), section: p.idu.slice(5, 10) });
+    }
   }
+  return out;
+}
 
-  const payload = data as unknown as Prisma.InputJsonValue;
-  await db.enrichmentBlock.upsert({
-    where: { terrainId_type: { terrainId: terrain.id, type } },
-    create: {
-      organisationId,
-      terrainId: terrain.id,
-      type,
+/** Bloc PRIX_DVF (comparables terrains). Ne throw pas : signale le besoin de réessai via `retry`. */
+async function enrichPrixDvf(
+  db: TenantDb,
+  orgId: string,
+  terrain: TerrainWithParcelles,
+  force: boolean,
+): Promise<BlockRun> {
+  const type: EnrichmentType = 'PRIX_DVF';
+  try {
+    const { data, transientError } = await getPrixDvfCached(
+      { codeInsee: terrain.inseeCode, sections: dvfSections(terrain) },
+      { force },
+    );
+    const { status, confidence } = summarizePrixDvf(data);
+    if (transientError) {
+      if (status === 'UNAVAILABLE') {
+        await upsertBlock(db, orgId, terrain.id, type, { status: 'ERROR', source: DVF_SOURCE, sourceUrl: DVF_SOURCE_URL, error: 'DVF injoignable' });
+        return { outcome: { type, status: 'ERROR' }, retry: true };
+      }
+      // Panne partielle (une section injoignable) : estimation partielle conservée, mais on
+      // relance pour compléter le secteur au prochain essai (ne pas figer une médiane tronquée).
+      await upsertBlock(db, orgId, terrain.id, type, { status, data: data as unknown as Prisma.InputJsonValue, source: DVF_SOURCE, sourceUrl: DVF_SOURCE_URL, confidence });
+      return { outcome: { type, status }, retry: true };
+    }
+    await upsertBlock(db, orgId, terrain.id, type, {
       status,
-      data: payload,
-      source: 'Géorisques',
-      sourceUrl: GEORISQUES_URL,
+      data: data as unknown as Prisma.InputJsonValue,
+      source: DVF_SOURCE,
+      sourceUrl: DVF_SOURCE_URL,
       confidence,
-      fetchedAt: new Date(),
-    },
-    update: {
-      status,
-      data: payload,
-      source: 'Géorisques',
-      sourceUrl: GEORISQUES_URL,
-      confidence,
-      fetchedAt: new Date(),
-      error: null,
-    },
-  });
-  return { type, status };
+    });
+    return { outcome: { type, status }, retry: false };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'erreur inconnue';
+    await upsertBlock(db, orgId, terrain.id, type, { status: 'ERROR', source: DVF_SOURCE, sourceUrl: DVF_SOURCE_URL, error: message }).catch(() => undefined);
+    return { outcome: { type, status: 'ERROR' }, retry: true };
+  }
 }
 
 /**
- * Enrichit un terrain : lit le terrain (scopé tenant via forOrg), calcule un point
- * représentatif, récupère et persiste les blocs sourcés. En Tranche 2 slice 1 : bloc RISQUES.
- * Relance (throw) sur panne transitoire de source ou erreur DB, pour laisser BullMQ rejouer.
+ * Enrichit un terrain : lit le terrain (scopé tenant via forOrg), récupère et persiste chaque
+ * bloc sourcé de façon indépendante (une panne d'une source ne bloque pas l'autre). Relance
+ * (throw) en fin si au moins un bloc a subi une panne transitoire, pour que BullMQ rejoue.
+ * En Tranche 2 : blocs RISQUES (Géorisques) et PRIX_DVF (Etalab).
  */
 export async function runEnrichTerrain(data: EnrichTerrainJobData): Promise<EnrichTerrainJobResult> {
   const { organizationId, terrainId, force } = data;
@@ -126,9 +198,23 @@ export async function runEnrichTerrain(data: EnrichTerrainJobData): Promise<Enri
     include: { parcelles: true },
   })) as unknown as TerrainWithParcelles | null;
 
-  const blocks: EnrichBlockOutcome[] = [];
-  if (terrain) {
-    blocks.push(await enrichRisques(db, organizationId, terrain, Boolean(force)));
+  if (!terrain) {
+    return { terrainId, blocks: [], at: new Date().toISOString() };
   }
-  return { terrainId, blocks, at: new Date().toISOString() };
+
+  const runs: BlockRun[] = [
+    await enrichRisques(db, organizationId, terrain, Boolean(force)),
+    await enrichPrixDvf(db, organizationId, terrain, Boolean(force)),
+  ];
+  const result: EnrichTerrainJobResult = {
+    terrainId,
+    blocks: runs.map((r) => r.outcome),
+    at: new Date().toISOString(),
+  };
+  if (runs.some((r) => r.retry)) {
+    // Au moins un bloc a subi une panne transitoire : on relance pour rejeu BullMQ (les blocs
+    // OK sont idempotents et se rechargeront du cache). L'état de chaque bloc est déjà persisté.
+    throw new Error(`Enrichissement partiellement injoignable, réessai programmé (terrain ${terrainId})`);
+  }
+  return result;
 }

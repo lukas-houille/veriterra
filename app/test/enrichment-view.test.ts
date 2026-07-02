@@ -16,6 +16,9 @@ function block(overrides: Partial<EnrichmentBlockView>): EnrichmentBlockView {
   };
 }
 
+const allTerminal = (status: EnrichmentBlockView['status']) =>
+  EXPECTED_ENRICHMENT_TYPES.map((type) => block({ type, status }));
+
 describe('buildEnrichmentView', () => {
   it('présente chaque type attendu, en PENDING quand aucun bloc n\'existe encore', () => {
     const view = buildEnrichmentView([]);
@@ -24,15 +27,15 @@ describe('buildEnrichmentView', () => {
     expect(view.anyPending).toBe(true);
   });
 
-  it('utilise le bloc existant pour un type attendu (statut terminal => pas de pending)', () => {
-    const view = buildEnrichmentView([block({ type: 'RISQUES', status: 'OK' })]);
-    expect(view.blocks).toHaveLength(EXPECTED_ENRICHMENT_TYPES.length);
-    expect(view.blocks[0]?.status).toBe('OK');
-    expect(view.anyPending).toBe(false);
+  it('anyPending faux quand tous les types attendus ont un statut terminal', () => {
+    expect(buildEnrichmentView(allTerminal('OK')).anyPending).toBe(false);
+    expect(buildEnrichmentView(allTerminal('UNAVAILABLE')).anyPending).toBe(false);
+    expect(buildEnrichmentView(allTerminal('ERROR')).anyPending).toBe(false);
   });
 
-  it('UNAVAILABLE et ERROR sont terminaux (anyPending faux)', () => {
-    expect(buildEnrichmentView([block({ status: 'UNAVAILABLE' })]).anyPending).toBe(false);
-    expect(buildEnrichmentView([block({ status: 'ERROR', error: 'x' })]).anyPending).toBe(false);
+  it('anyPending vrai si un type attendu manque encore (reste PENDING)', () => {
+    const view = buildEnrichmentView([block({ type: EXPECTED_ENRICHMENT_TYPES[0], status: 'OK' })]);
+    expect(view.blocks).toHaveLength(EXPECTED_ENRICHMENT_TYPES.length);
+    expect(view.anyPending).toBe(true);
   });
 });

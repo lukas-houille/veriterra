@@ -4,8 +4,8 @@ import type { EnrichmentBlockView, EnrichmentView } from './types';
 // affichés même sans ligne en base (le worker crée le bloc quand il aboutit) : un type attendu
 // sans bloc est présenté PENDING (préchargement non bloquant, US-1.4), ce qui pilote le polling.
 
-/** Types d'enrichissement attendus sur la fiche, dans l'ordre d'affichage. Tranche 2 slice 1 : RISQUES. */
-export const EXPECTED_ENRICHMENT_TYPES = ['RISQUES'] as const;
+/** Types d'enrichissement attendus sur la fiche, dans l'ordre d'affichage. */
+export const EXPECTED_ENRICHMENT_TYPES = ['PRIX_DVF', 'RISQUES'] as const;
 
 function pendingBlock(type: string): EnrichmentBlockView {
   return {

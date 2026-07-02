@@ -17,6 +17,7 @@ import {
   UnavailableState,
   type PortfolioStatus,
 } from '@veriterra/ui';
+import type { PrixDvfData, RisquesData } from '@veriterra/enrichment';
 import { auth } from '@/auth';
 import { getTerrain, getTerrainEnrichment } from '@/modules/terrains/service';
 import type { EnrichmentBlockView } from '@/modules/terrains/types';
@@ -157,6 +158,7 @@ function RisquesBlock({ block }: { block: EnrichmentBlockView }) {
       </section>
     );
   }
+  const risques = block.data as RisquesData;
   const meta = [
     block.source,
     block.fetchedAt ? formatDate(block.fetchedAt) : null,
@@ -168,7 +170,7 @@ function RisquesBlock({ block }: { block: EnrichmentBlockView }) {
     <section>
       <BlockHeader title={title} meta={meta} />
       <div className="grid gap-3 sm:grid-cols-2">
-        {block.data.items.map((item) => (
+        {risques.items.map((item) => (
           <div key={item.key} className="rounded-lg border border-border p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{item.label}</p>
             <div className="mt-1.5">
@@ -190,6 +192,116 @@ function RisquesBlock({ block }: { block: EnrichmentBlockView }) {
           Source ·{' '}
           <a href={block.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">
             {block.source ?? 'Géorisques'}
+          </a>
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function formatEcart(ratio: number): string {
+  const pct = Math.round(ratio * 100);
+  return `${pct > 0 ? '+' : ''}${pct} % vs estimation`;
+}
+
+/** Rend le bloc PRIX_DVF selon son statut. Calcule l'estimation du terrain et l'écart au prix demandé. */
+function PrixDvfBlock({
+  block,
+  prixDemande,
+  surfaceM2,
+}: {
+  block: EnrichmentBlockView;
+  prixDemande: number | null;
+  surfaceM2: number;
+}) {
+  const title = 'Prix (DVF)';
+  if (block.status === 'PENDING') {
+    return (
+      <section aria-busy="true">
+        <BlockHeader title={title} />
+        <div className="h-20 animate-pulse rounded-lg border border-border bg-neutral-100" />
+        <p className="mt-2 text-xs text-muted-foreground">Recherche des comparables...</p>
+      </section>
+    );
+  }
+  if (block.status === 'ERROR') {
+    return (
+      <section>
+        <BlockHeader title={title} />
+        <UnavailableState label="Récupération impossible pour l'instant, réessayez avec Actualiser" />
+      </section>
+    );
+  }
+  const data = block.data as PrixDvfData | null;
+  if (block.status === 'UNAVAILABLE' || !data || data.estimationM2 == null) {
+    return (
+      <section>
+        <BlockHeader title={title} />
+        <UnavailableState label={data?.note ?? 'Estimation DVF indisponible'} />
+      </section>
+    );
+  }
+
+  const estimationTotale = data.estimationM2 * surfaceM2;
+  const ecart = prixDemande != null && estimationTotale > 0 ? (prixDemande - estimationTotale) / estimationTotale : null;
+  const meta = [
+    block.source,
+    block.fetchedAt ? formatDate(block.fetchedAt) : null,
+    block.confidence ? `confiance ${CONFIDENCE_LABEL[block.confidence] ?? block.confidence.toLowerCase()}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <section>
+      <BlockHeader title={title} meta={meta} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Estimation du terrain</p>
+          <p className="mt-1 font-mono text-lg text-foreground">{nfPrix.format(estimationTotale)}</p>
+          <p className="mt-0.5 text-xs text-neutral-500">
+            environ {nfSurface.format(data.estimationM2)} €/m² (de {nfSurface.format(data.fourchetteBasseM2 ?? 0)} à{' '}
+            {nfSurface.format(data.fourchetteHauteM2 ?? 0)} €/m²)
+          </p>
+          <p className="mt-1 text-xs text-neutral-500">
+            {data.nbComparables} vente{data.nbComparables > 1 ? 's' : ''} de terrain comparable
+            {data.nbComparables > 1 ? 's' : ''}
+          </p>
+        </div>
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Écart au prix demandé</p>
+          <div className="mt-1.5">
+            {prixDemande == null ? (
+              <UnavailableState label="Prix demandé non renseigné" />
+            ) : ecart != null ? (
+              <AlertChip severity={ecart > 0.1 ? 'warning' : ecart < -0.1 ? 'success' : 'info'}>
+                {formatEcart(ecart)}
+              </AlertChip>
+            ) : (
+              <span className="text-sm text-neutral-500">non calculable</span>
+            )}
+          </div>
+        </div>
+      </div>
+      {data.dernieresVentes.length > 0 ? (
+        <div className="mt-3">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            Dernières ventes de terrain
+          </p>
+          <ul className="flex flex-col gap-0.5 font-mono text-xs text-neutral-600">
+            {data.dernieresVentes.map((v) => (
+              <li key={`${v.date}-${v.surfaceM2}-${v.valeur}`}>
+                {formatDate(v.date)} · {nfSurface.format(v.surfaceM2)} m² · {nfSurface.format(v.prixM2)} €/m²
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {block.sourceUrl ? (
+        <p className="mt-2 text-[10.5px] text-neutral-400">
+          Source ·{' '}
+          <a href={block.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">
+            {block.source ?? 'DVF'}
           </a>
         </p>
       ) : null}
@@ -373,14 +485,23 @@ export default async function TerrainPage({
                 <EnrichmentActions terrainId={terrain.id} pending={enrichment.anyPending} />
               </div>
 
-              {enrichment.blocks.map((block) =>
-                block.type === 'RISQUES' ? <RisquesBlock key={block.type} block={block} /> : null,
-              )}
+              {enrichment.blocks.map((block) => {
+                if (block.type === 'PRIX_DVF')
+                  return (
+                    <PrixDvfBlock
+                      key={block.type}
+                      block={block}
+                      prixDemande={terrain.prixDemande}
+                      surfaceM2={terrain.surfaceTotaleM2}
+                    />
+                  );
+                if (block.type === 'RISQUES') return <RisquesBlock key={block.type} block={block} />;
+                return null;
+              })}
 
               {/* Blocs à venir dans les prochaines slices (jamais silencieux, règle n°3). */}
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 {[
-                  { key: 'dvf', title: 'Prix DVF' },
                   { key: 'plu', title: 'PLU' },
                   { key: 'pente', title: 'Pente et services' },
                 ].map((item) => (

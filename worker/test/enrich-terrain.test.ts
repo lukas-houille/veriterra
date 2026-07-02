@@ -47,10 +47,14 @@ afterAll(async () => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('runEnrichTerrain', () => {
-  it('écrit un bloc RISQUES sourcé (OK) à partir de Géorisques', async () => {
+  it('écrit les blocs RISQUES et PRIX_DVF sourcés (OK) à partir des sources', async () => {
+    const mut = (id: string, vf: string, st: string) => ({ id_mutation: id, nature_mutation: 'Vente', valeur_fonciere: vf, type_local: 'None', surface_terrain: st, code_nature_culture: 'AB', nature_culture: 'Terrain à bâtir' });
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
+        if (url.includes('/mutations3')) {
+          return new Response(JSON.stringify({ mutations: [mut('A', '50000', '500'), mut('B', '60000', '500'), mut('C', '70000', '500')] }), { status: 200 });
+        }
         const body = url.includes('/rga')
           ? { codeExposition: '2', exposition: 'Exposition moyenne' }
           : url.includes('/zonage_sismique')
@@ -63,16 +67,26 @@ describe('runEnrichTerrain', () => {
     );
 
     const result = await runEnrichTerrain({ organizationId: ORG_ID, terrainId: TERRAIN_ID, force: true });
-    expect(result.blocks).toEqual([{ type: 'RISQUES', status: 'OK' }]);
+    expect(result.blocks).toEqual([
+      { type: 'RISQUES', status: 'OK' },
+      { type: 'PRIX_DVF', status: 'OK' },
+    ]);
 
-    const row = await admin.enrichmentBlock.findFirst({ where: { terrainId: TERRAIN_ID, type: 'RISQUES' } });
-    expect(row?.status).toBe('OK');
-    expect(row?.source).toBe('Géorisques');
-    expect(row?.confidence).toBe('ELEVEE');
-    expect(row?.organisationId).toBe(ORG_ID);
-    const data = row?.data as { items?: Array<{ key: string; available: boolean }> } | null;
-    expect(data?.items?.map((i) => i.key).sort()).toEqual(['argile', 'inondation', 'radon', 'sismicite']);
-    expect(data?.items?.every((i) => i.available)).toBe(true);
+    const risques = await admin.enrichmentBlock.findFirst({ where: { terrainId: TERRAIN_ID, type: 'RISQUES' } });
+    expect(risques?.status).toBe('OK');
+    expect(risques?.source).toBe('Géorisques');
+    expect(risques?.confidence).toBe('ELEVEE');
+    expect(risques?.organisationId).toBe(ORG_ID);
+    const rData = risques?.data as { items?: Array<{ key: string; available: boolean }> } | null;
+    expect(rData?.items?.map((i) => i.key).sort()).toEqual(['argile', 'inondation', 'radon', 'sismicite']);
+    expect(rData?.items?.every((i) => i.available)).toBe(true);
+
+    const prix = await admin.enrichmentBlock.findFirst({ where: { terrainId: TERRAIN_ID, type: 'PRIX_DVF' } });
+    expect(prix?.status).toBe('OK');
+    expect(prix?.source).toContain('DVF');
+    const pData = prix?.data as { estimationM2?: number; nbComparables?: number } | null;
+    expect(pData?.nbComparables).toBe(3);
+    expect(pData?.estimationM2).toBe(120);
   });
 
   it('une panne transitoire totale (503) écrit un bloc ERROR et relance pour réessai', async () => {

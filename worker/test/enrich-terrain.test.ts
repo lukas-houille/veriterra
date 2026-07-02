@@ -55,6 +55,10 @@ describe('runEnrichTerrain', () => {
         if (url.includes('/mutations3')) {
           return new Response(JSON.stringify({ mutations: [mut('A', '50000', '500'), mut('B', '60000', '500'), mut('C', '70000', '500')] }), { status: 200 });
         }
+        if (url.includes('/calcul/alti/')) {
+          // 5 altitudes [centre, est, ouest, nord, sud] : pente descendant vers le sud.
+          return new Response(JSON.stringify({ elevations: [100, 100, 100, 110, 90] }), { status: 200 });
+        }
         const body = url.includes('/rga')
           ? { codeExposition: '2', exposition: 'Exposition moyenne' }
           : url.includes('/zonage_sismique')
@@ -70,6 +74,7 @@ describe('runEnrichTerrain', () => {
     expect(result.blocks).toEqual([
       { type: 'RISQUES', status: 'OK' },
       { type: 'PRIX_DVF', status: 'OK' },
+      { type: 'PENTE', status: 'OK' },
     ]);
 
     const risques = await admin.enrichmentBlock.findFirst({ where: { terrainId: TERRAIN_ID, type: 'RISQUES' } });

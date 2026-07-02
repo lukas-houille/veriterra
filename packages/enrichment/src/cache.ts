@@ -1,7 +1,8 @@
 import { getRedisConnection } from '@veriterra/shared';
 import { fetchRisquesGeorisques, type GeorisquesInput, type RisquesFetchResult } from './georisques';
 import { fetchPrixDvf, type DvfInput, type PrixDvfFetchResult } from './dvf';
-import type { PrixDvfData, RisquesData } from './types';
+import { fetchPente, type PenteInput, type PenteFetchResult } from './pente';
+import type { PenteData, PrixDvfData, RisquesData } from './types';
 
 // Cache Redis best-effort autour des sources publiques (données réutilisables entre terrains
 // d'une même zone). Calqué sur app/src/lib/geo/apicarto.ts : préfixe à deux points, TTL long,
@@ -10,11 +11,17 @@ import type { PrixDvfData, RisquesData } from './types';
 
 const PREFIX = 'enrich:georisques:';
 const DVF_PREFIX = 'enrich:dvf:';
+const PENTE_PREFIX = 'enrich:pente:';
 const TTL_SECONDS = 60 * 60 * 24 * 30; // 30 jours (données publiques peu volatiles)
 
 function cacheKey(input: GeorisquesInput): string {
   // Arrondi ~11 m pour mutualiser entre parcelles proches, plus le code INSEE (radon).
   return `${PREFIX}${input.lat.toFixed(4)},${input.lon.toFixed(4)},${input.codeInsee}`;
+}
+
+function penteCacheKey(input: PenteInput): string {
+  // Topographie très stable : arrondi ~11 m pour mutualiser entre parcelles proches.
+  return `${PENTE_PREFIX}${input.lat.toFixed(4)},${input.lon.toFixed(4)}`;
 }
 
 function dvfCacheKey(input: DvfInput): string {
@@ -70,6 +77,34 @@ export async function getPrixDvfCached(
     }
   }
   const result = await fetchPrixDvf(input);
+  if (!result.transientError) {
+    try {
+      await getRedisConnection().set(key, JSON.stringify(result.data), 'EX', TTL_SECONDS);
+    } catch {
+      // écriture best-effort.
+    }
+  }
+  return result;
+}
+
+/**
+ * Pente et exposition (RGE ALTI) avec cache Redis (mêmes garanties : `force` contourne, un
+ * résultat affecté par une panne transitoire n'est pas mis en cache).
+ */
+export async function getPenteCached(
+  input: PenteInput,
+  opts: { force?: boolean } = {},
+): Promise<PenteFetchResult> {
+  const key = penteCacheKey(input);
+  if (!opts.force) {
+    try {
+      const cached = await getRedisConnection().get(key);
+      if (cached) return { data: JSON.parse(cached) as PenteData, transientError: false };
+    } catch {
+      // cache indisponible : on poursuit sans.
+    }
+  }
+  const result = await fetchPente(input);
   if (!result.transientError) {
     try {
       await getRedisConnection().set(key, JSON.stringify(result.data), 'EX', TTL_SECONDS);

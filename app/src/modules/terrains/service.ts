@@ -2,6 +2,7 @@ import { forOrg, withOrg, type Prisma } from '@veriterra/db';
 import type { PenteData, PluData, PrixDvfData, RisquesData, ServicesData } from '@veriterra/enrichment';
 import type { GeoJsonGeometry } from '@/lib/geo/types';
 import { getEnrichTerrainQueue } from '@/lib/queues';
+import { deleteObject } from '@/lib/storage/s3';
 import { ensureProjet, getActiveProjet } from '@/modules/projet/service';
 import type { ProjetSummary } from '@/modules/projet/types';
 import { scoreTerrain, type ScoreResult, type ScoringInput } from './scoring';
@@ -15,6 +16,10 @@ import type {
 } from './types';
 
 const PARCELLE_SOURCE = 'IGN API Carto Cadastre';
+
+/** Délai max d'attente de l'enfilement de l'enrichissement à la création (effet de bord best-effort). */
+const ENQUEUE_TIMEOUT_MS = 4000;
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Statuts de terrain admissibles (aligné sur l'enum Prisma `TerrainStatus`). */
 export const TERRAIN_STATUSES = ['A_ETUDIER', 'PROMETTEUR', 'RESERVE', 'ECARTE'] as const;
@@ -143,11 +148,45 @@ export async function createTerrain(
     return terrain.id;
   });
 
-  await enqueueTerrainEnrichment(orgId, terrainId);
+  // Effet de bord POST-commit : ne doit JAMAIS transformer une création réussie en échec client
+  // (le terrain est déjà persisté). Best-effort et borné dans le temps : si Redis est indisponible,
+  // l'enfilement ne doit pas faire traîner la requête jusqu'au 502 de la façade. Les blocs restent
+  // PENDING et un « Actualiser » relancera le job.
+  const enqueued = enqueueTerrainEnrichment(orgId, terrainId).catch((err) => {
+    console.error(`[createTerrain] enfilement de l'enrichissement échoué pour ${terrainId}:`, err);
+  });
+  await Promise.race([enqueued, delay(ENQUEUE_TIMEOUT_MS)]);
 
   const summary = await getTerrain(orgId, terrainId);
   if (!summary) throw new Error('Terrain introuvable après création.');
   return summary;
+}
+
+/**
+ * Supprime un terrain de l'organisation (scopé RLS). Le cascade DB retire parcelles, blocs
+ * d'enrichissement et lignes de documents ; les objets S3 des documents sont retirés best-effort
+ * (un objet orphelin est moins grave qu'une requête bloquée). Renvoie false si le terrain
+ * n'existe pas dans le tenant (ou appartient à une autre organisation, invisible via RLS).
+ */
+export async function deleteTerrain(orgId: string, id: string): Promise<boolean> {
+  const db = forOrg(orgId);
+  const terrain = await db.terrain.findUnique({ where: { id }, select: { id: true } });
+  if (!terrain) return false;
+
+  // Clés S3 des documents à nettoyer après suppression (le cascade retire les lignes en base).
+  const docs = (await db.terrainDocument.findMany({
+    where: { terrainId: id },
+    select: { storageKey: true },
+  })) as Array<{ storageKey: string }>;
+
+  try {
+    await db.terrain.delete({ where: { id } });
+  } catch (e) {
+    if ((e as { code?: unknown }).code === 'P2025') return false;
+    throw e;
+  }
+  await Promise.all(docs.map((d) => deleteObject(d.storageKey).catch(() => undefined)));
+  return true;
 }
 
 /**

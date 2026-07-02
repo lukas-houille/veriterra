@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { isUuid } from '@/lib/uuid';
-import { getTerrain, TERRAIN_STATUSES, updateTerrain } from '@/modules/terrains/service';
+import { deleteTerrain, getTerrain, TERRAIN_STATUSES, updateTerrain } from '@/modules/terrains/service';
 import type { UpdateTerrainInput } from '@/modules/terrains/types';
 
 export const runtime = 'nodejs';
@@ -65,6 +65,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'introuvable' }, { status: 404 });
   }
   return NextResponse.json({ terrain });
+}
+
+// DELETE /api/terrains/[id] : supprime un terrain de l'organisation (cascade parcelles,
+// enrichissements, documents). Scopé tenant (RLS) via deleteTerrain.
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user?.orgId) {
+    return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
+  }
+  const { id } = await params;
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: 'introuvable' }, { status: 404 });
+  }
+  const ok = await deleteTerrain(session.user.orgId, id);
+  if (!ok) {
+    return NextResponse.json({ error: 'introuvable' }, { status: 404 });
+  }
+  return new NextResponse(null, { status: 204 });
 }
 
 /** Valide et borne l'entrée de modification. Ne retient que les champs réellement fournis. */

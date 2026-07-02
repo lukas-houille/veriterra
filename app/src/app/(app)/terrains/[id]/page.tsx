@@ -564,6 +564,44 @@ function PluBlock({ block }: { block: EnrichmentBlockView }) {
   );
 }
 
+/** Résumé compact du zonage PLU pour l'onglet Aperçu (le détail complet reste dans Enrichissement). */
+function ZonageApercu({ block }: { block: EnrichmentBlockView | undefined }) {
+  const title = 'Zonage PLU';
+  const shell = (children: React.ReactNode) => (
+    <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+      <BlockHeader title={title} meta={block?.source ?? undefined} />
+      {children}
+    </section>
+  );
+  if (!block || block.status === 'PENDING') {
+    return shell(
+      <p className="text-sm text-muted-foreground">
+        {block ? 'Recherche du zonage en cours...' : 'Zonage non demandé.'}
+      </p>,
+    );
+  }
+  if (block.status === 'ERROR') {
+    return shell(
+      <UnavailableState label="Récupération impossible pour l'instant, réessayez via Actualiser (onglet Enrichissement)" />,
+    );
+  }
+  const data = block.data as PluData | null;
+  if (block.status === 'UNAVAILABLE' || !data || (!data.typezone && !data.zoneLibelle)) {
+    return shell(<UnavailableState label={data?.note ?? 'Zonage indisponible'} />);
+  }
+  const family = zoneFamily(data.typezone);
+  return shell(
+    <>
+      <p className="text-sm font-semibold text-foreground">
+        {data.zoneLibelle ?? data.typezone}
+        {family ? ` · zone ${family}` : ''}
+      </p>
+      {data.zoneDescription ? <p className="mt-1 text-xs text-neutral-500">{data.zoneDescription}</p> : null}
+      <p className="mt-2 text-[11px] text-neutral-400">Document et règlement dans l&apos;onglet Enrichissement.</p>
+    </>,
+  );
+}
+
 /** Carte de score (US-3.1/3.2/3.4) : jauge globale, détail par critère sourcé, alertes rouges. */
 function ScoreCard({ score }: { score: ScoreResult }) {
   return (
@@ -626,6 +664,7 @@ export default async function TerrainPage({
   const maxUploadMb = maxUploadMbForDisplay();
   const projet = await getActiveProjet(session.user.orgId);
   const score = scoreTerrainView(terrain, projet, enrichment.blocks);
+  const pluBlock = enrichment.blocks.find((b) => b.type === 'PLU');
 
   const status = statusMeta(terrain.status);
   const createdLabel = formatDate(terrain.createdAt);
@@ -745,6 +784,9 @@ export default async function TerrainPage({
             <div className="flex flex-col gap-6">
               {/* Score par catégorie (Tranche 3) : le score global et le résumé sont en tête. */}
               <ScoreCard score={score} />
+
+              {/* Résumé du zonage PLU (le détail complet vit dans l'onglet Enrichissement). */}
+              <ZonageApercu block={pluBlock} />
 
               {/* Parcelles */}
               <section>

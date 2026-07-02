@@ -91,4 +91,27 @@ describe('fetchPlu', () => {
     const { transientError } = await fetchPlu({ lon: 4.8226, lat: 45.7626 });
     expect(transientError).toBe(true);
   });
+
+  it('zone récupérée mais /document en panne => zonage renvoyé (zone-urba fait foi, doc indisponible)', async () => {
+    stub((url) => {
+      if (url.includes('/municipality')) return fc({ is_rnu: false });
+      if (url.includes('/zone-urba')) return fc({ typezone: 'U', libelle: 'UPp', partition: 'DU_1' });
+      if (url.includes('/document')) return 503; // source molle décorative en panne
+      return fc(null);
+    });
+    const { data, transientError } = await fetchPlu({ lon: 4.8, lat: 45.7 });
+    expect(transientError).toBe(false);
+    expect(data.typezone).toBe('U');
+    expect(data.zoneLibelle).toBe('UPp');
+    expect(data.documentType).toBeNull(); // donnée doc indisponible, jamais masquée par un défaut (règle 3)
+  });
+
+  it('zone-urba en panne => transientError même si les autres répondent (source primaire seule)', async () => {
+    stub((url) => {
+      if (url.includes('/zone-urba')) return 503;
+      return fc({ is_rnu: false });
+    });
+    const { transientError } = await fetchPlu({ lon: 4.8, lat: 45.7 });
+    expect(transientError).toBe(true);
+  });
 });

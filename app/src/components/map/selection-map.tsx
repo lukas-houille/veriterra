@@ -342,15 +342,15 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
       // l'ancien style, si bien que reinstall poserait les calques sur le style sortant (effacés
       // ensuite par le diff). Le rebuild complet fait attendre reinstall le vrai nouveau style.
       map.setStyle(basemapStyle(next), { diff: false });
-      const reinstall = () => {
-        if (!map.isStyleLoaded()) {
-          map.once('styledata', reinstall);
-          return;
-        }
+      // Le nouveau document de style est appliqué au premier `styledata` après setStyle : ses
+      // sources sont alors déclarées (getSource(...) truthy) et on peut réinstaller nos calques
+      // par-dessus. NE PAS gater sur isStyleLoaded() (vrai seulement une fois toutes les tuiles
+      // chargées, signalé par 'idle'/'sourcedata') : le once('styledata') gardé ratait souvent
+      // l'instant et les parcelles ne revenaient jamais au retour en vue plan.
+      map.once('styledata', () => {
         installOverlays(map, next, selectionRef.current, matchesRef.current);
         setMapReady(true);
-      };
-      reinstall();
+      });
     },
     [],
   );

@@ -44,6 +44,7 @@ export function EditTerrainForm({
   const [lien, setLien] = useState(initial.lienAnnonce ?? '');
   const [notes, setNotes] = useState(initial.notes ?? '');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function reset() {
@@ -140,6 +141,31 @@ export function EditTerrainForm({
     }
   }
 
+  async function handleDelete() {
+    if (
+      !window.confirm(
+        'Supprimer ce terrain ? Cette action est définitive (parcelles, enrichissements et documents inclus).',
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/terrains/${terrainId}`, { method: 'DELETE' });
+      if (!res.ok && res.status !== 204) {
+        setError(`La suppression a échoué (code ${res.status}).`);
+        setDeleting(false);
+        return;
+      }
+      router.push('/dashboard');
+      router.refresh();
+    } catch {
+      setError('Impossible de joindre le serveur.');
+      setDeleting(false);
+    }
+  }
+
   if (!open) {
     return (
       <Button variant="secondary" onClick={() => setOpen(true)}>
@@ -233,7 +259,7 @@ export function EditTerrainForm({
       )}
 
       <div className="flex items-center gap-2">
-        <Button type="submit" disabled={saving}>
+        <Button type="submit" disabled={saving || deleting}>
           {saving ? 'Enregistrement...' : 'Enregistrer'}
         </Button>
         <Button
@@ -245,6 +271,15 @@ export function EditTerrainForm({
           }}
         >
           Annuler
+        </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          className="ml-auto"
+          disabled={deleting || saving}
+          onClick={handleDelete}
+        >
+          {deleting ? 'Suppression...' : 'Supprimer le terrain'}
         </Button>
       </div>
     </form>

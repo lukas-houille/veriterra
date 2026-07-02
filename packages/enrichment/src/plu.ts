@@ -90,7 +90,10 @@ export async function fetchPlu(input: PluInput, signal?: AbortSignal): Promise<P
     safeGet(`${APICARTO_GPU}/municipality?geom=${geom}`, signal),
     safeGet(`${APICARTO_GPU}/document?geom=${geom}`, signal),
   ]);
-  if (zoneRes.transient || muniRes.transient || docRes.transient) {
+  // Seul zone-urba porte la donnée autoritative (typezone, libellé, règlement). municipality
+  // (détection RNU) et document (métadonnées décoratives) sont des données molles : leur panne
+  // ne doit PAS masquer un zonage récupéré. On ne réessaie donc que si zone-urba est injoignable.
+  if (zoneRes.transient) {
     return { data: { ...EMPTY }, transientError: true };
   }
 

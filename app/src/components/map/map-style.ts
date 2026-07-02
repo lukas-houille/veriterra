@@ -48,7 +48,8 @@ export const veriterraSatelliteStyle: StyleSpecification = {
   },
   layers: [
     { id: 'ortho', type: 'raster', source: 'ortho' },
-    { id: 'cadastre', type: 'raster', source: 'cadastre', paint: { 'raster-opacity': 0.85 } },
+    // Cadastre raster allégé (0.85 encombrait l'ortho) : le liseré de sélection ambre ressort mieux.
+    { id: 'cadastre', type: 'raster', source: 'cadastre', paint: { 'raster-opacity': 0.6 } },
   ],
 };
 
@@ -72,8 +73,10 @@ export const veriterraMapStyle: StyleSpecification = veriterraSatelliteStyle;
 // --- Recoloration « Positron Veriterra » du plan IGN gris -------------------------------
 
 const PLAN_BG = '#F6F7FB';
-const PLAN_CADASTRE_LINE = '#B7BFD3';
+// Liseré cadastral assombri (l'ancien #B7BFD3 très clair/fin était quasi invisible).
+const PLAN_CADASTRE_LINE = '#8A93AD';
 const PLAN_CADASTRE_LAYER = 'veriterra-plan-cadastre';
+const PLAN_PARCELLE_LABEL_LAYER = 'veriterra-plan-parcelle-num';
 /** Source vectorielle du style gris IGN (voir gris.json). */
 const PLAN_IGN_SOURCE = 'plan_ign';
 
@@ -117,9 +120,10 @@ const PLAN_TINT: Record<string, Tint> = {
   limite_lin: { line: '#C4C9DA' },
   toponyme_localite_ponc: { text: '#2F3B6E', halo: '#FFFFFF' },
   toponyme_routier_odonyme_lin: { text: '#6C7488', halo: '#FFFFFF' },
-  toponyme_routier_numero_lin: { text: '#8890A2', halo: '#FFFFFF' },
-  toponyme_routier_liaison_lin: { text: '#8890A2', halo: '#FFFFFF' },
-  toponyme_parcellaire_adresse_ponc: { text: '#98A0B0', halo: '#FFFFFF' },
+  toponyme_routier_numero_lin: { text: '#7C86A2', halo: '#FFFFFF' },
+  toponyme_routier_liaison_lin: { text: '#7C86A2', halo: '#FFFFFF' },
+  // Contraste relevé (l'ancien #98A0B0 sur blanc était sous le seuil WCAG AA).
+  toponyme_parcellaire_adresse_ponc: { text: '#6C7488', halo: '#FFFFFF' },
   toponyme_hydro_ponc: { text: '#7E8AA6', halo: '#FFFFFF' },
   toponyme_hydro_lin: { text: '#7E8AA6', halo: '#FFFFFF' },
   toponyme_bati_ponc: { text: '#5A6072', halo: '#FFFFFF' },
@@ -129,23 +133,73 @@ const PLAN_TINT: Record<string, Tint> = {
   toponyme_limite_ponc: { text: '#4C5468', halo: '#FFFFFF' },
 };
 
-/** Ajoute un liseré cadastral vectoriel net (parcelles en calque) sur le plan. */
+/** Police d'un calque symbole déjà présent (glyphs IGN), pour que nos libellés utilisent un jeu
+ *  de caractères réellement servi par le style plan (sinon MapLibre ne rend rien). */
+function firstSymbolFont(map: MaplibreMap): string[] | undefined {
+  for (const layer of map.getStyle().layers ?? []) {
+    if (layer.type !== 'symbol') continue;
+    try {
+      const font = map.getLayoutProperty(layer.id, 'text-font');
+      // Uniquement un fontstack LITTÉRAL (tableau de noms de police) : une text-font data-driven
+      // (expression par zoom/attribut) est aussi un Array mais pourrait référencer un champ absent
+      // de notre source-layer et casser le rendu ; on la rejette.
+      if (Array.isArray(font) && font.length > 0 && font.every((f) => typeof f === 'string')) {
+        return font as string[];
+      }
+    } catch {
+      // couche sans police explicite : on continue.
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Ajoute sur le plan : (1) un liseré cadastral vectoriel net (parcelles en calque, source-layer
+ * `parcellaire_parcelle` qui ne porte QUE la géométrie), et (2) les NUMÉROS de parcelle, portés
+ * par la source-layer `toponyme_parcellaire_parcelle` (champ `texte`) que le style gris IGN ne
+ * rend pas, d'où leur absence auparavant. Idempotent (chaque calque n'est ajouté qu'une fois).
+ */
 function ensurePlanCadastre(map: MaplibreMap): void {
-  if (map.getLayer(PLAN_CADASTRE_LAYER)) return;
   if (!map.getSource(PLAN_IGN_SOURCE)) return;
-  // minzoom 13 (US-1.12) : le découpage cadastral apparaît plus tôt (échelle quartier) pour se
-  // repérer sans trop zoomer. Trait très fin en dessous de 15 pour rester lisible sans surcharger.
-  map.addLayer({
-    id: PLAN_CADASTRE_LAYER,
-    type: 'line',
-    source: PLAN_IGN_SOURCE,
-    'source-layer': 'parcellaire_parcelle',
-    minzoom: 13,
-    paint: {
-      'line-color': PLAN_CADASTRE_LINE,
-      'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.25, 15, 0.5, 18, 1.1],
-    },
-  });
+
+  // (1) Liseré des parcelles. minzoom 13 (US-1.12) : découpage visible dès l'échelle quartier.
+  // Trait assombri et un peu épaissi par rapport à l'ancien (quasi invisible sous z15).
+  if (!map.getLayer(PLAN_CADASTRE_LAYER)) {
+    map.addLayer({
+      id: PLAN_CADASTRE_LAYER,
+      type: 'line',
+      source: PLAN_IGN_SOURCE,
+      'source-layer': 'parcellaire_parcelle',
+      minzoom: 13,
+      paint: {
+        'line-color': PLAN_CADASTRE_LINE,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.4, 15, 0.9, 18, 1.8],
+      },
+    });
+  }
+
+  // (2) Numéros de parcelle (dès z16 pour éviter la surdensité), halo blanc pour la lisibilité.
+  if (!map.getLayer(PLAN_PARCELLE_LABEL_LAYER)) {
+    const font = firstSymbolFont(map);
+    map.addLayer({
+      id: PLAN_PARCELLE_LABEL_LAYER,
+      type: 'symbol',
+      source: PLAN_IGN_SOURCE,
+      'source-layer': 'toponyme_parcellaire_parcelle',
+      minzoom: 16,
+      layout: {
+        'text-field': ['get', 'texte'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 16, 10, 18, 12, 19, 13],
+        'symbol-placement': 'point',
+        ...(font ? { 'text-font': font } : {}),
+      },
+      paint: {
+        'text-color': '#2F3B6E',
+        'text-halo-color': '#FFFFFF',
+        'text-halo-width': 1.4,
+      },
+    });
+  }
 }
 
 /**

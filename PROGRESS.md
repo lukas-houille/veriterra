@@ -4,6 +4,9 @@
 
 ## Où on en est
 
+**Passe de cohérence UX (shell, fiche/dashboard, explorer, soleil) : EN COURS.** Suite au retour du porteur (app « flat » et incohérente, cliquer un terrain donnait l'impression « d'une page complètement différente »), un audit multi-agents a confirmé la cause racine : aucun shell applicatif partagé, barre de nav réécrite en inline deux fois et absente de la fiche, dashboard/explorer 100 % en hex inline pendant que seule la fiche utilisait les tokens. Livraison en 4 slices (PR1 shell → PR2 fiche+dashboard alignés → PR3 explorer → PR4 soleil ambiance+relief).
+**PR1 — Shell commun (`feat/app-shell`) : LIVRÉE (PR à venir).** Groupe de routes authentifié `(app)/` (URLs inchangées) portant un shell unique : `AppShell` + `AppTopBar` (client, `usePathname` pour la pastille active, tokens Tailwind, aucun hex inline, bulle d'initiales de compte + déconnexion via Server Action). Logo factorisé (`VeriterraMark`, remplace 4 copies) et statuts portefeuille centralisés (`modules/terrains/status.ts`, remplace 3 définitions dupliquées, branché sur la fiche). Dashboard, fiche et explorer passent sous la même barre : la fiche cesse d'être une page à part. Vérifié : lint, typecheck, build verts ; routes identiques (`/dashboard`, `/terrains/[id]`, `/terrains/nouveau`). **Hors périmètre PR1 (fast-follow)** : migration des `style={{}}`/hex du dashboard vers `Card`/`Badge`/`StatusPin`, en-tête de fiche façon maquette, tri par clic sur colonnes, quick wins explorer, ambiance/relief soleil.
+
 **Tranche 0 — Socle : FAITE, mergée (PR #1-3) et DÉPLOYÉE en prod** via Arcane sur `veriterra.lukas-houille.com` (image GHCR, Caddy TLS, `migrate` one-shot exit 0). Couvre US-0.1 (auth OIDC Pocket ID), US-0.2 (multi-tenant + RLS + test d'isolation), US-0.3 (stack déployable).
 
 **Tranche design system — `@veriterra/ui` : FAITE et mergée (PR #4).** CI verte (dont e2e OIDC), revue en contexte neuf GO.

@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation';
 import {
   AlertChip,
   Badge,
-  type BadgeProps,
   Card,
   CardContent,
   CardHeader,
@@ -16,13 +15,13 @@ import {
   TabsList,
   TabsTrigger,
   UnavailableState,
-  type PortfolioStatus,
 } from '@veriterra/ui';
 import type { PenteData, PluData, PrixDvfData, RisquesData, ServicesData } from '@veriterra/enrichment';
 import { auth } from '@/auth';
 import { getTerrain, getTerrainEnrichment, scoreTerrainView } from '@/modules/terrains/service';
 import { getActiveProjet } from '@/modules/projet/service';
 import { CRITERIA_COUNT, type ScoreResult } from '@/modules/terrains/scoring';
+import { statusMeta } from '@/modules/terrains/status';
 import { listDocuments } from '@/modules/terrains/documents';
 import { maxUploadMbForDisplay } from '@/lib/storage/s3';
 import type { EnrichmentBlockView } from '@/modules/terrains/types';
@@ -35,29 +34,7 @@ import { SunMap } from '@/components/map/sun-map';
 // Composant serveur : appelle directement le service (pas d'aller-retour HTTP), l'isolation
 // tenant est portée par `session.user.orgId` transmis au service (RLS).
 
-/** Statuts portefeuille tels que stockés (enum) vers le libellé attendu par StatusPin. */
-const STATUS_PIN: Record<string, PortfolioStatus> = {
-  A_ETUDIER: 'à étudier',
-  PROMETTEUR: 'prometteur',
-  RESERVE: 'réservé',
-  ECARTE: 'écarté',
-};
-
-/** Libellé français lisible du statut. */
-const STATUS_LABEL: Record<string, string> = {
-  A_ETUDIER: 'À étudier',
-  PROMETTEUR: 'Prometteur',
-  RESERVE: 'Réservé',
-  ECARTE: 'Écarté',
-};
-
-/** Teinte sémantique du badge par statut (design-system §2, statuts portefeuille). */
-const STATUS_BADGE: Record<string, NonNullable<BadgeProps['variant']>> = {
-  A_ETUDIER: 'neutral',
-  PROMETTEUR: 'success',
-  RESERVE: 'warning',
-  ECARTE: 'danger',
-};
+// Statuts portefeuille : source unique dans @/modules/terrains/status (statusMeta).
 
 /** Icônes inline (trait 1.5, cohérent Lucide) : le paquet lucide-react n'est pas installé côté app. */
 function ArrowLeftIcon() {
@@ -667,13 +644,11 @@ export default async function TerrainPage({
   const projet = await getActiveProjet(session.user.orgId);
   const score = scoreTerrainView(terrain, projet, enrichment.blocks);
 
-  const statusPin = STATUS_PIN[terrain.status] ?? 'à étudier';
-  const statusLabel = STATUS_LABEL[terrain.status] ?? terrain.status;
-  const statusVariant = STATUS_BADGE[terrain.status] ?? 'neutral';
+  const status = statusMeta(terrain.status);
   const createdLabel = formatDate(terrain.createdAt);
 
   return (
-    <main className="min-h-screen bg-background">
+    <div>
       <div className="mx-auto w-full max-w-4xl px-6 py-8">
         {/* En-tête */}
         <div className="mb-6">
@@ -693,8 +668,8 @@ export default async function TerrainPage({
               <p className="mt-1 text-sm text-muted-foreground">{terrain.address}</p>
             </div>
             <span className="inline-flex items-center gap-2">
-              <StatusPin status={statusPin} />
-              <Badge variant={statusVariant}>{statusLabel}</Badge>
+              <StatusPin status={status.pin} />
+              <Badge variant={status.badge}>{status.label}</Badge>
             </span>
           </div>
         </div>
@@ -872,6 +847,6 @@ export default async function TerrainPage({
           </TabsContent>
         </Tabs>
       </div>
-    </main>
+    </div>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import type { MaisonType } from '@/modules/projet/types';
+import { VeriterraMark } from '@/components/brand/veriterra-mark';
 
 // Onboarding court (US-1.0). Reskin fidèle à la maquette designée
 // (docs/design/handoff/Onboarding.dc.html) : JSX + styles inline reproduisant les
@@ -71,31 +72,6 @@ const ghostBtn: CSSProperties = {
   borderRadius: '11px',
   cursor: 'pointer',
 };
-
-function Mark({ size = 28, rx = 10, stroke = 2.4 }: { size?: number; rx?: number; stroke?: number }) {
-  const id = `mark${size}`;
-  return (
-    <svg width={size} height={size} viewBox="0 0 152 152" fill="none" aria-hidden="true">
-      <defs>
-        <clipPath id={id}>
-          <rect x="22" y="22" width="108" height="108" rx={rx} />
-        </clipPath>
-      </defs>
-      <rect x="22" y="22" width="108" height="108" rx={rx} fill="#EAECF4" />
-      <g clipPath={`url(#${id})`}>
-        <rect x="63" y="65" width="37" height="65" fill="#DB9B2C" />
-        <rect x="22" y="22" width="41" height="56" fill="none" stroke="#2F3B6E" strokeWidth={stroke} />
-        <rect x="22" y="78" width="41" height="52" fill="none" stroke="#2F3B6E" strokeWidth={stroke} />
-        <rect x="63" y="22" width="37" height="43" fill="none" stroke="#2F3B6E" strokeWidth={stroke} />
-        <rect x="63" y="65" width="37" height="65" fill="none" stroke="#2F3B6E" strokeWidth={stroke} />
-        <rect x="100" y="22" width="30" height="37" fill="none" stroke="#2F3B6E" strokeWidth={stroke} />
-        <rect x="100" y="59" width="30" height="39" fill="none" stroke="#2F3B6E" strokeWidth={stroke} />
-        <rect x="100" y="98" width="30" height="32" fill="none" stroke="#2F3B6E" strokeWidth={stroke} />
-      </g>
-      <rect x="22" y="22" width="108" height="108" rx={rx} fill="none" stroke="#2F3B6E" strokeWidth="3" />
-    </svg>
-  );
-}
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -184,7 +160,7 @@ export default function OnboardingPage() {
       {/* Bandeau : logo + barre de progression */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 22px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Mark size={28} />
+          <VeriterraMark size={28} />
           <span style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.02em' }}>Veriterra</span>
         </div>
         <div style={{ flex: 1, maxWidth: '380px', margin: '0 auto' }}>

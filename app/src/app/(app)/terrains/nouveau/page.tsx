@@ -67,30 +67,6 @@ const SelectionMap = dynamic(
   },
 );
 
-function Mark({ size = 30 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 152 152" fill="none" aria-hidden="true">
-      <defs>
-        <clipPath id="navlogo">
-          <rect x="22" y="22" width="108" height="108" rx="10" />
-        </clipPath>
-      </defs>
-      <rect x="22" y="22" width="108" height="108" rx="10" fill="#EAECF4" />
-      <g clipPath="url(#navlogo)">
-        <rect x="63" y="65" width="37" height="65" fill="#DB9B2C" />
-        <rect x="22" y="22" width="41" height="56" fill="none" stroke={NAVY} strokeWidth="2.4" />
-        <rect x="22" y="78" width="41" height="52" fill="none" stroke={NAVY} strokeWidth="2.4" />
-        <rect x="63" y="22" width="37" height="43" fill="none" stroke={NAVY} strokeWidth="2.4" />
-        <rect x="63" y="65" width="37" height="65" fill="none" stroke={NAVY} strokeWidth="2.4" />
-        <rect x="100" y="22" width="30" height="37" fill="none" stroke={NAVY} strokeWidth="2.4" />
-        <rect x="100" y="59" width="30" height="39" fill="none" stroke={NAVY} strokeWidth="2.4" />
-        <rect x="100" y="98" width="30" height="32" fill="none" stroke={NAVY} strokeWidth="2.4" />
-      </g>
-      <rect x="22" y="22" width="108" height="108" rx="10" fill="none" stroke={NAVY} strokeWidth="3" />
-    </svg>
-  );
-}
-
 /** Découpe le code INSEE (5 premiers caractères) d'un IDU cadastral. */
 function inseeFromIdu(idu: string): string {
   return idu.slice(0, 5);
@@ -196,7 +172,7 @@ export default function NouveauTerrainPage() {
   return (
     <div
       style={{
-        height: '100vh',
+        height: 'calc(100dvh - 3.625rem)',
         display: 'flex',
         flexDirection: 'column',
         fontFamily: SANS,
@@ -204,74 +180,7 @@ export default function NouveauTerrainPage() {
         color: TEXT,
       }}
     >
-      {/* SHELL TOP BAR */}
-      <header
-        style={{
-          position: 'relative',
-          zIndex: 30,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '20px',
-          height: '58px',
-          padding: '0 22px',
-          background: PANEL,
-          borderBottom: `1px solid ${BORDER}`,
-          flexShrink: 0,
-        }}
-      >
-        <Link
-          href="/terrains/nouveau"
-          style={{ display: 'flex', alignItems: 'center', gap: '11px', color: 'inherit' }}
-        >
-          <Mark size={30} />
-          <span style={{ fontSize: '20px', fontWeight: 700, letterSpacing: '-0.02em' }}>Veriterra</span>
-        </Link>
-        <nav aria-label="Navigation principale" style={{ display: 'flex', gap: '4px', marginLeft: '14px' }}>
-          <span
-            aria-current="page"
-            style={{
-              fontSize: '14px',
-              fontWeight: 600,
-              color: NAVY,
-              background: '#EEF0F8',
-              padding: '7px 13px',
-              borderRadius: '8px',
-            }}
-          >
-            Explorer
-          </span>
-          <Link
-            href="/dashboard"
-            style={{ fontSize: '14px', fontWeight: 500, color: SUB, padding: '7px 13px', borderRadius: '8px' }}
-          >
-            Mes terrains
-          </Link>
-        </nav>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Link
-            href="/dashboard"
-            title="Mon espace"
-            aria-label="Mon espace"
-            style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '50%',
-              background: NAVY,
-              color: '#FFFFFF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '13px',
-              fontWeight: 700,
-              letterSpacing: '0.02em',
-            }}
-          >
-            VT
-          </Link>
-        </div>
-      </header>
-
-      {/* MAP AREA */}
+      {/* MAP AREA (la barre de nav est fournie par le shell (app)) */}
       <div style={{ position: 'relative', flex: 1, overflow: 'hidden', background: '#E9ECF2' }}>
         <div style={{ position: 'absolute', inset: 0 }}>
           <SelectionMap onSelectionChange={handleSelectionChange} onAddressPick={handleAddressPick} />

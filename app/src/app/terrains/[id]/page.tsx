@@ -26,6 +26,7 @@ import type { EnrichmentBlockView } from '@/modules/terrains/types';
 import { EditTerrainForm } from './edit-terrain-form';
 import { EnrichmentActions } from './enrichment-actions';
 import { DocumentsPanel } from './documents-panel';
+import { SunMap } from '@/components/map/sun-map';
 
 // Fiche terrain (US-1.3 données rapides + amorce US-1.4 progressive disclosure).
 // Composant serveur : appelle directement le service (pas d'aller-retour HTTP), l'isolation
@@ -657,6 +658,7 @@ export default async function TerrainPage({
           <TabsList>
             <TabsTrigger value="apercu">Aperçu</TabsTrigger>
             <TabsTrigger value="enrichissement">Enrichissement</TabsTrigger>
+            <TabsTrigger value="soleil">Soleil</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
           </TabsList>
 
@@ -778,6 +780,18 @@ export default async function TerrainPage({
                 if (block.type === 'PLU') return <PluBlock key={block.type} block={block} />;
                 return null;
               })}
+            </div>
+          </TabsContent>
+
+          {/* ----- Onglet Soleil : analyse solaire 3D, ombres portées des bâtiments (US-4.1) ----- */}
+          <TabsContent value="soleil">
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground">
+                Vue 3D de la parcelle et des bâtiments voisins (BD TOPO). Réglez la date et l'heure
+                pour voir les ombres portées au sol. Le relief et les ombres sur les bâtiments
+                viendront ensuite.
+              </p>
+              <SunMap terrainId={terrain.id} parcelles={terrain.parcelles} />
             </div>
           </TabsContent>
 

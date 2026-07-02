@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import type { CSSProperties } from 'react';
-import { auth, signOut } from '@/auth';
+import { auth } from '@/auth';
 import { listTerrainsWithScores } from '@/modules/terrains/service';
 import { getActiveProjet } from '@/modules/projet/service';
 import { DashboardMap } from '@/components/map/dashboard-map';
@@ -58,40 +57,6 @@ function projetResume(projet: {
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
-const navLink: CSSProperties = {
-  fontSize: '14px',
-  fontWeight: 500,
-  color: '#6C7488',
-  padding: '7px 13px',
-  borderRadius: '8px',
-  textDecoration: 'none',
-};
-
-/** Marque Veriterra (identique à la landing, reproduction du logo de la maquette). */
-function Mark() {
-  return (
-    <svg width={30} height={30} viewBox="0 0 152 152" fill="none" aria-hidden="true">
-      <defs>
-        <clipPath id="navlogo">
-          <rect x="22" y="22" width="108" height="108" rx="10" />
-        </clipPath>
-      </defs>
-      <rect x="22" y="22" width="108" height="108" rx="10" fill="#EAECF4" />
-      <g clipPath="url(#navlogo)">
-        <rect x="63" y="65" width="37" height="65" fill="#DB9B2C" />
-        <rect x="22" y="22" width="41" height="56" fill="none" stroke="#2F3B6E" strokeWidth="2.4" />
-        <rect x="22" y="78" width="41" height="52" fill="none" stroke="#2F3B6E" strokeWidth="2.4" />
-        <rect x="63" y="22" width="37" height="43" fill="none" stroke="#2F3B6E" strokeWidth="2.4" />
-        <rect x="63" y="65" width="37" height="65" fill="none" stroke="#2F3B6E" strokeWidth="2.4" />
-        <rect x="100" y="22" width="30" height="37" fill="none" stroke="#2F3B6E" strokeWidth="2.4" />
-        <rect x="100" y="59" width="30" height="39" fill="none" stroke="#2F3B6E" strokeWidth="2.4" />
-        <rect x="100" y="98" width="30" height="32" fill="none" stroke="#2F3B6E" strokeWidth="2.4" />
-      </g>
-      <rect x="22" y="22" width="108" height="108" rx="10" fill="none" stroke="#2F3B6E" strokeWidth="3" />
-    </svg>
-  );
-}
-
 export default async function DashboardPage() {
   const session = await auth();
   if (!session) redirect('/sign-in');
@@ -109,84 +74,7 @@ export default async function DashboardPage() {
   for (const t of terrains) counts[t.status] = (counts[t.status] ?? 0) + 1;
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#F5F6FA',
-        fontFamily: SANS,
-        color: '#161A2E',
-      }}
-    >
-      {/* TOP BAR */}
-      <header
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 30,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '20px',
-          height: '58px',
-          padding: '0 22px',
-          background: '#FFFFFF',
-          borderBottom: '1px solid #DADEE8',
-        }}
-      >
-        <Link
-          href="/dashboard"
-          style={{ display: 'flex', alignItems: 'center', gap: '11px', color: 'inherit', textDecoration: 'none' }}
-        >
-          <Mark />
-          <span style={{ fontSize: '20px', fontWeight: 700, letterSpacing: '-0.02em' }}>Veriterra</span>
-        </Link>
-        <nav aria-label="Navigation principale" style={{ display: 'flex', gap: '4px', marginLeft: '14px' }}>
-          <Link href="/terrains/nouveau" style={navLink}>
-            Explorer
-          </Link>
-          <span
-            aria-current="page"
-            style={{
-              fontSize: '14px',
-              fontWeight: 600,
-              color: '#2F3B6E',
-              background: '#EEF0F8',
-              padding: '7px 13px',
-              borderRadius: '8px',
-            }}
-          >
-            Mes terrains
-          </span>
-        </nav>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Link href="/onboarding" style={{ ...navLink, color: '#4C5468' }}>
-            Mon projet
-          </Link>
-          <form
-            action={async () => {
-              'use server';
-              await signOut({ redirectTo: '/' });
-            }}
-          >
-            <button
-              type="submit"
-              style={{
-                border: '1px solid #DADEE8',
-                background: '#FFFFFF',
-                color: '#161A2E',
-                fontFamily: SANS,
-                fontSize: '13px',
-                fontWeight: 600,
-                padding: '8px 13px',
-                borderRadius: '8px',
-                cursor: 'pointer',
-              }}
-            >
-              Se déconnecter
-            </button>
-          </form>
-        </div>
-      </header>
-
+    <>
       {/* TITRE + BARRE */}
       <div style={{ padding: '22px 22px 0' }}>
         <div
@@ -404,6 +292,6 @@ export default async function DashboardPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

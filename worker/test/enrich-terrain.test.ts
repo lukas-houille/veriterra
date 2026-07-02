@@ -59,6 +59,13 @@ describe('runEnrichTerrain', () => {
           // 5 altitudes [centre, est, ouest, nord, sud] : pente descendant vers le sud.
           return new Response(JSON.stringify({ elevations: [100, 100, 100, 110, 90] }), { status: 200 });
         }
+        if (url.includes('overpass')) {
+          // Un commerce et une école proches du centroïde du terrain (Lyon 69381).
+          return new Response(JSON.stringify({ elements: [
+            { lat: 45.7508, lon: 4.8305, tags: { shop: 'bakery' } },
+            { lat: 45.7512, lon: 4.8305, tags: { amenity: 'school' } },
+          ] }), { status: 200 });
+        }
         const body = url.includes('/rga')
           ? { codeExposition: '2', exposition: 'Exposition moyenne' }
           : url.includes('/zonage_sismique')
@@ -75,6 +82,7 @@ describe('runEnrichTerrain', () => {
       { type: 'RISQUES', status: 'OK' },
       { type: 'PRIX_DVF', status: 'OK' },
       { type: 'PENTE', status: 'OK' },
+      { type: 'SERVICES', status: 'OK' },
     ]);
 
     const risques = await admin.enrichmentBlock.findFirst({ where: { terrainId: TERRAIN_ID, type: 'RISQUES' } });
@@ -102,6 +110,24 @@ describe('runEnrichTerrain', () => {
     const row = await admin.enrichmentBlock.findFirst({ where: { terrainId: TERRAIN_ID, type: 'RISQUES' } });
     expect(row?.status).toBe('ERROR');
     expect(row?.error).toBeTruthy();
+  });
+
+  it('une panne Overpass (503) écrit un bloc SERVICES ERROR, jamais un faux « aucun service » (règle 3)', async () => {
+    // Overpass échoue (transitoire), les autres sources répondent (peu importe le contenu).
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('overpass')
+          ? new Response('', { status: 503 })
+          : new Response(JSON.stringify({}), { status: 200 }),
+      ),
+    );
+    await expect(
+      runEnrichTerrain({ organizationId: ORG_ID, terrainId: TERRAIN_ID, force: true }),
+    ).rejects.toThrow(/injoignable/i);
+    const svc = await admin.enrichmentBlock.findFirst({ where: { terrainId: TERRAIN_ID, type: 'SERVICES' } });
+    expect(svc?.status).toBe('ERROR');
+    expect(svc?.error).toBeTruthy();
   });
 
   it('un terrain inexistant ne produit aucun bloc et ne jette pas', async () => {

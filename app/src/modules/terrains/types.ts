@@ -1,5 +1,5 @@
 import type { GeoJsonGeometry } from '@/lib/geo/types';
-import type { PenteData, PrixDvfData, RisquesData } from '@veriterra/enrichment';
+import type { PenteData, PrixDvfData, RisquesData, ServicesData } from '@veriterra/enrichment';
 
 /**
  * Parcelle envoyée par le client à la création. La donnée provient de la requête
@@ -62,7 +62,7 @@ export interface EnrichmentBlockView {
   confidence: 'ELEVEE' | 'MOYENNE' | 'FAIBLE' | null;
   fetchedAt: string | null; // ISO 8601
   /** Payload normalisé, selon le type de bloc (discriminé par `type`). */
-  data: RisquesData | PrixDvfData | PenteData | null;
+  data: RisquesData | PrixDvfData | PenteData | ServicesData | null;
   error: string | null;
 }
 

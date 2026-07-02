@@ -9,12 +9,16 @@ import {
   DVF_SOURCE_URL,
   PENTE_SOURCE,
   PENTE_SOURCE_URL,
+  SERVICES_SOURCE,
+  SERVICES_SOURCE_URL,
   getPenteCached,
   getPrixDvfCached,
   getRisquesGeorisquesCached,
+  getServicesCached,
   summarizePente,
   summarizePrixDvf,
   summarizeRisques,
+  summarizeServices,
   type DvfSection,
 } from '@veriterra/enrichment';
 
@@ -231,11 +235,54 @@ async function enrichPente(
   }
 }
 
+/** Bloc SERVICES (Overpass/OSM : écoles, commerces, transports). Ne throw pas : signale `retry`. */
+async function enrichServices(
+  db: TenantDb,
+  orgId: string,
+  terrain: TerrainWithParcelles,
+  force: boolean,
+): Promise<BlockRun> {
+  const type: EnrichmentType = 'SERVICES';
+  try {
+    let centroid: { lon: number; lat: number } | null = null;
+    for (const p of terrain.parcelles) {
+      centroid = centroidOf(p.geojson);
+      if (centroid) break;
+    }
+    if (!centroid) {
+      await upsertBlock(db, orgId, terrain.id, type, { status: 'UNAVAILABLE', source: SERVICES_SOURCE, sourceUrl: SERVICES_SOURCE_URL });
+      return { outcome: { type, status: 'UNAVAILABLE' }, retry: false };
+    }
+    const { data, transientError } = await getServicesCached({ lon: centroid.lon, lat: centroid.lat }, { force });
+    const { status, confidence } = summarizeServices(data);
+    // Requête Overpass tout-ou-rien : pas de résultat partiel. Une panne transitoire ne doit
+    // JAMAIS figer un « aucun service » (empty data => note null => OK) : ce serait un faux
+    // rassurant (règle 3). On persiste ERROR et on relance.
+    if (transientError) {
+      await upsertBlock(db, orgId, terrain.id, type, { status: 'ERROR', source: SERVICES_SOURCE, sourceUrl: SERVICES_SOURCE_URL, error: 'Overpass injoignable' });
+      return { outcome: { type, status: 'ERROR' }, retry: true };
+    }
+    await upsertBlock(db, orgId, terrain.id, type, {
+      status,
+      data: data as unknown as Prisma.InputJsonValue,
+      source: SERVICES_SOURCE,
+      sourceUrl: SERVICES_SOURCE_URL,
+      confidence,
+    });
+    return { outcome: { type, status }, retry: false };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'erreur inconnue';
+    await upsertBlock(db, orgId, terrain.id, type, { status: 'ERROR', source: SERVICES_SOURCE, sourceUrl: SERVICES_SOURCE_URL, error: message }).catch(() => undefined);
+    return { outcome: { type, status: 'ERROR' }, retry: true };
+  }
+}
+
 /**
  * Enrichit un terrain : lit le terrain (scopé tenant via forOrg), récupère et persiste chaque
  * bloc sourcé de façon indépendante (une panne d'une source ne bloque pas l'autre). Relance
  * (throw) en fin si au moins un bloc a subi une panne transitoire, pour que BullMQ rejoue.
- * En Tranche 2 : blocs RISQUES (Géorisques), PRIX_DVF (Etalab) et PENTE (RGE ALTI).
+ * En Tranche 2 : blocs RISQUES (Géorisques), PRIX_DVF (Etalab), PENTE (RGE ALTI) et
+ * SERVICES (Overpass/OSM).
  */
 export async function runEnrichTerrain(data: EnrichTerrainJobData): Promise<EnrichTerrainJobResult> {
   const { organizationId, terrainId, force } = data;
@@ -253,6 +300,7 @@ export async function runEnrichTerrain(data: EnrichTerrainJobData): Promise<Enri
     await enrichRisques(db, organizationId, terrain, Boolean(force)),
     await enrichPrixDvf(db, organizationId, terrain, Boolean(force)),
     await enrichPente(db, organizationId, terrain, Boolean(force)),
+    await enrichServices(db, organizationId, terrain, Boolean(force)),
   ];
   const result: EnrichTerrainJobResult = {
     terrainId,

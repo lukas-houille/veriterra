@@ -65,6 +65,25 @@ export interface PenteData {
   note: string | null;
 }
 
+/** Une catégorie de service de proximité (OSM), avec distance au plus proche et nombre dans le rayon. */
+export interface ServiceItem {
+  key: 'ecoles' | 'commerces' | 'transports';
+  label: string;
+  /** Distance (m) au plus proche, ou null si aucun dans le rayon (réponse réelle, pas indisponible). */
+  nearestM: number | null;
+  /** Nombre trouvé dans le rayon. */
+  count: number;
+}
+
+/** Payload du bloc SERVICES (proximité, OpenStreetMap). Un rayon fixe, une entrée par catégorie. */
+export interface ServicesData {
+  /** Rayon de recherche en mètres. */
+  radiusM: number;
+  items: ServiceItem[];
+  /** Raison d'indisponibilité de la source (jamais un "0" silencieux : "aucun dans le rayon" vit dans items). */
+  note: string | null;
+}
+
 /** Statut de synthèse d'un bloc, aligné sur l'enum Prisma EnrichmentStatus. */
 export type BlockStatus = 'OK' | 'UNAVAILABLE' | 'ERROR';
 

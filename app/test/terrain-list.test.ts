@@ -52,6 +52,21 @@ describe('sortTerrains', () => {
   it('récents : plus récent d\'abord', () => {
     expect(sortTerrains(rows, 'recent').map((r) => r.id)).toEqual(['new', 'mid', 'old']);
   });
+  it('récents asc : plus ancien d\'abord', () => {
+    expect(sortTerrains(rows, 'recent', 'asc').map((r) => r.id)).toEqual(['old', 'mid', 'new']);
+  });
+  it('libellé : A vers Z (asc) et Z vers A (desc)', () => {
+    const named = [item({ id: 'b', label: 'Beta' }), item({ id: 'a', label: 'Alpha' }), item({ id: 'c', label: 'Gamma' })];
+    expect(sortTerrains(named, 'label', 'asc').map((r) => r.id)).toEqual(['a', 'b', 'c']);
+    expect(sortTerrains(named, 'label', 'desc').map((r) => r.id)).toEqual(['c', 'b', 'a']);
+  });
+  it('score asc : plus bas d\'abord, non évalué (null) TOUJOURS en fin (règle 3)', () => {
+    const scored = [item({ id: 'a', score: 60 }), item({ id: 'b', score: 85 }), item({ id: 'c', score: null })];
+    expect(sortTerrains(scored, 'score', 'asc').map((r) => r.id)).toEqual(['a', 'b', 'c']);
+  });
+  it('prix total asc : plus bas d\'abord, prix absent TOUJOURS en fin (règle 3)', () => {
+    expect(sortTerrains(rows, 'prixTotal', 'asc').map((r) => r.id)).toEqual(['old', 'mid', 'new']);
+  });
   it('score : plus haut d\'abord, non évalué (null) en fin (règle 3)', () => {
     const scored = [item({ id: 'a', score: 60 }), item({ id: 'b', score: 85 }), item({ id: 'c', score: null })];
     expect(sortTerrains(scored, 'score').map((r) => r.id)).toEqual(['b', 'a', 'c']);

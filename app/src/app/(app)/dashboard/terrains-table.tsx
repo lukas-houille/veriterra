@@ -1,34 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useMemo, useState } from 'react';
+import { Badge, Input, StatusPin, cn } from '@veriterra/ui';
 import {
   filterTerrains,
   prixM2 as prixM2Of,
   sortTerrains,
+  type SortDirection,
   type TerrainListItem,
   type TerrainSortKey,
 } from '@/modules/terrains/terrain-list';
+import { statusMeta } from '@/modules/terrains/status';
 
-// Îlot client : recherche et tri de la liste des terrains (US-5.9). Le tableau était rendu
-// côté serveur ; on le déplace ici pour l'interactivité (filtre + tri en mémoire sur les
-// terrains déjà chargés). Le rendu visuel (styles) reste fidèle à la maquette du dashboard.
-
-const SANS = "'Archivo', system-ui, sans-serif";
-const MONO = "'Spline Sans Mono', ui-monospace, monospace";
-
-// Styles de statut alignés sur le dashboard (couleur de texte + fond de badge).
-const STATUS_STYLE: Record<string, { label: string; color: string; bg: string }> = {
-  A_ETUDIER: { label: 'À étudier', color: '#98A0B0', bg: '#ECEEF2' },
-  PROMETTEUR: { label: 'Prometteur', color: '#2E7D5B', bg: '#E7F2EC' },
-  RESERVE: { label: 'Réservé', color: '#DB9B2C', bg: '#FBF2DD' },
-  ECARTE: { label: 'Écarté', color: '#C0432E', bg: '#F8E7E2' },
-};
-const STATUS_FALLBACK = { label: 'À étudier', color: '#98A0B0', bg: '#ECEEF2' };
-
-function statusStyle(status: string) {
-  return STATUS_STYLE[status] ?? STATUS_FALLBACK;
-}
+// Îlot client : recherche et tri de la liste des terrains (US-5.9). Tri déclenché en cliquant
+// l'en-tête de colonne (plus de select box) : reclic sur la même colonne bascule le sens
+// (chevron ▲/▼). En tokens du design system (Card, Input, StatusPin, Badge), plus d'hex inline.
 
 const surfaceFormat = new Intl.NumberFormat('fr-FR');
 const prixFormat = new Intl.NumberFormat('fr-FR', {
@@ -37,47 +24,77 @@ const prixFormat = new Intl.NumberFormat('fr-FR', {
   maximumFractionDigits: 0,
 });
 
-const SORT_OPTIONS: Array<{ value: TerrainSortKey; label: string }> = [
-  { value: 'recent', label: 'Plus récents' },
-  { value: 'score', label: 'Score' },
-  { value: 'surface', label: 'Surface' },
-  { value: 'prixTotal', label: 'Prix total' },
-  { value: 'prixM2', label: 'Prix au m²' },
-];
+/** Sens de tri par défaut au premier clic sur une colonne (alphabétique croissant, sinon décroissant). */
+function defaultDirection(key: TerrainSortKey): SortDirection {
+  return key === 'label' ? 'asc' : 'desc';
+}
 
-/** Couleur du score par bande (vert haut, indigo moyen, ambre bas, rouge faible). */
-function scoreColor(s: number): string {
-  if (s >= 75) return '#2E7D5B';
-  if (s >= 50) return '#2F3B6E';
-  if (s >= 30) return '#DB9B2C';
-  return '#C0432E';
+/** En-tête de colonne cliquable (défini hors du composant pour ne pas remonter à chaque rendu,
+ *  ce qui perdrait le focus clavier). Affiche un chevron sur la colonne active. */
+function SortHeader({
+  label,
+  sortAs,
+  activeKey,
+  direction,
+  onSort,
+  align = 'left',
+}: {
+  label: string;
+  sortAs: TerrainSortKey;
+  activeKey: TerrainSortKey;
+  direction: SortDirection;
+  onSort: (key: TerrainSortKey) => void;
+  align?: 'left' | 'right';
+}) {
+  const active = activeKey === sortAs;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortAs)}
+      aria-label={`Trier par ${label}${active ? (direction === 'asc' ? ', ordre croissant' : ', ordre décroissant') : ''}`}
+      className={cn(
+        'inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.06em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        active ? 'text-indigo-500' : 'text-neutral-500 hover:text-neutral-700',
+        align === 'right' && 'flex-row-reverse',
+      )}
+    >
+      {label}
+      <span aria-hidden="true" className="text-[9px] leading-none">
+        {active ? (direction === 'asc' ? '▲' : '▼') : ''}
+      </span>
+    </button>
+  );
+}
+
+/** Bande de couleur du score (vert haut, indigo moyen, ambre bas, rouge faible), en tokens. */
+function scoreBandClass(s: number): string {
+  if (s >= 75) return 'bg-success';
+  if (s >= 50) return 'bg-indigo-500';
+  if (s >= 30) return 'bg-amber-500';
+  return 'bg-danger';
 }
 
 /** Pastille de score comparatif + indicateur d'alertes rouges. */
 function ScoreCell({ score, redFlags }: { score?: number | null; redFlags?: number }) {
   return (
-    <div style={{ width: '96px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+    <div className="flex w-24 items-center gap-1.5">
       {score != null ? (
         <span
-          style={{
-            fontFamily: MONO,
-            fontSize: '13px',
-            fontWeight: 600,
-            color: '#FFFFFF',
-            background: scoreColor(score),
-            borderRadius: '6px',
-            padding: '2px 7px',
-            minWidth: '30px',
-            textAlign: 'center',
-          }}
+          className={cn(
+            'min-w-[30px] rounded-md px-1.5 py-0.5 text-center font-mono text-[13px] font-semibold tabular-nums text-white',
+            scoreBandClass(score),
+          )}
         >
           {score}
         </span>
       ) : (
-        <span style={{ fontSize: '11px', color: '#98A0B0', fontStyle: 'italic' }}>non évalué</span>
+        <span className="text-[11px] italic text-neutral-400">non évalué</span>
       )}
       {redFlags && redFlags > 0 ? (
-        <span title={`${redFlags} alerte${redFlags > 1 ? 's' : ''} rouge${redFlags > 1 ? 's' : ''}`} style={{ fontSize: '11px', color: '#C0432E', fontWeight: 700 }}>
+        <span
+          title={`${redFlags} alerte${redFlags > 1 ? 's' : ''} rouge${redFlags > 1 ? 's' : ''}`}
+          className="text-[11px] font-bold text-danger"
+        >
           ⚑{redFlags}
         </span>
       ) : null}
@@ -85,157 +102,101 @@ function ScoreCell({ score, redFlags }: { score?: number | null; redFlags?: numb
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const s = statusStyle(status);
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        fontSize: '12px',
-        fontWeight: 600,
-        color: s.color,
-        background: s.bg,
-        borderRadius: '999px',
-        padding: '3px 10px',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: s.color }} />
-      {s.label}
-    </span>
-  );
-}
-
-const controlStyle: CSSProperties = {
-  border: '1px solid #DADEE8',
-  borderRadius: '8px',
-  padding: '8px 11px',
-  fontFamily: SANS,
-  fontSize: '13px',
-  color: '#161A2E',
-  background: '#FFFFFF',
-  outline: 'none',
-};
-
 export function TerrainsTable({ terrains }: { terrains: TerrainListItem[] }) {
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<TerrainSortKey>('recent');
+  const [sortKey, setSortKey] = useState<TerrainSortKey>('recent');
+  const [direction, setDirection] = useState<SortDirection>('desc');
 
-  const rows = useMemo(() => sortTerrains(filterTerrains(terrains, query), sort), [terrains, query, sort]);
+  const rows = useMemo(
+    () => sortTerrains(filterTerrains(terrains, query), sortKey, direction),
+    [terrains, query, sortKey, direction],
+  );
+
+  function onSort(key: TerrainSortKey) {
+    if (key === sortKey) {
+      setDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setDirection(defaultDirection(key));
+    }
+  }
+
+  const headerProps = { activeKey: sortKey, direction, onSort };
 
   return (
     <div>
-      {/* Barre recherche + tri */}
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
-        <input
+      {/* Recherche */}
+      <div className="mb-3">
+        <Input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Rechercher un terrain (libellé, adresse)"
           aria-label="Rechercher un terrain"
-          style={{ ...controlStyle, flex: '1 1 240px', minWidth: 0 }}
+          className="max-w-sm"
         />
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '12px', color: '#6C7488', fontWeight: 600 }}>Trier</span>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as TerrainSortKey)}
-            aria-label="Trier les terrains"
-            style={{ ...controlStyle, cursor: 'pointer' }}
-          >
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
       </div>
 
-      <div
-        style={{
-          background: '#FFFFFF',
-          border: '1px solid #DADEE8',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          minWidth: '640px',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            padding: '0 16px',
-            height: '42px',
-            background: '#FAFBFD',
-            borderBottom: '1px solid #DADEE8',
-            fontSize: '11px',
-            fontWeight: 600,
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-            color: '#6C7488',
-          }}
-        >
-          <div style={{ flex: 1, minWidth: '170px' }}>Terrain</div>
-          <div style={{ width: '96px' }}>Score</div>
-          <div style={{ width: '104px', textAlign: 'right' }}>Surface</div>
-          <div style={{ width: '150px', textAlign: 'right' }}>Prix</div>
-          <div style={{ width: '118px' }}>Statut</div>
+      <div className="min-w-[640px] overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        {/* En-têtes de colonnes (tri au clic) */}
+        <div className="flex h-[42px] items-center gap-3 border-b border-border bg-neutral-50 px-4">
+          <div className="min-w-[170px] flex-1">
+            <SortHeader label="Terrain" sortAs="label" {...headerProps} />
+          </div>
+          <div className="w-24">
+            <SortHeader label="Score" sortAs="score" {...headerProps} />
+          </div>
+          <div className="flex w-[104px] justify-end">
+            <SortHeader label="Surface" sortAs="surface" align="right" {...headerProps} />
+          </div>
+          <div className="flex w-[150px] justify-end">
+            <SortHeader label="Prix" sortAs="prixTotal" align="right" {...headerProps} />
+          </div>
+          <div className="w-[118px] text-[11px] font-semibold uppercase tracking-[0.06em] text-neutral-500">Statut</div>
         </div>
 
         {rows.length === 0 ? (
-          <div style={{ padding: '28px 16px', textAlign: 'center', fontSize: '13.5px', color: '#6C7488' }}>
+          <div className="px-4 py-7 text-center text-sm text-neutral-500">
             Aucun terrain ne correspond à la recherche.
           </div>
         ) : (
           rows.map((terrain) => {
             const ratio = prixM2Of(terrain);
-            const prixM2 = ratio != null ? Math.round(ratio) : null;
+            const pm2 = ratio != null ? Math.round(ratio) : null;
+            const meta = statusMeta(terrain.status);
             return (
               <Link
                 key={terrain.id}
                 href={`/terrains/${terrain.id}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '11px 16px',
-                  borderBottom: '1px solid #EFF1F6',
-                  textDecoration: 'none',
-                  color: '#161A2E',
-                }}
+                className="flex items-center gap-3 border-b border-neutral-100 px-4 py-3 text-foreground transition-colors last:border-b-0 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
-                <div style={{ flex: 1, minWidth: '170px' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#161A2E', lineHeight: 1.25 }}>
-                    {terrain.label}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6C7488' }}>{terrain.address}</div>
+                <div className="min-w-[170px] flex-1">
+                  <div className="text-sm font-semibold leading-tight text-foreground">{terrain.label}</div>
+                  <div className="text-xs text-neutral-500">{terrain.address}</div>
                 </div>
                 <ScoreCell score={terrain.score} redFlags={terrain.redFlags} />
-                <div style={{ width: '104px', textAlign: 'right', fontFamily: MONO, fontSize: '12.5px', color: '#343B4D' }}>
+                <div className="w-[104px] text-right font-mono text-xs tabular-nums text-neutral-700">
                   {surfaceFormat.format(terrain.surfaceTotaleM2)} m²
                 </div>
-                <div style={{ width: '150px', textAlign: 'right' }}>
+                <div className="w-[150px] text-right">
                   {terrain.prixDemande != null ? (
                     <>
-                      <div style={{ fontFamily: MONO, fontSize: '13px', fontWeight: 500, color: '#161A2E' }}>
+                      <div className="font-mono text-[13px] tabular-nums text-foreground">
                         {prixFormat.format(terrain.prixDemande)}
                       </div>
-                      {prixM2 != null ? (
-                        <div style={{ fontFamily: MONO, fontSize: '11px', color: '#98A0B0' }}>
-                          {surfaceFormat.format(prixM2)} €/m²
+                      {pm2 != null ? (
+                        <div className="font-mono text-[11px] tabular-nums text-neutral-400">
+                          {surfaceFormat.format(pm2)} €/m²
                         </div>
                       ) : null}
                     </>
                   ) : (
-                    <div style={{ fontSize: '12px', color: '#98A0B0', fontStyle: 'italic' }}>Indisponible</div>
+                    <div className="text-xs italic text-neutral-400">Indisponible</div>
                   )}
                 </div>
-                <div style={{ width: '118px' }}>
-                  <StatusBadge status={terrain.status} />
+                <div className="flex w-[118px] items-center gap-2">
+                  <StatusPin status={meta.pin} />
+                  <Badge variant={meta.badge}>{meta.label}</Badge>
                 </div>
               </Link>
             );

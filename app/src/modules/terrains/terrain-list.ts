@@ -16,7 +16,8 @@ export interface TerrainListItem {
   redFlags?: number;
 }
 
-export type TerrainSortKey = 'recent' | 'score' | 'surface' | 'prixTotal' | 'prixM2';
+export type TerrainSortKey = 'recent' | 'label' | 'score' | 'surface' | 'prixTotal' | 'prixM2';
+export type SortDirection = 'asc' | 'desc';
 
 /** Prix au m² dérivé, ou null si prix absent ou surface nulle (jamais 0 par défaut). */
 export function prixM2(item: Pick<TerrainListItem, 'prixDemande' | 'surfaceTotaleM2'>): number | null {
@@ -46,33 +47,46 @@ export function filterTerrains<T extends Pick<TerrainListItem, 'label' | 'addres
 }
 
 /**
- * Trie une copie des terrains selon la clé demandée (ordre décroissant pour surface/prix,
- * plus récent d'abord pour la date). Les valeurs manquantes (prix absent) sont renvoyées en
- * fin, jamais assimilées à 0. Départage stable par libellé pour un rendu déterministe.
+ * Trie une copie des terrains selon la clé et la direction demandées (défaut décroissant :
+ * plus grand ou plus récent d'abord). Les valeurs manquantes (prix, score absents) sont
+ * TOUJOURS renvoyées en fin, dans les deux directions, jamais assimilées à 0 (règle 3).
+ * Départage stable par libellé pour un rendu déterministe.
  */
-export function sortTerrains<T extends TerrainListItem>(items: T[], key: TerrainSortKey): T[] {
+export function sortTerrains<T extends TerrainListItem>(
+  items: T[],
+  key: TerrainSortKey,
+  direction: SortDirection = 'desc',
+): T[] {
   const byLabel = (a: T, b: T) => a.label.localeCompare(b.label, 'fr');
-  // Compare deux valeurs éventuellement nulles : décroissant, nulls en fin.
-  const desc = (a: number | null, b: number | null, x: T, y: T): number => {
+  const sign = direction === 'asc' ? -1 : 1;
+  // Compare deux nombres éventuellement nuls : nulls TOUJOURS en fin (indépendamment de la
+  // direction), sinon ordonnés selon la direction (desc = plus grand d'abord).
+  const cmpNum = (a: number | null, b: number | null, x: T, y: T): number => {
     if (a == null && b == null) return byLabel(x, y);
     if (a == null) return 1;
     if (b == null) return -1;
-    return b - a || byLabel(x, y);
+    return sign * (b - a) || byLabel(x, y);
   };
   const copy = [...items];
   switch (key) {
+    case 'label':
+      // Alphabétique : asc = A vers Z, desc = Z vers A.
+      return copy.sort((a, b) => (direction === 'asc' ? byLabel(a, b) : -byLabel(a, b)));
     case 'score':
-      // Score le plus haut d'abord ; les terrains non évalués (null) en fin (jamais 0).
-      return copy.sort((a, b) => desc(a.score ?? null, b.score ?? null, a, b));
+      // Score le plus haut d'abord (desc) ; non évalués (null) en fin dans les deux sens.
+      return copy.sort((a, b) => cmpNum(a.score ?? null, b.score ?? null, a, b));
     case 'surface':
-      return copy.sort((a, b) => desc(a.surfaceTotaleM2, b.surfaceTotaleM2, a, b));
+      return copy.sort((a, b) => cmpNum(a.surfaceTotaleM2, b.surfaceTotaleM2, a, b));
     case 'prixTotal':
-      return copy.sort((a, b) => desc(a.prixDemande, b.prixDemande, a, b));
+      return copy.sort((a, b) => cmpNum(a.prixDemande, b.prixDemande, a, b));
     case 'prixM2':
-      return copy.sort((a, b) => desc(prixM2(a), prixM2(b), a, b));
+      return copy.sort((a, b) => cmpNum(prixM2(a), prixM2(b), a, b));
     case 'recent':
     default:
-      // Plus récent d'abord (createdAt ISO comparable lexicographiquement), départage par libellé.
-      return copy.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : byLabel(a, b)));
+      // Par date de création : desc = plus récent d'abord, asc = plus ancien d'abord.
+      return copy.sort((a, b) => {
+        if (a.createdAt === b.createdAt) return byLabel(a, b);
+        return sign * (a.createdAt < b.createdAt ? 1 : -1);
+      });
   }
 }

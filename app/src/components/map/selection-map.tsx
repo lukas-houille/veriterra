@@ -58,10 +58,12 @@ const INDIGO = '#2F3B6E';
 const SELECTION_SOURCE = 'selection';
 const SURFACE_SOURCE = 'surface-matches';
 
-// --- Analyse d'ensoleillement en place (relief natif + bâti/canopée extrudés + ombres Turf) -----
+// --- Relief permanent + analyse d'ensoleillement en place (natif MapLibre) ----------------------
 // Rendu 100 % natif MapLibre (setTerrain + fill-extrusion) : robuste, sans dépendance 3D externe.
-// Les ombres au sol sont projetées par Turf (shadows.ts) et bougent avec l'heure et la saison.
-const SUN_TERRAIN_SOURCE = 'selection-sun-dem';
+// Le relief (MNT) est chargé en PERMANENCE sur les deux fonds ; la carte reste à plat par défaut
+// (pitch 0, lisible en 2D) et on l'incline pour voir le relief. Les ombres au sol sont projetées
+// par Turf (shadows.ts) et bougent avec l'heure et la saison.
+const TERRAIN_SOURCE = 'selection-dem';
 const SUN_SHADOW_SOURCE = 'sun-shadows';
 const SUN_BUILDING_SOURCE = 'sun-buildings';
 const SUN_CANOPY_SOURCE = 'sun-canopies';
@@ -77,10 +79,14 @@ function todayStr(): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-/** Active le relief 3D (MNT Terrarium) pour l'analyse d'ensoleillement. */
-function ensureSunTerrain(map: MaplibreMap): void {
-  if (!map.getSource(SUN_TERRAIN_SOURCE)) {
-    map.addSource(SUN_TERRAIN_SOURCE, {
+/**
+ * (Ré)active le relief 3D (MNT Terrarium) sur le style courant. Idempotent ; à rappeler après chaque
+ * chargement de style (setStyle remet le terrain à zéro). Le relief n'est visible qu'en vue inclinée ;
+ * à plat (pitch 0) la carte reste lisible en 2D. Exagération 1,2x (rendu, pas une mesure).
+ */
+function ensureTerrain(map: MaplibreMap): void {
+  if (!map.getSource(TERRAIN_SOURCE)) {
+    map.addSource(TERRAIN_SOURCE, {
       type: 'raster-dem',
       tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
       encoding: 'terrarium',
@@ -89,15 +95,7 @@ function ensureSunTerrain(map: MaplibreMap): void {
       attribution: 'Relief : Terrarium (Mapzen, AWS Open Data)',
     });
   }
-  // Exagération 1,2x : relief lisible en vue pitchée, disclosée dans le panneau (pas une mesure).
-  map.setTerrain({ source: SUN_TERRAIN_SOURCE, exaggeration: 1.2 });
-}
-function removeSunTerrain(map: MaplibreMap): void {
-  try {
-    map.setTerrain(null);
-  } catch {
-    // pas de relief actif : rien à faire.
-  }
+  map.setTerrain({ source: TERRAIN_SOURCE, exaggeration: 1.2 });
 }
 
 // US-1.6 : garde-fous de la recherche par surface.
@@ -179,6 +177,9 @@ function installOverlays(
 ): void {
   if (basemap === 'plan') applyVeriterraPlanTint(map);
 
+  // Relief chargé en permanence (les deux fonds) : rejoué ici car setStyle remet le terrain à zéro.
+  ensureTerrain(map);
+
   if (!map.getSource(SURFACE_SOURCE)) {
     map.addSource(SURFACE_SOURCE, { type: 'geojson', data: EMPTY_FC as SetDataArg });
   }
@@ -259,7 +260,7 @@ function installSunLayers(map: MaplibreMap): void {
       {
         id: 'sun-hillshade',
         type: 'hillshade',
-        source: SUN_TERRAIN_SOURCE,
+        source: TERRAIN_SOURCE,
         paint: {
           'hillshade-illumination-anchor': 'map',
           'hillshade-illumination-direction': 315,
@@ -415,7 +416,7 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
     if (!sunActive || !sunCentroid) {
       removeSunLayers(map);
       sunDataRef.current = null;
-      removeSunTerrain(map);
+      // Le relief reste en place (permanent) : on repasse seulement à plat et on réinitialise le ciel.
       try {
         map.setSky({}); // réinitialise le ciel (retour en 2D).
       } catch {
@@ -433,7 +434,7 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
       pitch: 55,
       bearing: -20,
     });
-    ensureSunTerrain(map);
+    // Le relief est déjà chargé (permanent) ; on ajoute seulement les calques bâti/canopée/ombres/hillshade.
     installSunLayers(map);
 
     let cancelled = false;
@@ -516,8 +517,8 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
         }
         if (map.getLayer('sun-shadow-fill')) {
           map.setPaintProperty('sun-shadow-fill', 'fill-color', amb.shadowColor);
-          // Opacité en FONDU (plancher la nuit, croissant avec la hauteur du soleil) : plus de
-          // disparition brutale de l'ombre à l'horizon, l'intensité suit la course du soleil.
+          // Opacité en FONDU : NULLE sous l'horizon (l'ombre disparaît complètement la nuit), puis
+          // elle réapparaît au lever et se densifie quand le soleil monte (l'intensité suit sa course).
           map.setPaintProperty('sun-shadow-fill', 'fill-opacity', shadowFadeOpacity(sunPos.altitudeDeg));
         }
         if (map.getLayer('sun-hillshade')) {
@@ -544,7 +545,8 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
     });
     mapRef.current = map;
     // Zoom natif MapLibre en bas-droite (la carte contextuelle occupe le haut-droite).
-    map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
+    // Compas + visualisation du pitch : permet d'incliner la carte pour voir le relief (permanent).
+    map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');
 
     map.on('load', () => {
       installOverlays(map, basemapRef.current, selectionRef.current, matchesRef.current);

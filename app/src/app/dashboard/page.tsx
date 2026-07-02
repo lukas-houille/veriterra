@@ -5,6 +5,7 @@ import { auth, signOut } from '@/auth';
 import { listTerrains } from '@/modules/terrains/service';
 import { getActiveProjet } from '@/modules/projet/service';
 import { DashboardMap } from '@/components/map/dashboard-map';
+import { TerrainsTable } from './terrains-table';
 
 // Tableau de bord des terrains du projet (Tranche 1, US-5.2). Composant serveur : lit la
 // session (tenant garanti par proxy.ts), exige un projet (sinon onboarding), et charge les
@@ -88,30 +89,6 @@ function Mark() {
       </g>
       <rect x="22" y="22" width="108" height="108" rx="10" fill="none" stroke="#2F3B6E" strokeWidth="3" />
     </svg>
-  );
-}
-
-/** Badge de statut coloré (pastille + libellé), fidèle aux styles de la maquette. */
-function StatusBadge({ status }: { status: string }) {
-  const s = statusStyle(status);
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        fontSize: '12px',
-        fontWeight: 600,
-        color: s.color,
-        background: s.bg,
-        borderRadius: '999px',
-        padding: '3px 10px',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: s.color }} />
-      {s.label}
-    </span>
   );
 }
 
@@ -357,98 +334,9 @@ export default async function DashboardPage() {
             alignItems: 'flex-start',
           }}
         >
-          {/* TABLEAU */}
+          {/* TABLEAU (recherche + tri, US-5.9) */}
           <div style={{ flex: '1 1 560px', minWidth: 0, overflowX: 'auto' }}>
-            <div
-              style={{
-                background: '#FFFFFF',
-                border: '1px solid #DADEE8',
-                borderRadius: '12px',
-                overflow: 'hidden',
-                minWidth: '560px',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '0 16px',
-                  height: '42px',
-                  background: '#FAFBFD',
-                  borderBottom: '1px solid #DADEE8',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
-                  color: '#6C7488',
-                }}
-              >
-                <div style={{ flex: 1, minWidth: '170px' }}>Terrain</div>
-                <div style={{ width: '104px', textAlign: 'right' }}>Surface</div>
-                <div style={{ width: '150px', textAlign: 'right' }}>Prix</div>
-                <div style={{ width: '118px' }}>Statut</div>
-              </div>
-
-              {terrains.map((terrain) => {
-                const prixM2 =
-                  terrain.prixDemande != null && terrain.surfaceTotaleM2 > 0
-                    ? Math.round(terrain.prixDemande / terrain.surfaceTotaleM2)
-                    : null;
-                return (
-                  <Link
-                    key={terrain.id}
-                    href={`/terrains/${terrain.id}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '11px 16px',
-                      borderBottom: '1px solid #EFF1F6',
-                      textDecoration: 'none',
-                      color: '#161A2E',
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: '170px' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#161A2E', lineHeight: 1.25 }}>
-                        {terrain.label}
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#6C7488' }}>{terrain.address}</div>
-                    </div>
-                    <div
-                      style={{
-                        width: '104px',
-                        textAlign: 'right',
-                        fontFamily: MONO,
-                        fontSize: '12.5px',
-                        color: '#343B4D',
-                      }}
-                    >
-                      {surfaceFormat.format(terrain.surfaceTotaleM2)} m²
-                    </div>
-                    <div style={{ width: '150px', textAlign: 'right' }}>
-                      {terrain.prixDemande != null ? (
-                        <>
-                          <div style={{ fontFamily: MONO, fontSize: '13px', fontWeight: 500, color: '#161A2E' }}>
-                            {prixFormat.format(terrain.prixDemande)}
-                          </div>
-                          {prixM2 != null ? (
-                            <div style={{ fontFamily: MONO, fontSize: '11px', color: '#98A0B0' }}>
-                              {surfaceFormat.format(prixM2)} €/m²
-                            </div>
-                          ) : null}
-                        </>
-                      ) : (
-                        <div style={{ fontSize: '12px', color: '#98A0B0', fontStyle: 'italic' }}>Indisponible</div>
-                      )}
-                    </div>
-                    <div style={{ width: '118px' }}>
-                      <StatusBadge status={terrain.status} />
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
+            <TerrainsTable terrains={terrains} />
           </div>
 
           {/* CARTE */}

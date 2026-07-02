@@ -87,11 +87,14 @@ export async function fetchBatimentsBbox(bbox: Bbox): Promise<BatimentsResult> {
     // cache indisponible : on poursuit sans.
   }
 
-  let payload: unknown = null;
+  let payload: unknown;
   try {
     const res = await fetch(wfsUrl(bbox));
-    if (res.status >= 500 || res.status === 429) return { batiments: [], transientError: true };
-    if (res.ok) payload = await res.json();
+    // Toute réponse non-2xx est une erreur : une zone réellement vide renvoie 200 + features
+    // vides. On la traite donc comme transitoire (réessai, pas de cache), jamais figée en un
+    // « 0 bâtiment » de 30 jours qui présenterait une panne comme un fait (règle 3).
+    if (!res.ok) return { batiments: [], transientError: true };
+    payload = await res.json();
   } catch {
     return { batiments: [], transientError: true };
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dateForDayOfYear, dayOfYear, seasonLabel, timestampFor } from '@/lib/sun/sun-time';
+import { dateForDayOfYear, dayOfYear, seasonLabel, seasonMarks, timestampFor } from '@/lib/sun/sun-time';
 
 describe('sun-time', () => {
   it('timestampFor : epoch ms local depuis une date et des minutes du jour', () => {
@@ -17,6 +17,13 @@ describe('sun-time', () => {
     expect(dayOfYear(dateForDayOfYear(2026, 180))).toBe(180);
     expect(dayOfYear(dateForDayOfYear(2026, 999))).toBe(364); // borné en haut
     expect(dayOfYear(dateForDayOfYear(2026, -5))).toBe(0); // borné en bas
+  });
+
+  it('seasonMarks : solstices et équinoxes de l\'année, libellés cohérents', () => {
+    const m = seasonMarks(2026);
+    expect(m).toEqual({ printemps: '2026-03-20', ete: '2026-06-21', automne: '2026-09-22', hiver: '2026-12-21' });
+    expect(seasonLabel(m.ete)).toBe('Été');
+    expect(seasonLabel(m.hiver)).toBe('Hiver');
   });
 
   it('seasonLabel : hémisphère nord', () => {

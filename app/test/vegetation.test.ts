@@ -11,14 +11,14 @@ describe('parseCanopies', () => {
     const out = parseCanopies(payload);
     expect(out).toHaveLength(1);
     expect(out[0]!.geometry.type).toBe('Polygon');
-    expect(out[0]!.hauteur).toBe(12); // canopée bois/forêt approximée
+    expect(out[0]!.hauteur).toBe(10); // canopée bois/forêt approximée (basse, pour ne pas sur-évaluer l'ombre)
   });
 
   it('ferme l\'anneau si nécessaire et attribue la hauteur des broussailles', () => {
     const payload = { elements: [way({ natural: 'scrub' }, [[4, 45], [4.001, 45], [4.001, 45.001]])] };
     const out = parseCanopies(payload);
     expect(out).toHaveLength(1);
-    expect(out[0]!.hauteur).toBe(3);
+    expect(out[0]!.hauteur).toBe(2);
     const ring = out[0]!.geometry.coordinates[0]!;
     expect(ring[0]).toEqual(ring[ring.length - 1]); // anneau fermé
   });

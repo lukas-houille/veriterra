@@ -39,10 +39,51 @@ const prixFormat = new Intl.NumberFormat('fr-FR', {
 
 const SORT_OPTIONS: Array<{ value: TerrainSortKey; label: string }> = [
   { value: 'recent', label: 'Plus récents' },
+  { value: 'score', label: 'Score' },
   { value: 'surface', label: 'Surface' },
   { value: 'prixTotal', label: 'Prix total' },
   { value: 'prixM2', label: 'Prix au m²' },
 ];
+
+/** Couleur du score par bande (vert haut, indigo moyen, ambre bas, rouge faible). */
+function scoreColor(s: number): string {
+  if (s >= 75) return '#2E7D5B';
+  if (s >= 50) return '#2F3B6E';
+  if (s >= 30) return '#DB9B2C';
+  return '#C0432E';
+}
+
+/** Pastille de score comparatif + indicateur d'alertes rouges. */
+function ScoreCell({ score, redFlags }: { score?: number | null; redFlags?: number }) {
+  return (
+    <div style={{ width: '96px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+      {score != null ? (
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: '13px',
+            fontWeight: 600,
+            color: '#FFFFFF',
+            background: scoreColor(score),
+            borderRadius: '6px',
+            padding: '2px 7px',
+            minWidth: '30px',
+            textAlign: 'center',
+          }}
+        >
+          {score}
+        </span>
+      ) : (
+        <span style={{ fontSize: '11px', color: '#98A0B0', fontStyle: 'italic' }}>non évalué</span>
+      )}
+      {redFlags && redFlags > 0 ? (
+        <span title={`${redFlags} alerte${redFlags > 1 ? 's' : ''} rouge${redFlags > 1 ? 's' : ''}`} style={{ fontSize: '11px', color: '#C0432E', fontWeight: 700 }}>
+          ⚑{redFlags}
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 function StatusBadge({ status }: { status: string }) {
   const s = statusStyle(status);
@@ -119,7 +160,7 @@ export function TerrainsTable({ terrains }: { terrains: TerrainListItem[] }) {
           border: '1px solid #DADEE8',
           borderRadius: '12px',
           overflow: 'hidden',
-          minWidth: '560px',
+          minWidth: '640px',
         }}
       >
         <div
@@ -139,6 +180,7 @@ export function TerrainsTable({ terrains }: { terrains: TerrainListItem[] }) {
           }}
         >
           <div style={{ flex: 1, minWidth: '170px' }}>Terrain</div>
+          <div style={{ width: '96px' }}>Score</div>
           <div style={{ width: '104px', textAlign: 'right' }}>Surface</div>
           <div style={{ width: '150px', textAlign: 'right' }}>Prix</div>
           <div style={{ width: '118px' }}>Statut</div>
@@ -172,6 +214,7 @@ export function TerrainsTable({ terrains }: { terrains: TerrainListItem[] }) {
                   </div>
                   <div style={{ fontSize: '12px', color: '#6C7488' }}>{terrain.address}</div>
                 </div>
+                <ScoreCell score={terrain.score} redFlags={terrain.redFlags} />
                 <div style={{ width: '104px', textAlign: 'right', fontFamily: MONO, fontSize: '12.5px', color: '#343B4D' }}>
                   {surfaceFormat.format(terrain.surfaceTotaleM2)} m²
                 </div>

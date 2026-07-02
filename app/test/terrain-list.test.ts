@@ -52,6 +52,10 @@ describe('sortTerrains', () => {
   it('récents : plus récent d\'abord', () => {
     expect(sortTerrains(rows, 'recent').map((r) => r.id)).toEqual(['new', 'mid', 'old']);
   });
+  it('score : plus haut d\'abord, non évalué (null) en fin (règle 3)', () => {
+    const scored = [item({ id: 'a', score: 60 }), item({ id: 'b', score: 85 }), item({ id: 'c', score: null })];
+    expect(sortTerrains(scored, 'score').map((r) => r.id)).toEqual(['b', 'a', 'c']);
+  });
   it('surface : plus grande d\'abord', () => {
     expect(sortTerrains(rows, 'surface').map((r) => r.id)).toEqual(['mid', 'new', 'old']);
   });

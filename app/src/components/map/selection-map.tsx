@@ -8,7 +8,6 @@ import {
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { CSSProperties } from 'react';
-import type { FeatureCollection, Geometry } from 'geojson';
 import {
   applyVeriterraPlanTint,
   basemapStyle,
@@ -28,9 +27,8 @@ import type { BanFeature, GeoJsonGeometry } from '@/lib/geo/types';
 import { parcellesCentroid } from '@/lib/geo/centroid';
 import { ambienceForAltitude } from '@/lib/sun/ambience';
 import { sunPosition } from '@/lib/sun/shadows';
+import { sunShadowsFor, toExtrusionFC, type SunVolume } from '@/lib/sun/sun-render';
 import { dateForDayOfYear, dayOfYear, seasonLabel, timestampFor } from '@/lib/sun/sun-time';
-// Type only : le module deck.gl (sun-scene) est importé en LAZY à l'activation (jamais au repos).
-import type { SunSceneHandle } from './sun-scene';
 
 /** Parcelle retenue dans la sélection courante (remontée au parent). */
 export interface SelectedParcelle {
@@ -54,8 +52,15 @@ const INDIGO = '#2F3B6E';
 const SELECTION_SOURCE = 'selection';
 const SURFACE_SOURCE = 'surface-matches';
 
-// --- Analyse d'ensoleillement en place (relief + ombres 3D deck.gl) ---------------------------
+// --- Analyse d'ensoleillement en place (relief natif + bâti/canopée extrudés + ombres Turf) -----
+// Rendu 100 % natif MapLibre (setTerrain + fill-extrusion) : robuste, sans dépendance 3D externe.
+// Les ombres au sol sont projetées par Turf (shadows.ts) et bougent avec l'heure et la saison.
 const SUN_TERRAIN_SOURCE = 'selection-sun-dem';
+const SUN_SHADOW_SOURCE = 'sun-shadows';
+const SUN_BUILDING_SOURCE = 'sun-buildings';
+const SUN_CANOPY_SOURCE = 'sun-canopies';
+const SUN_BUILDING_COLOR = '#c7ccda';
+const SUN_CANOPY_COLOR = '#5c8a4a';
 const SUN_RADIUS_M = 250;
 
 function pad2(n: number): string {
@@ -78,8 +83,8 @@ function ensureSunTerrain(map: MaplibreMap): void {
       attribution: 'Relief : Terrarium (Mapzen, AWS Open Data)',
     });
   }
-  // Exagération 1.0 : pas de sur-relief trompeur dans un outil d'analyse de terrain.
-  map.setTerrain({ source: SUN_TERRAIN_SOURCE, exaggeration: 1.0 });
+  // Exagération 1,2x : relief lisible en vue pitchée, disclosée dans le panneau (pas une mesure).
+  map.setTerrain({ source: SUN_TERRAIN_SOURCE, exaggeration: 1.2 });
 }
 function removeSunTerrain(map: MaplibreMap): void {
   try {
@@ -87,18 +92,6 @@ function removeSunTerrain(map: MaplibreMap): void {
   } catch {
     // pas de relief actif : rien à faire.
   }
-}
-
-/** Convertit des volumes (bâtiments/canopée : géométrie + hauteur) en FeatureCollection deck.gl. */
-function toVolumeFC(items: Array<{ geometry: unknown; hauteur: number | null }>): FeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: items.map((it) => ({
-      type: 'Feature',
-      geometry: it.geometry as Geometry,
-      properties: { height: it.hauteur ?? 0 },
-    })),
-  };
 }
 
 // US-1.6 : garde-fous de la recherche par surface.
@@ -229,6 +222,67 @@ function installOverlays(
 }
 
 /**
+ * Installe (idempotent) les calques de l'analyse d'ensoleillement sur le style courant : ombres au
+ * sol (fill), canopée végétale extrudée (volume approximé) et bâtiments extrudés (hauteur BD TOPO ;
+ * sans hauteur => 0, non extrudé, règle 3). Tout est natif MapLibre. Choix d'empilement assumé :
+ * l'ombre est posée SOUS le CONTOUR de la sélection (liseré sombre + trait ambre, qui restent nets
+ * au-dessus), mais AU-DESSUS du fond ambre, pour qu'on VOIE l'ombre d'un bâtiment voisin tomber sur
+ * la parcelle sélectionnée, ce qui est l'intérêt même d'une étude d'ensoleillement.
+ */
+function installSunLayers(map: MaplibreMap): void {
+  for (const id of [SUN_SHADOW_SOURCE, SUN_BUILDING_SOURCE, SUN_CANOPY_SOURCE]) {
+    if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: EMPTY_FC as SetDataArg });
+  }
+  if (!map.getLayer('sun-shadow-fill')) {
+    // Sous le liseré de contour (selection-casing), donc au-dessus du fond ambre : ombre visible sur la parcelle.
+    const beforeId = map.getLayer('selection-casing') ? 'selection-casing' : undefined;
+    map.addLayer(
+      {
+        id: 'sun-shadow-fill',
+        type: 'fill',
+        source: SUN_SHADOW_SOURCE,
+        paint: { 'fill-color': '#1a2036', 'fill-opacity': 0.28 },
+      },
+      beforeId,
+    );
+  }
+  if (!map.getLayer('sun-canopy-3d')) {
+    map.addLayer({
+      id: 'sun-canopy-3d',
+      type: 'fill-extrusion',
+      source: SUN_CANOPY_SOURCE,
+      paint: {
+        'fill-extrusion-color': SUN_CANOPY_COLOR,
+        'fill-extrusion-height': ['coalesce', ['get', 'hauteur'], 0],
+        'fill-extrusion-opacity': 0.6,
+      },
+    });
+  }
+  if (!map.getLayer('sun-buildings-3d')) {
+    map.addLayer({
+      id: 'sun-buildings-3d',
+      type: 'fill-extrusion',
+      source: SUN_BUILDING_SOURCE,
+      paint: {
+        'fill-extrusion-color': SUN_BUILDING_COLOR,
+        'fill-extrusion-height': ['coalesce', ['get', 'hauteur'], 0],
+        'fill-extrusion-opacity': 0.92,
+      },
+    });
+  }
+}
+
+/** Retire les calques et sources de l'analyse d'ensoleillement (retour à la vue 2D). */
+function removeSunLayers(map: MaplibreMap): void {
+  for (const id of ['sun-buildings-3d', 'sun-canopy-3d', 'sun-shadow-fill']) {
+    if (map.getLayer(id)) map.removeLayer(id);
+  }
+  for (const id of [SUN_SHADOW_SOURCE, SUN_BUILDING_SOURCE, SUN_CANOPY_SOURCE]) {
+    if (map.getSource(id)) map.removeSource(id);
+  }
+}
+
+/**
  * Carte de sélection de parcelles (US-1.1 / US-1.2 / US-1.6). Fond de carte au choix
  * (plan vectoriel Veriterra ou satellite IGN, cadastre en calque), recherche d'adresse
  * (BAN) avec autocomplétion, sélection de parcelles au clic (API Carto Cadastre) surlignées
@@ -262,7 +316,7 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
   const [clickLoading, setClickLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Analyse d'ensoleillement EN PLACE : bascule 3D + relief + ombres GPU deck.gl (chargé en lazy).
+  // Analyse d'ensoleillement EN PLACE : bascule 3D + relief natif + bâti/canopée extrudés + ombres Turf.
   const [sunActive, setSunActive] = useState(false);
   const [sunMinutes, setSunMinutes] = useState(14 * 60);
   const [sunDate, setSunDate] = useState<string>(todayStr);
@@ -270,8 +324,9 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
   const [sunError, setSunError] = useState<string | null>(null);
   const [sunCounts, setSunCounts] = useState<{ b: number; v: number }>({ b: 0, v: 0 });
   const [sunUnavail, setSunUnavail] = useState<{ b: boolean; v: boolean }>({ b: false, v: false });
-  const sunSceneRef = useRef<SunSceneHandle | null>(null);
-  const sunDataRef = useRef<{ buildings: FeatureCollection; canopies: FeatureCollection } | null>(null);
+  // Bâtiments sans hauteur BD TOPO : exclus des ombres et affichés honnêtement (règle 3).
+  const [sunSansHauteur, setSunSansHauteur] = useState(0);
+  const sunDataRef = useRef<{ buildings: SunVolume[]; canopies: SunVolume[] } | null>(null);
   // Miroirs de l'instant courant : la mise à jour d'après-chargement applique l'heure/saison
   // RÉELLES même si l'utilisateur a bougé un curseur pendant le fetch initial (closures fraîches).
   const sunDateRef = useRef(sunDate);
@@ -291,17 +346,20 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
         : null,
     [sunCentroid, sunDate, sunMinutes],
   );
+  // Voile d'ambiance jour/nuit (réchauffe le jour/crépuscule, assombrit la nuit) : rendu, pas de la
+  // donnée (règles 1 et 3). Actif seulement pendant l'analyse.
+  const sunAmbience = useMemo(
+    () => (sunActive && sunPos ? ambienceForAltitude(sunPos.altitudeDeg) : null),
+    [sunActive, sunPos],
+  );
 
-  // Entrée/sortie du mode : pitch 3D + relief + scène deck.gl (lazy) + chargement bâti/végétation.
+  // Entrée/sortie du mode : pitch 3D + relief natif + calques bâti/canopée/ombres + chargement des données.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
     if (!sunActive || !sunCentroid) {
-      if (sunSceneRef.current) {
-        sunSceneRef.current.destroy();
-        sunSceneRef.current = null;
-      }
+      removeSunLayers(map);
       sunDataRef.current = null;
       removeSunTerrain(map);
       try {
@@ -322,6 +380,7 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
       bearing: -20,
     });
     ensureSunTerrain(map);
+    installSunLayers(map);
 
     let cancelled = false;
     setSunLoading(true);
@@ -339,22 +398,34 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
         const bJson = bOk ? await bResp.json() : { batiments: [] };
         const vJson = vOk ? await vResp.json() : { canopees: [] };
         if (cancelled) return;
-        const batiments = Array.isArray(bJson.batiments) ? bJson.batiments : [];
-        const canopees = Array.isArray(vJson.canopees) ? vJson.canopees : [];
-        const buildings = toVolumeFC(batiments);
-        const canopies = toVolumeFC(canopees);
+        const buildings: SunVolume[] = (Array.isArray(bJson.batiments) ? bJson.batiments : []).map(
+          (b: { geometry: SunVolume['geometry']; hauteur: number | null }) => ({ geometry: b.geometry, hauteur: b.hauteur ?? null }),
+        );
+        const canopies: SunVolume[] = (Array.isArray(vJson.canopees) ? vJson.canopees : []).map(
+          (c: { geometry: SunVolume['geometry']; hauteur: number | null }) => ({ geometry: c.geometry, hauteur: c.hauteur ?? null }),
+        );
         sunDataRef.current = { buildings, canopies };
-        setSunCounts({ b: batiments.length, v: canopees.length });
+        setSunCounts({ b: buildings.length, v: canopies.length });
         setSunUnavail({ b: !bOk, v: !vOk });
-        const mod = await import('./sun-scene');
-        if (cancelled) return;
-        if (!sunSceneRef.current) sunSceneRef.current = mod.createSunScene(map);
-        // Instant COURANT (via refs) : correct même si un curseur a bougé pendant le fetch.
-        sunSceneRef.current.update({
-          buildings,
-          canopies,
-          timestamp: timestampFor(sunDateRef.current, sunMinutesRef.current),
-        });
+        // Volumes extrudés (natif MapLibre) + ombres à l'instant COURANT (via refs : correct même
+        // si un curseur a bougé pendant le fetch).
+        (map.getSource(SUN_BUILDING_SOURCE) as GeoJSONSource | undefined)?.setData(
+          toExtrusionFC(buildings) as SetDataArg,
+        );
+        (map.getSource(SUN_CANOPY_SOURCE) as GeoJSONSource | undefined)?.setData(
+          toExtrusionFC(canopies) as SetDataArg,
+        );
+        const pos = sunPosition(
+          new Date(timestampFor(sunDateRef.current, sunMinutesRef.current)),
+          sunCentroid.lat,
+          sunCentroid.lon,
+        );
+        const { shadows, sansHauteur } = sunShadowsFor(buildings, canopies, pos);
+        setSunSansHauteur(sansHauteur);
+        (map.getSource(SUN_SHADOW_SOURCE) as GeoJSONSource | undefined)?.setData({
+          type: 'FeatureCollection',
+          features: shadows,
+        } as SetDataArg);
       } catch {
         if (!cancelled) setSunError('Données 3D indisponibles (bâtiments ou végétation).');
       } finally {
@@ -367,35 +438,36 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
     // sunDate/sunMinutes exclus volontairement : l'instant initial suffit ici, l'effet suivant met à jour.
   }, [sunActive, sunCentroid, mapReady]);
 
-  // Mise à jour de l'instant (heure + saison) et du ciel d'ambiance, sans recharger les données.
+  // Mise à jour de l'instant (heure + saison) : recalcule les ombres (Turf) et l'ambiance jour/nuit
+  // (ciel, teinte des façades et des ombres), sans recharger les données.
   useEffect(() => {
     if (!sunActive) return;
     const map = mapRef.current;
-    const scene = sunSceneRef.current;
+    if (!map) return;
     const data = sunDataRef.current;
-    if (scene && data) {
-      scene.update({
-        buildings: data.buildings,
-        canopies: data.canopies,
-        timestamp: timestampFor(sunDate, sunMinutes),
-      });
+    if (data && sunPos) {
+      const { shadows } = sunShadowsFor(data.buildings, data.canopies, sunPos);
+      (map.getSource(SUN_SHADOW_SOURCE) as GeoJSONSource | undefined)?.setData({
+        type: 'FeatureCollection',
+        features: shadows,
+      } as SetDataArg);
     }
-    if (map && sunPos) {
+    if (sunPos) {
+      const amb = ambienceForAltitude(sunPos.altitudeDeg);
       try {
-        map.setSky(ambienceForAltitude(sunPos.altitudeDeg).sky);
+        map.setSky(amb.sky);
+        if (map.getLayer('sun-buildings-3d')) {
+          map.setPaintProperty('sun-buildings-3d', 'fill-extrusion-color', amb.buildingColor);
+        }
+        if (map.getLayer('sun-shadow-fill')) {
+          map.setPaintProperty('sun-shadow-fill', 'fill-color', amb.shadowColor);
+          map.setPaintProperty('sun-shadow-fill', 'fill-opacity', amb.shadowOpacity);
+        }
       } catch {
-        // ciel indisponible : rien de bloquant.
+        // style transitoirement indisponible : rien de bloquant.
       }
     }
   }, [sunActive, sunDate, sunMinutes, sunPos]);
-
-  // Démontage du composant : retirer la scène deck.gl si encore montée.
-  useEffect(() => {
-    return () => {
-      sunSceneRef.current?.destroy();
-      sunSceneRef.current = null;
-    };
-  }, []);
 
   // Initialisation de la carte (une seule fois, côté navigateur uniquement).
   useEffect(() => {
@@ -631,6 +703,22 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
         style={{ height: '100%', width: '100%' }}
         aria-label="Carte de sélection de parcelles"
       />
+
+      {/* Voile d'ambiance de l'analyse d'ensoleillement (sous les panneaux, sans capter les clics) */}
+      {sunAmbience && sunAmbience.overlay.opacity > 0.001 ? (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 5,
+            pointerEvents: 'none',
+            background: sunAmbience.overlay.color,
+            opacity: sunAmbience.overlay.opacity,
+            mixBlendMode: sunAmbience.overlay.blend,
+          }}
+        />
+      ) : null}
 
       {/* Recherche : adresse + surface (haut-gauche) */}
       <div
@@ -1066,7 +1154,7 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
                 ? 'Chargement des volumes 3D...'
                 : sunError
                   ? sunError
-                  : `${sunUnavail.b ? 'Bâtiments indisponibles' : `${sunCounts.b} bâtiment${sunCounts.b > 1 ? 's' : ''}`}, ${sunUnavail.v ? 'végétation indisponible' : `${sunCounts.v} zone${sunCounts.v > 1 ? 's' : ''} boisée${sunCounts.v > 1 ? 's' : ''}`}. Canopée approximée. Ombres du bâti et de la végétation ; relief indicatif (non ombrant, à venir).`}
+                  : `${sunUnavail.b ? 'Bâtiments indisponibles' : `${sunCounts.b} bâtiment${sunCounts.b > 1 ? 's' : ''}`}${sunSansHauteur > 0 ? ` (dont ${sunSansHauteur} sans hauteur connue, non ombré${sunSansHauteur > 1 ? 's' : ''})` : ''}, ${sunUnavail.v ? 'végétation indisponible' : `${sunCounts.v} zone${sunCounts.v > 1 ? 's' : ''} boisée${sunCounts.v > 1 ? 's' : ''}`}. Ombres du bâti et de la végétation projetées au sol (méthode simplifiée), drapées sur le relief (MNT, exagéré 1,2x). Canopée approximée.`}
             </p>
           </div>
         )}

@@ -21,8 +21,9 @@ export function prixM2(item: Pick<TerrainListItem, 'prixDemande' | 'surfaceTotal
     : null;
 }
 
-/** Normalise pour une recherche insensible à la casse et aux accents. */
-function normalize(value: string): string {
+/** Normalise pour une recherche insensible à la casse et aux accents (tolère null/undefined). */
+function normalize(value: string | null | undefined): string {
+  if (!value) return '';
   return value
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')

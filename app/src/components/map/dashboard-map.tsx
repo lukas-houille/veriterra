@@ -282,7 +282,9 @@ export function DashboardMap({ terrains, className }: DashboardMapProps) {
     const onPointMove = (e: maplibre.MapLayerMouseEvent) => {
       const f = e.features?.[0];
       const coords = f ? pointCoords(f) : null;
-      if (coords) popup.setLngLat(coords);
+      // Rafraîchit aussi le contenu : entre deux pins voisins, le curseur peut passer sans
+      // mouseleave/mouseenter (événements par couche) ; sinon l'infobulle garderait l'ancien terrain.
+      if (f && coords) popup.setLngLat(coords).setHTML(popupHtml(f.properties ?? {}));
     };
     const onPointLeave = () => {
       map.getCanvas().style.cursor = '';

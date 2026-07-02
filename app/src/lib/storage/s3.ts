@@ -50,9 +50,18 @@ export function maxUploadBytes(): number {
   return getConfig().S3_MAX_UPLOAD_MB * 1024 * 1024;
 }
 
-/** Taille max en Mo pour l'affichage (repli 25 si le stockage n'est pas configuré, sans throw). */
+/**
+ * Taille max en Mo pour l'affichage. Ne throw JAMAIS : repli à 25 si le stockage n'est pas
+ * configuré OU s'il l'est partiellement (`loadStorageEnv` lève dans ce cas). La fiche terrain
+ * appelle ceci en rendu serveur ; une config de stockage incomplète ne doit pas casser une page
+ * de lecture (l'upload, lui, échoue proprement en 503 côté route).
+ */
 export function maxUploadMbForDisplay(): number {
-  return loadStorageEnv()?.S3_MAX_UPLOAD_MB ?? 25;
+  try {
+    return loadStorageEnv()?.S3_MAX_UPLOAD_MB ?? 25;
+  } catch {
+    return 25;
+  }
 }
 
 /** Crée le bucket s'il n'existe pas. Idempotent et mémoïsé (une seule vérification par process). */

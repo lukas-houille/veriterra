@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { isUuid } from '@/lib/uuid';
+import { readCappedBody } from '@/lib/http';
 import { createDocument, listDocuments } from '@/modules/terrains/documents';
 import { maxUploadBytes } from '@/lib/storage/s3';
 import { getTerrain } from '@/modules/terrains/service';
@@ -16,8 +17,8 @@ const CODE_STATUS: Record<string, number> = {
   CONTENT: 400,
 };
 
-// GET /api/terrains/[id]/documents : liste des pièces jointes (la fiche lit aussi le service
-// directement en composant serveur ; cette route sert l'îlot client après upload/suppression).
+// GET /api/terrains/[id]/documents : liste des pièces jointes via l'API. Complément : la fiche
+// lit le service directement en composant serveur et l'îlot client rafraîchit via router.refresh().
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.orgId) {
@@ -57,16 +58,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'Stockage de documents indisponible.' }, { status: 503 });
   }
 
-  // Garde anti-DoS : refuse tôt sur l'en-tête Content-Length (marge pour l'overhead multipart),
-  // avant de bufferiser le corps.
+  // Garde anti-DoS. Le Content-Length permet un refus immédiat, mais il peut être absent
+  // (chunked, HTTP/2), donc la borne AUTORITAIRE est la lecture bornée du flux ci-dessous :
+  // on ne bufferise jamais au-delà de la limite (+ marge pour l'overhead multipart).
+  const cap = maxBytes + 1_000_000;
   const declared = Number(req.headers.get('content-length') ?? '0');
-  if (Number.isFinite(declared) && declared > maxBytes + 1_000_000) {
+  if (Number.isFinite(declared) && declared > cap) {
     return NextResponse.json({ error: 'Fichier trop volumineux.' }, { status: 413 });
   }
 
+  const raw = await readCappedBody(req, cap);
+  if (raw === null) {
+    return NextResponse.json({ error: 'Fichier trop volumineux.' }, { status: 413 });
+  }
+
+  // Parse le multipart depuis le corps déjà borné (l'en-tête Content-Type porte la frontière).
   let form: FormData;
   try {
-    form = await req.formData();
+    form = await new Request('http://internal/upload', {
+      method: 'POST',
+      headers: { 'content-type': req.headers.get('content-type') ?? '' },
+      body: raw.buffer as ArrayBuffer,
+    }).formData();
   } catch {
     return NextResponse.json({ error: 'corps multipart invalide' }, { status: 400 });
   }

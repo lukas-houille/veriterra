@@ -164,8 +164,9 @@ L'exploration est la feature phare. Le parcours : définir mon projet (onboardin
 - Carte avec pins colorés par statut ou score.
 - Filtres synchronisés avec le tableau.
 
-**US-5.3 [MVP] Photos et notes.** Je veux documenter un terrain afin de m'en souvenir.
+**US-5.3 [MVP] Photos et notes. LIVRÉE (photos).** Je veux documenter un terrain afin de m'en souvenir.
 - Photos et notes attachées à un terrain.
+- Photos livrées via le socle stockage objet (voir US-5.8, `feat/terrain-documents`) : dépôt, grille, provenance, suppression. Notes déjà présentes sur la fiche (champ `notes`, US-1.9).
 
 **US-5.4 [V2] Contacts et relances.** Je veux gérer les contacts afin de relancer.
 - Contacts (agent, propriétaire, notaire), relances avec rappel.
@@ -181,11 +182,12 @@ L'exploration est la feature phare. Le parcours : définir mon projet (onboardin
 **US-5.7 [V2] Liens externes multiples.** Je veux rattacher plusieurs annonces (leboncoin, sites immobiliers) afin de suivre un terrain sur toutes ses sources.
 - Au-delà du `lienAnnonce` unique de la fiche (déjà présent), possibilité d'ajouter plusieurs liens nommés, avec la source détectée.
 
-**US-5.8 [V2] Documents attachés au terrain.** Je veux joindre des documents à un terrain (étude de sol, bornage, CU, devis, diagnostic) afin de centraliser le dossier.
+**US-5.8 [V2] Documents attachés au terrain. LIVRÉE.** Je veux joindre des documents à un terrain (étude de sol, bornage, CU, devis, diagnostic) afin de centraliser le dossier.
 - Dépôt de fichiers (PDF, images) rattachés à un terrain, avec type/libellé, provenance (déposé par, date) et taille ; stockés hors base et hors dépôt (stockage objet).
 - Chaque document porte sa source et sa date, cohérent avec la règle des chiffres sourcés (un document est une pièce justificative datée, pas une valeur inventée).
 - État "aucun document" géré proprement.
-- **Décision d'architecture requise** avant implémentation : introduction d'un stockage objet (MinIO/S3), modèle `Document` scopé au tenant (RLS), limites de taille et types autorisés, antivirus/validation d'upload.
+- **Décision d'architecture prise** (`feat/terrain-documents`) : stockage objet **MinIO auto-hébergé** (réseau interne, jamais exposé au navigateur ni à Caddy) ; modèle `TerrainDocument` scopé tenant (RLS ENABLE+FORCE) ; upload et download **par proxy applicatif** (chaque accès ré-authentifié et re-scopé tenant, aucune URL de stockage exposée) ; liste blanche de types (PDF, JPEG, PNG, WebP), taille max configurable, **sniff des octets d'en-tête** (anti-usurpation), en-têtes de download durcis (nosniff, disposition selon la nature).
+- **Reste en suivi** : antivirus ClamAV (arrivera avec US-8.4), miniatures générées, conversion HEIC, purge des objets orphelins à la suppression d'un terrain.
 
 **US-8.4 [LATER] Partage externe d'un document (côté offre).** En tant que propriétaire ou agent, je veux partager un document sur un terrain (ex. une étude de sol) afin d'enrichir le dossier de l'acheteur.
 - Un tiers externe (propriétaire, agent, notaire) dépose un document via un lien de partage dédié et révocable, sans compte inter-organisation.

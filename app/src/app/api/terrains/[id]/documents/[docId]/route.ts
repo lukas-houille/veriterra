@@ -35,9 +35,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
 
   // Les images sont affichées en ligne (grille photos), le reste est téléchargé. filename*
-  // (RFC 5987) transporte le nom accentué sans risque d'échappement.
+  // (RFC 5987) transporte le nom accentué. encodeURIComponent laisse passer quelques caractères
+  // interdits par le grammaire ext-value (' ( ) * !) : on les encode aussi pour un nom fidèle.
   const dispositionType = meta.kind === 'PHOTO' ? 'inline' : 'attachment';
-  const encodedName = encodeURIComponent(meta.filename);
+  const encodedName = encodeURIComponent(meta.filename).replace(
+    /['()*!]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
   const headers = new Headers({
     'Content-Type': meta.contentType,
     'Content-Disposition': `${dispositionType}; filename*=UTF-8''${encodedName}`,

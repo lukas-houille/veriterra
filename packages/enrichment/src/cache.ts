@@ -34,7 +34,9 @@ function servicesCacheKey(input: ServicesInput): string {
 }
 
 function pluCacheKey(input: PluInput): string {
-  return `${PLU_PREFIX}${input.lat.toFixed(4)},${input.lon.toFixed(4)}`;
+  // 5 décimales (~1 m) : le zonage est spatialement DISCONTINU (une parcelle U peut jouxter une
+  // parcelle N), donc on ne mutualise pas entre parcelles voisines comme pour la topographie.
+  return `${PLU_PREFIX}${input.lat.toFixed(5)},${input.lon.toFixed(5)}`;
 }
 
 function dvfCacheKey(input: DvfInput): string {

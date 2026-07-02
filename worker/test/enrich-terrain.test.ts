@@ -141,6 +141,24 @@ describe('runEnrichTerrain', () => {
     expect(svc?.error).toBeTruthy();
   });
 
+  it('une panne GPU (503) écrit un bloc PLU ERROR, jamais un faux « pas de PLU » (règle 3)', async () => {
+    // Les endpoints GPU échouent (transitoire), les autres sources répondent (peu importe le contenu).
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('/api/gpu/')
+          ? new Response('', { status: 503 })
+          : new Response(JSON.stringify({}), { status: 200 }),
+      ),
+    );
+    await expect(
+      runEnrichTerrain({ organizationId: ORG_ID, terrainId: TERRAIN_ID, force: true }),
+    ).rejects.toThrow(/injoignable/i);
+    const plu = await admin.enrichmentBlock.findFirst({ where: { terrainId: TERRAIN_ID, type: 'PLU' } });
+    expect(plu?.status).toBe('ERROR');
+    expect(plu?.error).toBeTruthy();
+  });
+
   it('un terrain inexistant ne produit aucun bloc et ne jette pas', async () => {
     const result = await runEnrichTerrain({ organizationId: ORG_ID, terrainId: '00000000-0000-0000-0000-0000000000ff' });
     expect(result.blocks).toEqual([]);

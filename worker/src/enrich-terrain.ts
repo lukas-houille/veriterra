@@ -255,13 +255,12 @@ async function enrichServices(
     }
     const { data, transientError } = await getServicesCached({ lon: centroid.lon, lat: centroid.lat }, { force });
     const { status, confidence } = summarizeServices(data);
+    // Requête Overpass tout-ou-rien : pas de résultat partiel. Une panne transitoire ne doit
+    // JAMAIS figer un « aucun service » (empty data => note null => OK) : ce serait un faux
+    // rassurant (règle 3). On persiste ERROR et on relance.
     if (transientError) {
-      if (status === 'UNAVAILABLE') {
-        await upsertBlock(db, orgId, terrain.id, type, { status: 'ERROR', source: SERVICES_SOURCE, sourceUrl: SERVICES_SOURCE_URL, error: 'Overpass injoignable' });
-        return { outcome: { type, status: 'ERROR' }, retry: true };
-      }
-      await upsertBlock(db, orgId, terrain.id, type, { status, data: data as unknown as Prisma.InputJsonValue, source: SERVICES_SOURCE, sourceUrl: SERVICES_SOURCE_URL, confidence });
-      return { outcome: { type, status }, retry: true };
+      await upsertBlock(db, orgId, terrain.id, type, { status: 'ERROR', source: SERVICES_SOURCE, sourceUrl: SERVICES_SOURCE_URL, error: 'Overpass injoignable' });
+      return { outcome: { type, status: 'ERROR' }, retry: true };
     }
     await upsertBlock(db, orgId, terrain.id, type, {
       status,

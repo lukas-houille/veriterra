@@ -112,6 +112,24 @@ describe('runEnrichTerrain', () => {
     expect(row?.error).toBeTruthy();
   });
 
+  it('une panne Overpass (503) écrit un bloc SERVICES ERROR, jamais un faux « aucun service » (règle 3)', async () => {
+    // Overpass échoue (transitoire), les autres sources répondent (peu importe le contenu).
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('overpass')
+          ? new Response('', { status: 503 })
+          : new Response(JSON.stringify({}), { status: 200 }),
+      ),
+    );
+    await expect(
+      runEnrichTerrain({ organizationId: ORG_ID, terrainId: TERRAIN_ID, force: true }),
+    ).rejects.toThrow(/injoignable/i);
+    const svc = await admin.enrichmentBlock.findFirst({ where: { terrainId: TERRAIN_ID, type: 'SERVICES' } });
+    expect(svc?.status).toBe('ERROR');
+    expect(svc?.error).toBeTruthy();
+  });
+
   it('un terrain inexistant ne produit aucun bloc et ne jette pas', async () => {
     const result = await runEnrichTerrain({ organizationId: ORG_ID, terrainId: '00000000-0000-0000-0000-0000000000ff' });
     expect(result.blocks).toEqual([]);

@@ -15,6 +15,9 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1078.0",
+    "@deck.gl/core": "^9",
+    "@deck.gl/layers": "^9",
+    "@deck.gl/mapbox": "^9",
     "@turf/convex": "^7.3.5",
     "@turf/helpers": "^7.3.5",
     "@turf/transform-translate": "^7.3.5",

@@ -17,7 +17,7 @@ import {
   UnavailableState,
   type PortfolioStatus,
 } from '@veriterra/ui';
-import type { PenteData, PrixDvfData, RisquesData } from '@veriterra/enrichment';
+import type { PenteData, PrixDvfData, RisquesData, ServicesData } from '@veriterra/enrichment';
 import { auth } from '@/auth';
 import { getTerrain, getTerrainEnrichment } from '@/modules/terrains/service';
 import { listDocuments } from '@/modules/terrains/documents';
@@ -396,6 +396,87 @@ function PenteBlock({ block }: { block: EnrichmentBlockView }) {
   );
 }
 
+function formatDistance(m: number): string {
+  if (m < 1000) return `${nfSurface.format(m)} m`;
+  return `${(m / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km`;
+}
+
+/** Rend le bloc SERVICES (OSM) selon son statut : distance au plus proche par catégorie. */
+function ServicesBlock({ block }: { block: EnrichmentBlockView }) {
+  const title = 'Services de proximité';
+  if (block.status === 'PENDING') {
+    return (
+      <section aria-busy="true">
+        <BlockHeader title={title} />
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-16 animate-pulse rounded-lg border border-border bg-neutral-100" />
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">Recherche des services...</p>
+      </section>
+    );
+  }
+  if (block.status === 'ERROR') {
+    return (
+      <section>
+        <BlockHeader title={title} />
+        <UnavailableState label="Récupération impossible pour l'instant, réessayez avec Actualiser" />
+      </section>
+    );
+  }
+  const data = block.data as ServicesData | null;
+  if (block.status === 'UNAVAILABLE' || !data) {
+    return (
+      <section>
+        <BlockHeader title={title} />
+        <UnavailableState label={data?.note ?? 'Services indisponibles'} />
+      </section>
+    );
+  }
+  const rayon = data.radiusM >= 1000 ? `${(data.radiusM / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km` : `${data.radiusM} m`;
+  const meta = [
+    block.source,
+    block.fetchedAt ? formatDate(block.fetchedAt) : null,
+    block.confidence ? `confiance ${CONFIDENCE_LABEL[block.confidence] ?? block.confidence.toLowerCase()}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <section>
+      <BlockHeader title={title} meta={meta} />
+      <div className="grid gap-3 sm:grid-cols-3">
+        {data.items.map((item) => (
+          <div key={item.key} className="rounded-lg border border-border p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{item.label}</p>
+            {item.nearestM != null ? (
+              <>
+                <p className="mt-1 font-mono text-sm text-foreground">{formatDistance(item.nearestM)}</p>
+                <p className="mt-0.5 text-xs text-neutral-500">
+                  {item.count} dans un rayon de {rayon}
+                </p>
+              </>
+            ) : (
+              <div className="mt-1.5">
+                <UnavailableState label={`Aucun à moins de ${rayon}`} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {block.sourceUrl ? (
+        <p className="mt-2 text-[10.5px] text-neutral-400">
+          Source ·{' '}
+          <a href={block.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">
+            {block.source ?? 'OpenStreetMap'}
+          </a>
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export default async function TerrainPage({
   params,
 }: {
@@ -587,22 +668,14 @@ export default async function TerrainPage({
                   );
                 if (block.type === 'RISQUES') return <RisquesBlock key={block.type} block={block} />;
                 if (block.type === 'PENTE') return <PenteBlock key={block.type} block={block} />;
+                if (block.type === 'SERVICES') return <ServicesBlock key={block.type} block={block} />;
                 return null;
               })}
 
-              {/* Blocs à venir dans les prochaines slices (jamais silencieux, règle n°3). */}
-              <div className="grid gap-4 sm:grid-cols-2">
-                {[
-                  { key: 'plu', title: 'PLU' },
-                  { key: 'services', title: 'Services de proximité' },
-                ].map((item) => (
-                  <div key={item.key}>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                      {item.title}
-                    </p>
-                    <UnavailableState label="À venir" />
-                  </div>
-                ))}
+              {/* Bloc à venir dans la prochaine slice (jamais silencieux, règle n°3). */}
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">PLU</p>
+                <UnavailableState label="À venir" />
               </div>
             </div>
           </TabsContent>

@@ -1,5 +1,5 @@
 import { forOrg, withOrg, type Prisma } from '@veriterra/db';
-import type { PenteData, PrixDvfData, RisquesData } from '@veriterra/enrichment';
+import type { PenteData, PrixDvfData, RisquesData, ServicesData } from '@veriterra/enrichment';
 import type { GeoJsonGeometry } from '@/lib/geo/types';
 import { getEnrichTerrainQueue } from '@/lib/queues';
 import { ensureProjet } from '@/modules/projet/service';
@@ -201,7 +201,7 @@ export async function getTerrainEnrichment(orgId: string, terrainId: string): Pr
     sourceUrl: r.sourceUrl,
     confidence: r.confidence as EnrichmentBlockView['confidence'],
     fetchedAt: r.fetchedAt ? r.fetchedAt.toISOString() : null,
-    data: (r.data ?? null) as RisquesData | PrixDvfData | PenteData | null,
+    data: (r.data ?? null) as RisquesData | PrixDvfData | PenteData | ServicesData | null,
     error: r.error,
   }));
   return buildEnrichmentView(existing);

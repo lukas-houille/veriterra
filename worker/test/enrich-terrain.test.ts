@@ -59,6 +59,13 @@ describe('runEnrichTerrain', () => {
           // 5 altitudes [centre, est, ouest, nord, sud] : pente descendant vers le sud.
           return new Response(JSON.stringify({ elevations: [100, 100, 100, 110, 90] }), { status: 200 });
         }
+        if (url.includes('overpass')) {
+          // Un commerce et une école proches du centroïde du terrain (Lyon 69381).
+          return new Response(JSON.stringify({ elements: [
+            { lat: 45.7508, lon: 4.8305, tags: { shop: 'bakery' } },
+            { lat: 45.7512, lon: 4.8305, tags: { amenity: 'school' } },
+          ] }), { status: 200 });
+        }
         const body = url.includes('/rga')
           ? { codeExposition: '2', exposition: 'Exposition moyenne' }
           : url.includes('/zonage_sismique')
@@ -75,6 +82,7 @@ describe('runEnrichTerrain', () => {
       { type: 'RISQUES', status: 'OK' },
       { type: 'PRIX_DVF', status: 'OK' },
       { type: 'PENTE', status: 'OK' },
+      { type: 'SERVICES', status: 'OK' },
     ]);
 
     const risques = await admin.enrichmentBlock.findFirst({ where: { terrainId: TERRAIN_ID, type: 'RISQUES' } });

@@ -7,8 +7,12 @@ import type {
 import {
   DVF_SOURCE,
   DVF_SOURCE_URL,
+  PENTE_SOURCE,
+  PENTE_SOURCE_URL,
+  getPenteCached,
   getPrixDvfCached,
   getRisquesGeorisquesCached,
+  summarizePente,
   summarizePrixDvf,
   summarizeRisques,
   type DvfSection,
@@ -184,11 +188,54 @@ async function enrichPrixDvf(
   }
 }
 
+/** Bloc PENTE (RGE ALTI : altitude, pente, exposition). Ne throw pas : signale `retry`. */
+async function enrichPente(
+  db: TenantDb,
+  orgId: string,
+  terrain: TerrainWithParcelles,
+  force: boolean,
+): Promise<BlockRun> {
+  const type: EnrichmentType = 'PENTE';
+  try {
+    let centroid: { lon: number; lat: number } | null = null;
+    for (const p of terrain.parcelles) {
+      centroid = centroidOf(p.geojson);
+      if (centroid) break;
+    }
+    if (!centroid) {
+      await upsertBlock(db, orgId, terrain.id, type, { status: 'UNAVAILABLE', source: PENTE_SOURCE, sourceUrl: PENTE_SOURCE_URL });
+      return { outcome: { type, status: 'UNAVAILABLE' }, retry: false };
+    }
+    const { data, transientError } = await getPenteCached({ lon: centroid.lon, lat: centroid.lat }, { force });
+    const { status, confidence } = summarizePente(data);
+    if (transientError) {
+      if (status === 'UNAVAILABLE') {
+        await upsertBlock(db, orgId, terrain.id, type, { status: 'ERROR', source: PENTE_SOURCE, sourceUrl: PENTE_SOURCE_URL, error: 'RGE ALTI injoignable' });
+        return { outcome: { type, status: 'ERROR' }, retry: true };
+      }
+      await upsertBlock(db, orgId, terrain.id, type, { status, data: data as unknown as Prisma.InputJsonValue, source: PENTE_SOURCE, sourceUrl: PENTE_SOURCE_URL, confidence });
+      return { outcome: { type, status }, retry: true };
+    }
+    await upsertBlock(db, orgId, terrain.id, type, {
+      status,
+      data: data as unknown as Prisma.InputJsonValue,
+      source: PENTE_SOURCE,
+      sourceUrl: PENTE_SOURCE_URL,
+      confidence,
+    });
+    return { outcome: { type, status }, retry: false };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'erreur inconnue';
+    await upsertBlock(db, orgId, terrain.id, type, { status: 'ERROR', source: PENTE_SOURCE, sourceUrl: PENTE_SOURCE_URL, error: message }).catch(() => undefined);
+    return { outcome: { type, status: 'ERROR' }, retry: true };
+  }
+}
+
 /**
  * Enrichit un terrain : lit le terrain (scopé tenant via forOrg), récupère et persiste chaque
  * bloc sourcé de façon indépendante (une panne d'une source ne bloque pas l'autre). Relance
  * (throw) en fin si au moins un bloc a subi une panne transitoire, pour que BullMQ rejoue.
- * En Tranche 2 : blocs RISQUES (Géorisques) et PRIX_DVF (Etalab).
+ * En Tranche 2 : blocs RISQUES (Géorisques), PRIX_DVF (Etalab) et PENTE (RGE ALTI).
  */
 export async function runEnrichTerrain(data: EnrichTerrainJobData): Promise<EnrichTerrainJobResult> {
   const { organizationId, terrainId, force } = data;
@@ -205,6 +252,7 @@ export async function runEnrichTerrain(data: EnrichTerrainJobData): Promise<Enri
   const runs: BlockRun[] = [
     await enrichRisques(db, organizationId, terrain, Boolean(force)),
     await enrichPrixDvf(db, organizationId, terrain, Boolean(force)),
+    await enrichPente(db, organizationId, terrain, Boolean(force)),
   ];
   const result: EnrichTerrainJobResult = {
     terrainId,

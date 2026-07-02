@@ -49,6 +49,22 @@ export interface PrixDvfData {
   note: string | null;
 }
 
+/** Payload du bloc PENTE (topographie dérivée du RGE ALTI). Valeurs nulles = indisponible (règle 3). */
+export interface PenteData {
+  /** Altitude au centre de la parcelle (m), arrondie. */
+  altitudeM: number | null;
+  /** Pente en pourcentage (dénivelé / distance horizontale). */
+  pentePct: number | null;
+  /** Pente en degrés. */
+  penteDeg: number | null;
+  /** Exposition (direction vers laquelle le terrain descend) : "Sud", "Sud-Ouest"… ou null si plat. */
+  expositionLabel: string | null;
+  /** Cap boussole de l'exposition (0 = Nord, sens horaire), null si terrain plat ou indisponible. */
+  expositionBearingDeg: number | null;
+  /** Raison d'indisponibilité (hors couverture RGE ALTI), jamais un chiffre inventé. */
+  note: string | null;
+}
+
 /** Statut de synthèse d'un bloc, aligné sur l'enum Prisma EnrichmentStatus. */
 export type BlockStatus = 'OK' | 'UNAVAILABLE' | 'ERROR';
 

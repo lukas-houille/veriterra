@@ -17,7 +17,7 @@ import {
   UnavailableState,
   type PortfolioStatus,
 } from '@veriterra/ui';
-import type { PrixDvfData, RisquesData } from '@veriterra/enrichment';
+import type { PenteData, PrixDvfData, RisquesData } from '@veriterra/enrichment';
 import { auth } from '@/auth';
 import { getTerrain, getTerrainEnrichment } from '@/modules/terrains/service';
 import { listDocuments } from '@/modules/terrains/documents';
@@ -312,6 +312,90 @@ function PrixDvfBlock({
   );
 }
 
+/** Sévérité indicative de la pente pour la construction (informatif, pas un chiffre inventé). */
+function penteSeverity(pct: number): 'success' | 'info' | 'warning' | 'danger' {
+  if (pct < 5) return 'success';
+  if (pct < 10) return 'info';
+  if (pct < 15) return 'warning';
+  return 'danger';
+}
+
+/** Rend le bloc PENTE (RGE ALTI) selon son statut : altitude, pente et exposition dérivées. */
+function PenteBlock({ block }: { block: EnrichmentBlockView }) {
+  const title = 'Pente et exposition';
+  if (block.status === 'PENDING') {
+    return (
+      <section aria-busy="true">
+        <BlockHeader title={title} />
+        <div className="h-20 animate-pulse rounded-lg border border-border bg-neutral-100" />
+        <p className="mt-2 text-xs text-muted-foreground">Calcul de la topographie...</p>
+      </section>
+    );
+  }
+  if (block.status === 'ERROR') {
+    return (
+      <section>
+        <BlockHeader title={title} />
+        <UnavailableState label="Récupération impossible pour l'instant, réessayez avec Actualiser" />
+      </section>
+    );
+  }
+  const data = block.data as PenteData | null;
+  if (block.status === 'UNAVAILABLE' || !data || data.pentePct == null) {
+    return (
+      <section>
+        <BlockHeader title={title} />
+        <UnavailableState label={data?.note ?? 'Topographie indisponible'} />
+      </section>
+    );
+  }
+  const meta = [
+    block.source,
+    block.fetchedAt ? formatDate(block.fetchedAt) : null,
+    block.confidence ? `confiance ${CONFIDENCE_LABEL[block.confidence] ?? block.confidence.toLowerCase()}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const pentePct = data.pentePct.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+  const penteDeg = data.penteDeg != null ? data.penteDeg.toLocaleString('fr-FR', { maximumFractionDigits: 1 }) : null;
+
+  return (
+    <section>
+      <BlockHeader title={title} meta={meta} />
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Pente</p>
+          <div className="mt-1.5">
+            <AlertChip severity={penteSeverity(data.pentePct)}>
+              {pentePct} %{penteDeg ? ` (${penteDeg}°)` : ''}
+            </AlertChip>
+          </div>
+        </div>
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Exposition</p>
+          <p className="mt-1 text-sm text-foreground">
+            {data.expositionLabel ?? 'Terrain plat, sans exposition marquée'}
+          </p>
+        </div>
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Altitude</p>
+          <p className="mt-1 font-mono text-sm text-foreground">
+            {data.altitudeM != null ? `${nfSurface.format(data.altitudeM)} m` : 'indisponible'}
+          </p>
+        </div>
+      </div>
+      {block.sourceUrl ? (
+        <p className="mt-2 text-[10.5px] text-neutral-400">
+          Source ·{' '}
+          <a href={block.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">
+            {block.source ?? 'RGE ALTI'}
+          </a>
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export default async function TerrainPage({
   params,
 }: {
@@ -502,6 +586,7 @@ export default async function TerrainPage({
                     />
                   );
                 if (block.type === 'RISQUES') return <RisquesBlock key={block.type} block={block} />;
+                if (block.type === 'PENTE') return <PenteBlock key={block.type} block={block} />;
                 return null;
               })}
 
@@ -509,7 +594,7 @@ export default async function TerrainPage({
               <div className="grid gap-4 sm:grid-cols-2">
                 {[
                   { key: 'plu', title: 'PLU' },
-                  { key: 'pente', title: 'Pente et services' },
+                  { key: 'services', title: 'Services de proximité' },
                 ].map((item) => (
                   <div key={item.key}>
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">

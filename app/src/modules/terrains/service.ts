@@ -2,7 +2,9 @@ import { forOrg, withOrg, type Prisma } from '@veriterra/db';
 import type { PenteData, PluData, PrixDvfData, RisquesData, ServicesData } from '@veriterra/enrichment';
 import type { GeoJsonGeometry } from '@/lib/geo/types';
 import { getEnrichTerrainQueue } from '@/lib/queues';
-import { ensureProjet } from '@/modules/projet/service';
+import { ensureProjet, getActiveProjet } from '@/modules/projet/service';
+import type { ProjetSummary } from '@/modules/projet/types';
+import { scoreTerrain, type ScoreResult, type ScoringInput } from './scoring';
 import { EXPECTED_ENRICHMENT_TYPES, buildEnrichmentView } from './enrichment-view';
 import type {
   CreateTerrainInput,
@@ -267,4 +269,68 @@ export async function updateTerrain(
     throw e;
   }
   return getTerrain(orgId, id);
+}
+
+// ---------- Scoring (Tranche 3) : dérivé des données déjà sourcées, calculé à la lecture ----------
+
+/** Construit l'entrée du moteur de score depuis un terrain, le projet et ses blocs (par type). */
+function toScoringInput(
+  terrain: Pick<TerrainSummary, 'prixDemande' | 'surfaceTotaleM2'>,
+  projet: ProjetSummary | null,
+  blocks: Array<Pick<EnrichmentBlockView, 'type' | 'data'>>,
+): ScoringInput {
+  const dataByType = new Map(blocks.map((b) => [b.type, b.data ?? null]));
+  const get = (type: string) => dataByType.get(type) ?? null;
+  return {
+    prixDemande: terrain.prixDemande,
+    surfaceTotaleM2: terrain.surfaceTotaleM2,
+    budgetMax: projet?.budgetMax ?? null,
+    surfaceMinM2: projet?.surfaceMinM2 ?? null,
+    surfaceMaxM2: projet?.surfaceMaxM2 ?? null,
+    risques: get('RISQUES') as ScoringInput['risques'],
+    prixDvf: get('PRIX_DVF') as ScoringInput['prixDvf'],
+    pente: get('PENTE') as ScoringInput['pente'],
+    services: get('SERVICES') as ScoringInput['services'],
+    plu: get('PLU') as ScoringInput['plu'],
+  };
+}
+
+/** Score d'un terrain à partir d'une vue déjà chargée (fiche : évite de refetcher l'enrichissement). */
+export function scoreTerrainView(
+  terrain: Pick<TerrainSummary, 'prixDemande' | 'surfaceTotaleM2'>,
+  projet: ProjetSummary | null,
+  blocks: Array<Pick<EnrichmentBlockView, 'type' | 'data'>>,
+): ScoreResult {
+  return scoreTerrain(toScoringInput(terrain, projet, blocks));
+}
+
+/** Terrain enrichi de son score global (tableau comparatif du dashboard). */
+export interface TerrainWithScore extends TerrainSummary {
+  score: number | null;
+  evaluated: number;
+  redFlags: number;
+}
+
+/**
+ * Liste les terrains avec leur score global (US-3.3). Charge en UN SEUL findMany tous les blocs
+ * d'enrichissement de l'organisation (scopé tenant via forOrg, pas de N+1), les regroupe par
+ * terrain, et calcule chaque score relatif au projet actif.
+ */
+export async function listTerrainsWithScores(orgId: string): Promise<TerrainWithScore[]> {
+  const [terrains, projet] = await Promise.all([listTerrains(orgId), getActiveProjet(orgId)]);
+  const blockRows = (await forOrg(orgId).enrichmentBlock.findMany({
+    select: { terrainId: true, type: true, data: true },
+  })) as unknown as Array<{ terrainId: string; type: string; data: unknown }>;
+
+  const byTerrain = new Map<string, Array<Pick<EnrichmentBlockView, 'type' | 'data'>>>();
+  for (const b of blockRows) {
+    const arr = byTerrain.get(b.terrainId) ?? [];
+    arr.push({ type: b.type, data: (b.data ?? null) as EnrichmentBlockView['data'] });
+    byTerrain.set(b.terrainId, arr);
+  }
+
+  return terrains.map((t) => {
+    const result = scoreTerrainView(t, projet, byTerrain.get(t.id) ?? []);
+    return { ...t, score: result.global, evaluated: result.evaluated, redFlags: result.redFlags.length };
+  });
 }

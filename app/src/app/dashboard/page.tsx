@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { CSSProperties } from 'react';
 import { auth, signOut } from '@/auth';
-import { listTerrains } from '@/modules/terrains/service';
+import { listTerrainsWithScores } from '@/modules/terrains/service';
 import { getActiveProjet } from '@/modules/projet/service';
 import { DashboardMap } from '@/components/map/dashboard-map';
 import { TerrainsTable } from './terrains-table';
@@ -100,7 +100,7 @@ export default async function DashboardPage() {
   const projet = await getActiveProjet(session.user.orgId);
   if (!projet) redirect('/onboarding');
 
-  const terrains = await listTerrains(session.user.orgId);
+  const terrains = await listTerrainsWithScores(session.user.orgId);
   const resume = projetResume(projet);
   const total = terrains.length;
 

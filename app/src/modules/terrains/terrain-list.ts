@@ -10,9 +10,13 @@ export interface TerrainListItem {
   prixDemande: number | null;
   surfaceTotaleM2: number;
   createdAt: string; // ISO 8601
+  /** Score global 0-100, ou null si pas encore évalué (jamais 0 par défaut, règle 3). */
+  score?: number | null;
+  /** Nombre d'alertes rouges. */
+  redFlags?: number;
 }
 
-export type TerrainSortKey = 'recent' | 'surface' | 'prixTotal' | 'prixM2';
+export type TerrainSortKey = 'recent' | 'score' | 'surface' | 'prixTotal' | 'prixM2';
 
 /** Prix au m² dérivé, ou null si prix absent ou surface nulle (jamais 0 par défaut). */
 export function prixM2(item: Pick<TerrainListItem, 'prixDemande' | 'surfaceTotaleM2'>): number | null {
@@ -57,6 +61,9 @@ export function sortTerrains<T extends TerrainListItem>(items: T[], key: Terrain
   };
   const copy = [...items];
   switch (key) {
+    case 'score':
+      // Score le plus haut d'abord ; les terrains non évalués (null) en fin (jamais 0).
+      return copy.sort((a, b) => desc(a.score ?? null, b.score ?? null, a, b));
     case 'surface':
       return copy.sort((a, b) => desc(a.surfaceTotaleM2, b.surfaceTotaleM2, a, b));
     case 'prixTotal':

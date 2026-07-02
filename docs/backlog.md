@@ -128,20 +128,19 @@ L'exploration est la feature phare. Le parcours : définir mon projet (onboardin
 
 ## Epic 3 — Scoring et comparaison
 
-**US-3.1 [MVP] Score hybride.** Je veux un score afin de prioriser.
-- Critères notés sur 100, pondérés (poids réglables), score global calculé.
-- Override manuel par critère, avec trace de la valeur d'origine.
+**US-3.1 [MVP] Score hybride. PARTIELLE (calcul livré, override à venir).** Je veux un score afin de prioriser.
+- Critères notés sur 100, pondérés, score global calculé. **LIVRÉ** (`feat/scoring`) : moteur pur, 8 critères de la scorecard notés depuis les données sourcées + le projet, critère sans donnée non évalué (jamais 0), global renormalisé sur les critères évalués.
+- Override manuel par critère, avec trace de la valeur d'origine. **RESTE À FAIRE** (demande un modèle `Score` persisté).
 
-**US-3.2 [MVP] Affichage du score.** Je veux voir le score afin de le lire vite.
-- Jauge globale 0-100 et radar par catégorie sur la fiche.
+**US-3.2 [MVP] Affichage du score. LIVRÉE (jauge + détail ; radar à venir).** Je veux voir le score afin de le lire vite.
+- Jauge globale 0-100 sur la fiche (`ScoreGauge`) + détail par critère (barre + base sourcée) + alertes rouges. **LIVRÉ**. Radar SVG par catégorie : fast-follow.
 
-**US-3.3 [MVP] Tableau comparatif.** Je veux comparer mes terrains afin de choisir.
-- Tableau triable par n'importe quelle colonne (prix, score, pente, etc.).
-- Filtres par statut, commune, budget, score.
+**US-3.3 [MVP] Tableau comparatif. PARTIELLE (colonne score + tri livrés).** Je veux comparer mes terrains afin de choisir.
+- Colonne Score + tri par score (non évalués en fin) + badge d'alertes sur le dashboard, plus recherche et tris existants (US-5.9). **LIVRÉ**.
+- Filtres avancés (statut, commune, budget, score en panneau) au-delà de la recherche + tri : fast-follow.
 
-**US-3.4 [MVP] Alertes rouges.** Je veux voir les points bloquants afin de ne pas perdre de temps.
-- Drapeaux rouges (non constructible, inondable, hors DVF) visibles sur fiche, table et carte.
-- Les alertes pèsent sur le score sans l'annuler, sans exclure le terrain.
+**US-3.4 [MVP] Alertes rouges. LIVRÉE (fiche + table).** Je veux voir les points bloquants afin de ne pas perdre de temps.
+- Drapeaux rouges (non constructible, inondable, hors DVF) sur la fiche et le tableau ; ils pèsent sur le score sans l'annuler ni exclure le terrain. **LIVRÉ**. Indicateur sur la carte : fast-follow.
 
 **US-3.5 [MVP] Fiche projet.** Je veux définir mon projet afin de scorer relativement à mon besoin.
 - Fourchette de m² et budget par défaut ; programme détaillé optionnel.

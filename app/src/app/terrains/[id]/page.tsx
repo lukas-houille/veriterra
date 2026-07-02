@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
   DataBlock,
+  ScoreGauge,
   StatusPin,
   Tabs,
   TabsContent,
@@ -19,7 +20,9 @@ import {
 } from '@veriterra/ui';
 import type { PenteData, PluData, PrixDvfData, RisquesData, ServicesData } from '@veriterra/enrichment';
 import { auth } from '@/auth';
-import { getTerrain, getTerrainEnrichment } from '@/modules/terrains/service';
+import { getTerrain, getTerrainEnrichment, scoreTerrainView } from '@/modules/terrains/service';
+import { getActiveProjet } from '@/modules/projet/service';
+import { CRITERIA_COUNT, type ScoreResult } from '@/modules/terrains/scoring';
 import { listDocuments } from '@/modules/terrains/documents';
 import { maxUploadMbForDisplay } from '@/lib/storage/s3';
 import type { EnrichmentBlockView } from '@/modules/terrains/types';
@@ -584,6 +587,63 @@ function PluBlock({ block }: { block: EnrichmentBlockView }) {
   );
 }
 
+/** Carte de score (US-3.1/3.2/3.4) : jauge globale, détail par critère sourcé, alertes rouges. */
+function ScoreCard({ score }: { score: ScoreResult }) {
+  return (
+    <section className="rounded-lg border border-border p-4">
+      <BlockHeader title="Score" meta="dérivé des données sourcées, relatif au projet" />
+      <div className="flex flex-wrap items-start gap-5">
+        <div className="flex flex-col items-center">
+          {score.global != null ? (
+            <ScoreGauge value={score.global} size={116} />
+          ) : (
+            <div className="flex h-[116px] w-[116px] items-center justify-center rounded-full border border-dashed border-border p-3 text-center text-xs text-neutral-400">
+              En attente de données
+            </div>
+          )}
+          <p className="mt-1 text-xs text-neutral-500">
+            {score.evaluated}/{CRITERIA_COUNT} critères évalués
+          </p>
+        </div>
+
+        <div className="min-w-[240px] flex-1">
+          {score.redFlags.length > 0 ? (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {score.redFlags.map((f) => (
+                <AlertChip key={f.key} severity="danger">
+                  {f.label}
+                </AlertChip>
+              ))}
+            </div>
+          ) : null}
+          <div className="flex flex-col gap-2">
+            {score.criteria.map((c) => (
+              <div key={c.key} className="flex items-center gap-3">
+                <div className="w-44 shrink-0">
+                  <p className="text-xs font-medium text-neutral-600">{c.label}</p>
+                  <p className="truncate text-[10.5px] text-neutral-400" title={c.basis}>
+                    {c.basis}
+                  </p>
+                </div>
+                {c.score != null ? (
+                  <>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-100">
+                      <div className="h-full rounded-full bg-indigo-500" style={{ width: `${c.score}%` }} />
+                    </div>
+                    <span className="w-7 shrink-0 text-right font-mono text-xs text-neutral-700">{c.score}</span>
+                  </>
+                ) : (
+                  <span className="flex-1 text-xs italic text-neutral-400">non évalué</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default async function TerrainPage({
   params,
 }: {
@@ -604,6 +664,8 @@ export default async function TerrainPage({
   const enrichment = await getTerrainEnrichment(session.user.orgId, id);
   const documents = await listDocuments(session.user.orgId, id);
   const maxUploadMb = maxUploadMbForDisplay();
+  const projet = await getActiveProjet(session.user.orgId);
+  const score = scoreTerrainView(terrain, projet, enrichment.blocks);
 
   const statusPin = STATUS_PIN[terrain.status] ?? 'à étudier';
   const statusLabel = STATUS_LABEL[terrain.status] ?? terrain.status;
@@ -665,6 +727,9 @@ export default async function TerrainPage({
           {/* ----- Onglet Aperçu : données rapides sourcées ----- */}
           <TabsContent value="apercu">
             <div className="flex flex-col gap-6">
+              {/* Score de synthèse (Tranche 3) */}
+              <ScoreCard score={score} />
+
               {/* Surface et prix */}
               <div className="grid gap-4 sm:grid-cols-2">
                 <DataBlock

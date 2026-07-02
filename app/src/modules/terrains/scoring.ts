@@ -66,7 +66,8 @@ const nf1 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
 
 function scorePrix(input: ScoringInput): { score: number | null; basis: string } {
   const est = input.prixDvf?.estimationM2 ?? null;
-  if (est == null || input.prixDemande == null || input.surfaceTotaleM2 <= 0) {
+  // est <= 0 (théoriquement impossible côté DVF) traité comme absent, jamais un « au marché » fabriqué.
+  if (est == null || est <= 0 || input.prixDemande == null || input.surfaceTotaleM2 <= 0) {
     return { score: null, basis: 'estimation DVF ou prix demandé indisponible' };
   }
   const estTotal = est * input.surfaceTotaleM2;

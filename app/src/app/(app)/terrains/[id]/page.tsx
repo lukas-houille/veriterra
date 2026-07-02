@@ -567,55 +567,38 @@ function PluBlock({ block }: { block: EnrichmentBlockView }) {
 /** Carte de score (US-3.1/3.2/3.4) : jauge globale, détail par critère sourcé, alertes rouges. */
 function ScoreCard({ score }: { score: ScoreResult }) {
   return (
-    <section className="rounded-lg border border-border p-4">
-      <BlockHeader title="Score" meta="dérivé des données sourcées, relatif au projet" />
-      <div className="flex flex-wrap items-start gap-5">
-        <div className="flex flex-col items-center">
-          {score.global != null ? (
-            <ScoreGauge value={score.global} size={116} />
-          ) : (
-            <div className="flex h-[116px] w-[116px] items-center justify-center rounded-full border border-dashed border-border p-3 text-center text-xs text-neutral-400">
-              En attente de données
-            </div>
-          )}
-          <p className="mt-1 text-xs text-neutral-500">
-            {score.evaluated}/{CRITERIA_COUNT} critères évalués
-          </p>
+    <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+      <BlockHeader title="Score par catégorie" meta="dérivé des données sourcées, relatif au projet" />
+      {score.redFlags.length > 0 ? (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {score.redFlags.map((f) => (
+            <AlertChip key={f.key} severity="danger">
+              {f.label}
+            </AlertChip>
+          ))}
         </div>
-
-        <div className="min-w-[240px] flex-1">
-          {score.redFlags.length > 0 ? (
-            <div className="mb-3 flex flex-wrap gap-2">
-              {score.redFlags.map((f) => (
-                <AlertChip key={f.key} severity="danger">
-                  {f.label}
-                </AlertChip>
-              ))}
+      ) : null}
+      <div className="flex flex-col gap-2">
+        {score.criteria.map((c) => (
+          <div key={c.key} className="flex items-center gap-3">
+            <div className="w-44 shrink-0">
+              <p className="text-xs font-medium text-neutral-600">{c.label}</p>
+              <p className="truncate text-[10.5px] text-neutral-400" title={c.basis}>
+                {c.basis}
+              </p>
             </div>
-          ) : null}
-          <div className="flex flex-col gap-2">
-            {score.criteria.map((c) => (
-              <div key={c.key} className="flex items-center gap-3">
-                <div className="w-44 shrink-0">
-                  <p className="text-xs font-medium text-neutral-600">{c.label}</p>
-                  <p className="truncate text-[10.5px] text-neutral-400" title={c.basis}>
-                    {c.basis}
-                  </p>
+            {c.score != null ? (
+              <>
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-100">
+                  <div className="h-full rounded-full bg-indigo-500" style={{ width: `${c.score}%` }} />
                 </div>
-                {c.score != null ? (
-                  <>
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-100">
-                      <div className="h-full rounded-full bg-indigo-500" style={{ width: `${c.score}%` }} />
-                    </div>
-                    <span className="w-7 shrink-0 text-right font-mono text-xs text-neutral-700">{c.score}</span>
-                  </>
-                ) : (
-                  <span className="flex-1 text-xs italic text-neutral-400">non évalué</span>
-                )}
-              </div>
-            ))}
+                <span className="w-7 shrink-0 text-right font-mono text-xs text-neutral-700">{c.score}</span>
+              </>
+            ) : (
+              <span className="flex-1 text-xs italic text-neutral-400">non évalué</span>
+            )}
           </div>
-        </div>
+        ))}
       </div>
     </section>
   );
@@ -646,11 +629,20 @@ export default async function TerrainPage({
 
   const status = statusMeta(terrain.status);
   const createdLabel = formatDate(terrain.createdAt);
+  // Résumé de tête (maquette) : prix au m² dérivé et réf. cadastrale, indisponibles si absents (règle 3).
+  const pm2 =
+    terrain.prixDemande != null && terrain.surfaceTotaleM2 > 0
+      ? Math.round(terrain.prixDemande / terrain.surfaceTotaleM2)
+      : null;
+  const p0 = terrain.parcelles[0];
+  const refCadastrale = p0
+    ? `${p0.section} ${p0.numero}${terrain.parcelles.length > 1 ? ` +${terrain.parcelles.length - 1}` : ''}`
+    : null;
 
   return (
     <div>
       <div className="mx-auto w-full max-w-4xl px-6 py-8">
-        {/* En-tête */}
+        {/* En-tête : identité, score global et résumé sourcé (façon maquette). */}
         <div className="mb-6">
           <Link
             href="/dashboard"
@@ -660,17 +652,66 @@ export default async function TerrainPage({
             Retour au tableau de bord
           </Link>
 
-          <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                {terrain.label}
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground">{terrain.address}</p>
-            </div>
-            <span className="inline-flex items-center gap-2">
-              <StatusPin status={status.pin} />
+          <div className="mt-4 rounded-lg border border-border bg-card p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <StatusPin status={status.pin} className="mt-1.5" />
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tight text-foreground">{terrain.label}</h1>
+                  <p className="mt-1 text-sm text-muted-foreground">{terrain.address}</p>
+                </div>
+              </div>
               <Badge variant={status.badge}>{status.label}</Badge>
-            </span>
+            </div>
+
+            <div className="mt-6 flex flex-col gap-6 sm:flex-row sm:items-center">
+              <div className="flex shrink-0 flex-col items-center">
+                {score.global != null ? (
+                  <ScoreGauge value={score.global} size={132} />
+                ) : (
+                  <div className="flex h-[132px] w-[132px] items-center justify-center rounded-full border border-dashed border-border p-4 text-center text-xs text-neutral-400">
+                    En attente de données
+                  </div>
+                )}
+                <p className="mt-2 text-center text-xs font-medium text-neutral-500">
+                  Score global sur 100 · {score.evaluated}/{CRITERIA_COUNT} critères
+                </p>
+              </div>
+
+              <div className="grid flex-1 gap-3 sm:grid-cols-2">
+                <DataBlock
+                  label="Surface totale"
+                  value={formatSurface(terrain.surfaceTotaleM2)}
+                  source="Cadastre"
+                  date={createdLabel}
+                  confidence="élevée"
+                />
+                <DataBlock
+                  label="Prix demandé"
+                  value={terrain.prixDemande != null ? nfPrix.format(terrain.prixDemande) : ''}
+                  source="Annonce"
+                  date={createdLabel}
+                  confidence="moyenne"
+                  unavailable={terrain.prixDemande == null}
+                />
+                <DataBlock
+                  label="Prix au m²"
+                  value={pm2 != null ? `${nfSurface.format(pm2)} €` : ''}
+                  source="Dérivé"
+                  date={createdLabel}
+                  confidence="moyenne"
+                  unavailable={pm2 == null}
+                />
+                <DataBlock
+                  label="Réf. cadastrale"
+                  value={refCadastrale ?? ''}
+                  source="Cadastre"
+                  date={createdLabel}
+                  confidence="élevée"
+                  unavailable={refCadastrale == null}
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -702,35 +743,8 @@ export default async function TerrainPage({
           {/* ----- Onglet Aperçu : données rapides sourcées ----- */}
           <TabsContent value="apercu">
             <div className="flex flex-col gap-6">
-              {/* Score de synthèse (Tranche 3) */}
+              {/* Score par catégorie (Tranche 3) : le score global et le résumé sont en tête. */}
               <ScoreCard score={score} />
-
-              {/* Surface et prix */}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <DataBlock
-                  label="Surface totale"
-                  value={formatSurface(terrain.surfaceTotaleM2)}
-                  source="Cadastre"
-                  date={createdLabel}
-                  confidence="élevée"
-                />
-                {terrain.prixDemande != null ? (
-                  <DataBlock
-                    label="Prix demandé"
-                    value={nfPrix.format(terrain.prixDemande)}
-                    source="Annonce"
-                    date={createdLabel}
-                    confidence="moyenne"
-                  />
-                ) : (
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                      Prix demandé
-                    </p>
-                    <UnavailableState />
-                  </div>
-                )}
-              </div>
 
               {/* Parcelles */}
               <section>

@@ -37,3 +37,6 @@ const FALLBACK: StatusMeta = STATUS.A_ETUDIER;
 export function statusMeta(status: string): StatusMeta {
   return STATUS[status as PortfolioStatusKey] ?? { ...FALLBACK, label: status };
 }
+
+/** Tous les statuts, dans l'ordre d'affichage (chips, légendes). */
+export const STATUS_LIST: StatusMeta[] = Object.values(STATUS).sort((a, b) => a.order - b.order);

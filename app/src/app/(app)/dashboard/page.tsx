@@ -1,39 +1,19 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Button, StatusPin } from '@veriterra/ui';
 import { auth } from '@/auth';
 import { listTerrainsWithScores } from '@/modules/terrains/service';
 import { getActiveProjet } from '@/modules/projet/service';
+import { STATUS_LIST } from '@/modules/terrains/status';
 import { DashboardMap } from '@/components/map/dashboard-map';
 import { TerrainsTable } from './terrains-table';
 
 // Tableau de bord des terrains du projet (Tranche 1, US-5.2). Composant serveur : lit la
 // session (tenant garanti par proxy.ts), exige un projet (sinon onboarding), et charge les
-// terrains de l'organisation directement via le service.
-//
-// Reskin fidèle à la maquette designée (docs/design/handoff/Dashboard portefeuille.dc.html) :
-// en-tête, résumé projet, carte, tableau des terrains et statuts colorés. La logique
-// (session, garde onboarding, liens, déconnexion, carte MapLibre) est préservée à
-// l'identique. Conformément à la règle « pas de donnée par défaut silencieuse », seules les
-// colonnes dont la source réelle existe sont affichées (surface, prix, prix au m² dérivé),
-// et un prix absent est marqué « Indisponible ».
-
-const SANS = "'Archivo', system-ui, sans-serif";
-const MONO = "'Spline Sans Mono', ui-monospace, monospace";
-
-/** Styles de statut alignés sur la maquette (couleur de texte + fond de badge). */
-const STATUS_STYLE: Record<string, { label: string; color: string; bg: string }> = {
-  A_ETUDIER: { label: 'À étudier', color: '#98A0B0', bg: '#ECEEF2' },
-  PROMETTEUR: { label: 'Prometteur', color: '#2E7D5B', bg: '#E7F2EC' },
-  RESERVE: { label: 'Réservé', color: '#DB9B2C', bg: '#FBF2DD' },
-  ECARTE: { label: 'Écarté', color: '#C0432E', bg: '#F8E7E2' },
-};
-const STATUS_ORDER = ['A_ETUDIER', 'PROMETTEUR', 'RESERVE', 'ECARTE'];
-
-const STATUS_FALLBACK = { label: 'À étudier', color: '#98A0B0', bg: '#ECEEF2' };
-
-function statusStyle(status: string): { label: string; color: string; bg: string } {
-  return STATUS_STYLE[status] ?? STATUS_FALLBACK;
-}
+// terrains de l'organisation directement via le service. Rendu en tokens du design system
+// (Card/Button/StatusPin/Badge), sans hex inline, sous le shell commun. Conformément à la
+// règle « pas de donnée par défaut silencieuse », seules les colonnes dont la source réelle
+// existe sont affichées, et un prix absent est marqué « Indisponible ».
 
 const surfaceFormat = new Intl.NumberFormat('fr-FR');
 const prixFormat = new Intl.NumberFormat('fr-FR', {
@@ -74,224 +54,85 @@ export default async function DashboardPage() {
   for (const t of terrains) counts[t.status] = (counts[t.status] ?? 0) + 1;
 
   return (
-    <>
-      {/* TITRE + BARRE */}
-      <div style={{ padding: '22px 22px 0' }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-end',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '10px',
-            marginBottom: '16px',
-          }}
-        >
-          <div>
-            <h1 style={{ margin: '0 0 3px', fontSize: '25px', fontWeight: 700, letterSpacing: '-0.02em' }}>
-              Terrains du projet
-            </h1>
-            <div style={{ fontSize: '13.5px', color: '#6C7488' }}>
-              <span style={{ fontFamily: MONO, color: '#2F3B6E', fontWeight: 500 }}>{surfaceFormat.format(total)}</span>{' '}
-              {total > 1 ? 'terrains suivis' : 'terrain suivi'}
-              {resume ? (
-                <>
-                  {' · '}
-                  <span>
-                    {projet.name} ({resume})
-                  </span>
-                </>
-              ) : (
-                <>
-                  {' · '}
-                  <span>{projet.name}</span>
-                </>
-              )}
-            </div>
-          </div>
-          <Link
-            href="/terrains/nouveau"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: '#2F3B6E',
-              color: '#FFFFFF',
-              fontFamily: SANS,
-              fontSize: '13.5px',
-              fontWeight: 600,
-              padding: '11px 16px',
-              borderRadius: '10px',
-              textDecoration: 'none',
-            }}
-          >
-            <span style={{ fontSize: '16px', lineHeight: 1 }}>+</span>
+    <div className="mx-auto w-full max-w-6xl px-6 py-6">
+      {/* Titre + action */}
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Terrains du projet</h1>
+          <p className="mt-1 text-sm text-neutral-500">
+            <span className="font-mono font-medium tabular-nums text-indigo-500">{surfaceFormat.format(total)}</span>{' '}
+            {total > 1 ? 'terrains suivis' : 'terrain suivi'}
+            {' · '}
+            <span>{resume ? `${projet.name} (${resume})` : projet.name}</span>
+          </p>
+        </div>
+        <Button asChild size="sm">
+          <Link href="/terrains/nouveau">
+            <span aria-hidden="true" className="text-base leading-none">
+              +
+            </span>
             Ajouter un terrain
           </Link>
-        </div>
-
-        {/* Répartition par statut (chips colorés, comptages réels) */}
-        <div
-          aria-label="Répartition des terrains par statut"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            flexWrap: 'wrap',
-            padding: '12px 14px',
-            background: '#FFFFFF',
-            border: '1px solid #DADEE8',
-            borderRadius: '12px',
-          }}
-        >
-          <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
-            {STATUS_ORDER.map((code) => {
-              const s = statusStyle(code);
-              return (
-                <span
-                  key={code}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontFamily: SANS,
-                    fontSize: '12.5px',
-                    fontWeight: 600,
-                    padding: '6px 11px',
-                    borderRadius: '8px',
-                    border: '1px solid #DADEE8',
-                    background: '#FFFFFF',
-                    color: '#4C5468',
-                  }}
-                >
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: s.color }} />
-                  {s.label}
-                  <span style={{ opacity: 0.6, fontFamily: MONO, fontSize: '11px' }}>{counts[code] ?? 0}</span>
-                </span>
-              );
-            })}
-          </div>
-        </div>
+        </Button>
       </div>
 
-      {/* SPLIT PRINCIPAL : tableau + carte */}
-      {total === 0 ? (
-        <div style={{ padding: '16px 22px 28px' }}>
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '14px',
-              textAlign: 'center',
-              background: '#FFFFFF',
-              border: '1px solid #DADEE8',
-              borderRadius: '12px',
-              padding: '48px 24px',
-            }}
+      {/* Répartition par statut (comptages réels) */}
+      <div
+        aria-label="Répartition des terrains par statut"
+        className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 shadow-sm"
+      >
+        {STATUS_LIST.map((s) => (
+          <span
+            key={s.key}
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-neutral-600"
           >
-            <p style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Aucun terrain pour le moment</p>
-            <p style={{ margin: 0, maxWidth: '460px', fontSize: '14px', lineHeight: 1.6, color: '#6C7488' }}>
-              Explorez une zone à partir d&apos;une adresse, cliquez les parcelles qui vous intéressent, et
-              ajoutez-les à votre projet.
-            </p>
-            <Link
-              href="/terrains/nouveau"
-              style={{
-                background: '#2F3B6E',
-                color: '#FFFFFF',
-                fontFamily: SANS,
-                fontSize: '13.5px',
-                fontWeight: 600,
-                padding: '11px 16px',
-                borderRadius: '10px',
-                textDecoration: 'none',
-              }}
-            >
-              Explorer un terrain
-            </Link>
-          </div>
+            <StatusPin status={s.pin} className="h-2.5 w-2.5" />
+            {s.label}
+            <span className="font-mono text-[11px] tabular-nums text-neutral-400">{counts[s.key] ?? 0}</span>
+          </span>
+        ))}
+      </div>
+
+      {/* Split : tableau + carte, ou état vide */}
+      {total === 0 ? (
+        <div className="flex flex-col items-center gap-4 rounded-lg border border-border bg-card px-6 py-12 text-center shadow-sm">
+          <p className="text-base font-semibold text-foreground">Aucun terrain pour le moment</p>
+          <p className="max-w-md text-sm leading-relaxed text-neutral-500">
+            Explorez une zone à partir d&apos;une adresse, cliquez les parcelles qui vous intéressent, et
+            ajoutez-les à votre projet.
+          </p>
+          <Button asChild size="sm">
+            <Link href="/terrains/nouveau">Explorer un terrain</Link>
+          </Button>
         </div>
       ) : (
-        <div
-          style={{
-            padding: '16px 22px 28px',
-            display: 'flex',
-            gap: '18px',
-            flexWrap: 'wrap',
-            alignItems: 'flex-start',
-          }}
-        >
-          {/* TABLEAU (recherche + tri, US-5.9) */}
-          <div style={{ flex: '1 1 560px', minWidth: 0, overflowX: 'auto' }}>
+        <div className="flex flex-wrap items-start gap-[18px]">
+          {/* Tableau (recherche + tri, US-5.9) */}
+          <div className="min-w-0 flex-[1_1_560px] overflow-x-auto">
             <TerrainsTable terrains={terrains} />
           </div>
 
-          {/* CARTE */}
-          <div
-            style={{
-              flex: '1 1 360px',
-              minWidth: '320px',
-              position: 'sticky',
-              top: '74px',
-            }}
-          >
-            <div
-              style={{
-                position: 'relative',
-                width: '100%',
-                height: '520px',
-                border: '1px solid #DADEE8',
-                borderRadius: '12px',
-                overflow: 'hidden',
-                background: '#E6EAF2',
-              }}
-            >
+          {/* Carte */}
+          <div className="sticky top-[74px] min-w-[320px] flex-[1_1_360px]">
+            <div className="relative h-[520px] w-full overflow-hidden rounded-lg border border-border bg-neutral-100 shadow-sm">
               <DashboardMap terrains={terrains} className="absolute inset-0 h-full w-full" />
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '12px',
-                  bottom: '12px',
-                  zIndex: 1,
-                  background: 'rgba(255,255,255,0.94)',
-                  border: '1px solid #DADEE8',
-                  borderRadius: '10px',
-                  padding: '10px 12px',
-                  backdropFilter: 'blur(4px)',
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: '10px',
-                    fontWeight: 600,
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
-                    color: '#6C7488',
-                    marginBottom: '7px',
-                  }}
-                >
+              <div className="absolute bottom-3 left-3 z-[1] rounded-lg border border-border bg-white/95 p-3 backdrop-blur-sm">
+                <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
                   Statut
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                  {STATUS_ORDER.map((code) => {
-                    const s = statusStyle(code);
-                    return (
-                      <div
-                        key={code}
-                        style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px', color: '#343B4D' }}
-                      >
-                        <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: s.color }} />
-                        {s.label}
-                      </div>
-                    );
-                  })}
+                <div className="flex flex-col gap-1.5">
+                  {STATUS_LIST.map((s) => (
+                    <div key={s.key} className="flex items-center gap-2 text-xs text-neutral-700">
+                      <StatusPin status={s.pin} className="h-2.5 w-2.5" />
+                      {s.label}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

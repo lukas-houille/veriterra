@@ -1,0 +1,16 @@
+# Configuration GitGuardian (scan de secrets). On y déclare des IDENTIFIANTS DE TEST connus,
+# jamais des vrais secrets. Les secrets réels (prod) vivent uniquement dans le .env géré par
+# Arcane (jamais committé) ; les .env*.example et la CI ne portent que des valeurs jetables.
+version: 2
+secret:
+  ignored-matches:
+    # Identifiant MinIO de dev (docker-compose local, .env.example). Valeur jetable, pas un secret.
+    - name: "MinIO dev credential (docker-compose, .env.example)"
+      match: veriterra-minio
+    # Identifiant MinIO de la CI (GitHub Actions, conteneur éphémère). Jamais utilisé en prod.
+    - name: "MinIO CI credential (GitHub Actions, ephemeral container)"
+      match: veriterra-minio-ci
+  ignored-paths:
+    # Fichiers d'exemple : par nature des valeurs placeholder, jamais des secrets réels.
+    - ".env.example"
+    - ".env.prod.example"

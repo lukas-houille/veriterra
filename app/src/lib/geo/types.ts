@@ -10,6 +10,8 @@ export interface BanFeature {
   citycode: string; // code INSEE de la commune
   city: string;
   postcode: string;
+  /** Granularité du résultat BAN : housenumber, street, locality ou municipality (défaut ''). */
+  type: string;
   lon: number;
   lat: number;
   score: number;

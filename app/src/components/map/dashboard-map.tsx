@@ -16,11 +16,13 @@ import {
   type BasemapId,
 } from './map-style';
 
-/** Terrain minimal nécessaire à l'affichage cartographique (contours + statut). */
+/** Terrain minimal nécessaire à l'affichage cartographique (contours + statut + infos survol). */
 export interface DashboardMapTerrain {
   id: string;
   label: string;
   status: string;
+  surfaceTotaleM2: number;
+  prixDemande: number | null;
   parcelles: Array<{ geojson: GeoJsonGeometry }>;
 }
 
@@ -43,6 +45,40 @@ const SANS = "'Archivo', system-ui, sans-serif";
 
 /** Couleur de repli pour un statut inconnu (neutre « à étudier »). */
 const FALLBACK_COLOR = STATUS_COLORS.A_ETUDIER ?? '#98a0b0';
+
+const nfSurface = new Intl.NumberFormat('fr-FR');
+
+/** Échappe le texte injecté dans l'infobulle (le libellé est saisi par l'utilisateur : anti-XSS). */
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => {
+    switch (c) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      default:
+        return '&#39;';
+    }
+  });
+}
+
+/** Contenu HTML de l'infobulle de survol : libellé + 2 infos clés (surface, prix au m²). */
+function popupHtml(props: Record<string, unknown>): string {
+  const label = escapeHtml(String(props.label ?? 'Terrain'));
+  const surface = typeof props.surfaceM2 === 'number' ? `${nfSurface.format(props.surfaceM2)} m²` : null;
+  const prix = typeof props.prixM2 === 'number' ? `${nfSurface.format(props.prixM2)} €/m²` : 'Prix indisponible';
+  const meta = [surface, prix].filter(Boolean).join(' · ');
+  return (
+    `<div style="font-family:${SANS};min-width:120px">` +
+    `<div style="font-size:12.5px;font-weight:600;color:${INDIGO}">${label}</div>` +
+    `<div style="margin-top:2px;font-size:11.5px;color:${SUB}">${escapeHtml(meta)}</div>` +
+    `</div>`
+  );
+}
 
 /**
  * Construit une FeatureCollection des contours de parcelles, une entité par
@@ -94,6 +130,10 @@ function buildPointCollection(terrains: DashboardMapTerrain[]): FeatureCollectio
     }
     if (bounds.isEmpty()) continue;
     const center = bounds.getCenter();
+    const prixM2 =
+      terrain.prixDemande != null && terrain.surfaceTotaleM2 > 0
+        ? Math.round(terrain.prixDemande / terrain.surfaceTotaleM2)
+        : null;
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [center.lng, center.lat] },
@@ -101,6 +141,8 @@ function buildPointCollection(terrains: DashboardMapTerrain[]): FeatureCollectio
         terrainId: terrain.id,
         label: terrain.label,
         color: STATUS_COLORS[terrain.status] ?? FALLBACK_COLOR,
+        surfaceM2: terrain.surfaceTotaleM2,
+        prixM2,
       },
     });
   }
@@ -226,12 +268,36 @@ export function DashboardMap({ terrains, className }: DashboardMapProps) {
       map.getCanvas().style.cursor = '';
     };
 
+    // Infobulle de survol des pins (US-5.2) : 2/3 infos clés pour identifier le terrain sans
+    // ouvrir la fiche. Le contenu est échappé (le libellé est saisi par l'utilisateur).
+    const popup = new maplibre.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
+    const pointCoords = (f: maplibre.MapGeoJSONFeature): [number, number] | null =>
+      f.geometry.type === 'Point' ? (f.geometry.coordinates as [number, number]) : null;
+    const onPointEnter = (e: maplibre.MapLayerMouseEvent) => {
+      map.getCanvas().style.cursor = 'pointer';
+      const f = e.features?.[0];
+      const coords = f ? pointCoords(f) : null;
+      if (f && coords) popup.setLngLat(coords).setHTML(popupHtml(f.properties ?? {})).addTo(map);
+    };
+    const onPointMove = (e: maplibre.MapLayerMouseEvent) => {
+      const f = e.features?.[0];
+      const coords = f ? pointCoords(f) : null;
+      if (coords) popup.setLngLat(coords);
+    };
+    const onPointLeave = () => {
+      map.getCanvas().style.cursor = '';
+      popup.remove();
+    };
+
     map.on('load', onLoad);
     for (const layer of [FILL_LAYER_ID, POINTS_LAYER_ID]) {
       map.on('click', layer, onClick);
       map.on('mouseenter', layer, onEnter);
       map.on('mouseleave', layer, onLeave);
     }
+    map.on('mouseenter', POINTS_LAYER_ID, onPointEnter);
+    map.on('mousemove', POINTS_LAYER_ID, onPointMove);
+    map.on('mouseleave', POINTS_LAYER_ID, onPointLeave);
 
     return () => {
       map.remove();

@@ -74,6 +74,16 @@ L'exploration est la feature phare. Le parcours : définir mon projet (onboardin
 - Enregistrement scopé à l'organisation (RLS) : impossible de modifier le terrain d'une autre organisation.
 - Les données parcellaires faisant autorité (contour, surface, IDU) ne sont pas éditables à la main (la ré-association de parcelles viendra plus tard).
 
+**US-1.10 [MVP, quick win] Réinitialiser la sélection de parcelles.** En composant un terrain multi-parcelles, je veux effacer d'un clic les parcelles sélectionnées afin de repartir de zéro sans recharger.
+- Bouton "Réinitialiser la sélection" sur la carte de création, actif seulement s'il y a une sélection ; vide la sélection courante (contours et liste), sans toucher aux terrains déjà enregistrés.
+
+**US-1.12 [MVP, quick win] Cadastre visible plus tôt au zoom.** En explorant, je veux voir le découpage cadastral à un niveau de zoom plus large afin de me repérer sans avoir à trop zoomer.
+- Abaisser le `minzoom` du calque cadastre vectoriel sur le plan (aujourd'hui 15). Arbitrage lisibilité/perf : trouver le seuil où les parcelles restent lisibles (test visuel), sans surcharger.
+
+**US-1.11 [V2] Fond satellite plus moderne.** En jugeant le terrain réel, je veux une imagerie satellite plus récente/détaillée afin de mieux apprécier l'environnement.
+- Aujourd'hui : orthophoto IGN (raster) + cadastre en calque. Idée : proposer une imagerie alternative plus moderne.
+- **Décision d'architecture requise** avant implémentation : choix du fournisseur de tuiles (IGN actuel ; Esri World Imagery, attribution requise ; ou fournisseur à clé type MapTiler/Mapbox, secret côté serveur et coût). Licence, attribution et couverture à vérifier ; le cadastre reste en calque par-dessus.
+
 ## Epic 2 — Enrichissement automatique
 
 **US-2.1 [MVP] Extraction PLU par IA.** Je veux les règles d'urbanisme structurées afin de connaître la constructibilité.
@@ -163,6 +173,12 @@ L'exploration est la feature phare. Le parcours : définir mon projet (onboardin
 **US-5.2 [MVP] Dashboard carte.** Je veux voir mes terrains sur une carte afin d'avoir la vue d'ensemble.
 - Carte avec pins colorés par statut ou score.
 - Filtres synchronisés avec le tableau.
+- **[quick win] Survol d'un pin : infobulle avec 2/3 infos clés** (libellé, surface, prix au m²) pour identifier le terrain sans ouvrir la fiche ; clic = ouverture de la fiche (comportement actuel conservé).
+
+**US-5.9 [MVP, quick win] Recherche et tri de la liste des terrains.** Dans "mes terrains", je veux rechercher et trier afin de retrouver et comparer vite.
+- Recherche texte dans la liste (libellé, adresse, commune).
+- Tris : prix au m², prix total, surface (et par défaut date d'ajout). Le prix au m² dérivé n'est triable que s'il est disponible (règle 3 : les terrains sans prix restent listés, marqués indisponibles, jamais triés comme 0).
+- Client-side (îlot) sur les terrains déjà chargés ; la synchro carte/tableau (filtres) reste couverte par US-5.2.
 
 **US-5.3 [MVP] Photos et notes. LIVRÉE (photos).** Je veux documenter un terrain afin de m'en souvenir.
 - Photos et notes attachées à un terrain.

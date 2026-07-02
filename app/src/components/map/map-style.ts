@@ -133,15 +133,17 @@ const PLAN_TINT: Record<string, Tint> = {
 function ensurePlanCadastre(map: MaplibreMap): void {
   if (map.getLayer(PLAN_CADASTRE_LAYER)) return;
   if (!map.getSource(PLAN_IGN_SOURCE)) return;
+  // minzoom 13 (US-1.12) : le découpage cadastral apparaît plus tôt (échelle quartier) pour se
+  // repérer sans trop zoomer. Trait très fin en dessous de 15 pour rester lisible sans surcharger.
   map.addLayer({
     id: PLAN_CADASTRE_LAYER,
     type: 'line',
     source: PLAN_IGN_SOURCE,
     'source-layer': 'parcellaire_parcelle',
-    minzoom: 15,
+    minzoom: 13,
     paint: {
       'line-color': PLAN_CADASTRE_LINE,
-      'line-width': ['interpolate', ['linear'], ['zoom'], 15, 0.4, 18, 1.1],
+      'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.25, 15, 0.5, 18, 1.1],
     },
   });
 }

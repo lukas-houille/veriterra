@@ -418,6 +418,9 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
     setSearchMsg(null);
   }, []);
 
+  // US-1.10 : vide la sélection courante (l'effet synchronise le surlignage et remonte au parent).
+  const clearSelection = useCallback(() => setSelection([]), []);
+
   const totalSurface = selection.reduce((acc, p) => acc + p.surfaceM2, 0);
 
   return (
@@ -696,7 +699,27 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
           {selection.length === 0 ? (
             <span style={{ fontSize: '13px', color: SUB }}>Cliquez une parcelle sur la carte</span>
           ) : (
-            <span style={{ fontFamily: MONO, fontSize: '14px', color: TEXT }}>{formatSurface(totalSurface)}</span>
+            <>
+              <span style={{ fontFamily: MONO, fontSize: '14px', color: TEXT }}>{formatSurface(totalSurface)}</span>
+              <button
+                type="button"
+                onClick={clearSelection}
+                style={{
+                  alignSelf: 'flex-start',
+                  marginTop: '4px',
+                  border: 'none',
+                  background: 'transparent',
+                  padding: 0,
+                  color: AMBER,
+                  fontFamily: SANS,
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Réinitialiser la sélection
+              </button>
+            </>
           )}
         </div>
         {clickLoading && (

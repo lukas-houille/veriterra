@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Map as MaplibreMap,
   NavigationControl,
@@ -8,6 +8,7 @@ import {
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { CSSProperties } from 'react';
+import type { FeatureCollection, Geometry } from 'geojson';
 import {
   applyVeriterraPlanTint,
   basemapStyle,
@@ -24,6 +25,12 @@ import {
   type ParcelleInZone,
 } from '@/lib/geo/apicarto-core';
 import type { BanFeature, GeoJsonGeometry } from '@/lib/geo/types';
+import { parcellesCentroid } from '@/lib/geo/centroid';
+import { ambienceForAltitude } from '@/lib/sun/ambience';
+import { sunPosition } from '@/lib/sun/shadows';
+import { dateForDayOfYear, dayOfYear, seasonLabel, timestampFor } from '@/lib/sun/sun-time';
+// Type only : le module deck.gl (sun-scene) est importé en LAZY à l'activation (jamais au repos).
+import type { SunSceneHandle } from './sun-scene';
 
 /** Parcelle retenue dans la sélection courante (remontée au parent). */
 export interface SelectedParcelle {
@@ -46,6 +53,53 @@ const AMBER = '#db9b2c';
 const INDIGO = '#2F3B6E';
 const SELECTION_SOURCE = 'selection';
 const SURFACE_SOURCE = 'surface-matches';
+
+// --- Analyse d'ensoleillement en place (relief + ombres 3D deck.gl) ---------------------------
+const SUN_TERRAIN_SOURCE = 'selection-sun-dem';
+const SUN_RADIUS_M = 250;
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/** Active le relief 3D (MNT Terrarium) pour l'analyse d'ensoleillement. */
+function ensureSunTerrain(map: MaplibreMap): void {
+  if (!map.getSource(SUN_TERRAIN_SOURCE)) {
+    map.addSource(SUN_TERRAIN_SOURCE, {
+      type: 'raster-dem',
+      tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+      encoding: 'terrarium',
+      tileSize: 256,
+      maxzoom: 15,
+      attribution: 'Relief : Terrarium (Mapzen, AWS Open Data)',
+    });
+  }
+  // Exagération 1.0 : pas de sur-relief trompeur dans un outil d'analyse de terrain.
+  map.setTerrain({ source: SUN_TERRAIN_SOURCE, exaggeration: 1.0 });
+}
+function removeSunTerrain(map: MaplibreMap): void {
+  try {
+    map.setTerrain(null);
+  } catch {
+    // pas de relief actif : rien à faire.
+  }
+}
+
+/** Convertit des volumes (bâtiments/canopée : géométrie + hauteur) en FeatureCollection deck.gl. */
+function toVolumeFC(items: Array<{ geometry: unknown; hauteur: number | null }>): FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: items.map((it) => ({
+      type: 'Feature',
+      geometry: it.geometry as Geometry,
+      properties: { height: it.hauteur ?? 0 },
+    })),
+  };
+}
 
 // US-1.6 : garde-fous de la recherche par surface.
 const MIN_SEARCH_ZOOM = 14;
@@ -207,6 +261,141 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
 
   const [clickLoading, setClickLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Analyse d'ensoleillement EN PLACE : bascule 3D + relief + ombres GPU deck.gl (chargé en lazy).
+  const [sunActive, setSunActive] = useState(false);
+  const [sunMinutes, setSunMinutes] = useState(14 * 60);
+  const [sunDate, setSunDate] = useState<string>(todayStr);
+  const [sunLoading, setSunLoading] = useState(false);
+  const [sunError, setSunError] = useState<string | null>(null);
+  const [sunCounts, setSunCounts] = useState<{ b: number; v: number }>({ b: 0, v: 0 });
+  const [sunUnavail, setSunUnavail] = useState<{ b: boolean; v: boolean }>({ b: false, v: false });
+  const sunSceneRef = useRef<SunSceneHandle | null>(null);
+  const sunDataRef = useRef<{ buildings: FeatureCollection; canopies: FeatureCollection } | null>(null);
+  // Miroirs de l'instant courant : la mise à jour d'après-chargement applique l'heure/saison
+  // RÉELLES même si l'utilisateur a bougé un curseur pendant le fetch initial (closures fraîches).
+  const sunDateRef = useRef(sunDate);
+  sunDateRef.current = sunDate;
+  const sunMinutesRef = useRef(sunMinutes);
+  sunMinutesRef.current = sunMinutes;
+
+  // Mémoïse le centroïde sur sa VALEUR (lon/lat) : ajouter une parcelle (même première parcelle)
+  // ne change pas le centroïde effectif et ne doit donc pas relancer l'analyse.
+  const centroidRaw = parcellesCentroid(selection);
+  const centroidKey = centroidRaw ? `${centroidRaw.lon.toFixed(6)},${centroidRaw.lat.toFixed(6)}` : '';
+  const sunCentroid = useMemo(() => centroidRaw, [centroidKey]);
+  const sunPos = useMemo(
+    () =>
+      sunCentroid
+        ? sunPosition(new Date(timestampFor(sunDate, sunMinutes)), sunCentroid.lat, sunCentroid.lon)
+        : null,
+    [sunCentroid, sunDate, sunMinutes],
+  );
+
+  // Entrée/sortie du mode : pitch 3D + relief + scène deck.gl (lazy) + chargement bâti/végétation.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    if (!sunActive || !sunCentroid) {
+      if (sunSceneRef.current) {
+        sunSceneRef.current.destroy();
+        sunSceneRef.current = null;
+      }
+      sunDataRef.current = null;
+      removeSunTerrain(map);
+      try {
+        map.setSky({}); // réinitialise le ciel (retour en 2D).
+      } catch {
+        // pas de ciel : rien à faire.
+      }
+      map.easeTo({ pitch: 0, bearing: 0 });
+      // La sélection a été vidée pendant l'analyse : on referme le panneau (pas de demi-état).
+      if (sunActive && !sunCentroid) setSunActive(false);
+      return;
+    }
+
+    map.easeTo({
+      center: [sunCentroid.lon, sunCentroid.lat],
+      zoom: Math.max(map.getZoom(), 16.5),
+      pitch: 55,
+      bearing: -20,
+    });
+    ensureSunTerrain(map);
+
+    let cancelled = false;
+    setSunLoading(true);
+    setSunError(null);
+    setSunUnavail({ b: false, v: false });
+    const q = `lon=${sunCentroid.lon}&lat=${sunCentroid.lat}&radius=${SUN_RADIUS_M}`;
+    void (async () => {
+      try {
+        const [bResp, vResp] = await Promise.all([fetch(`/api/buildings?${q}`), fetch(`/api/vegetation?${q}`)]);
+        if (cancelled) return;
+        // Un statut non-ok (429 débit, 502 source injoignable) est une INDISPONIBILITÉ, pas un
+        // « 0 » : on l'affiche comme telle (règle 3), sans effacer le signal de panne côté serveur.
+        const bOk = bResp.ok;
+        const vOk = vResp.ok;
+        const bJson = bOk ? await bResp.json() : { batiments: [] };
+        const vJson = vOk ? await vResp.json() : { canopees: [] };
+        if (cancelled) return;
+        const batiments = Array.isArray(bJson.batiments) ? bJson.batiments : [];
+        const canopees = Array.isArray(vJson.canopees) ? vJson.canopees : [];
+        const buildings = toVolumeFC(batiments);
+        const canopies = toVolumeFC(canopees);
+        sunDataRef.current = { buildings, canopies };
+        setSunCounts({ b: batiments.length, v: canopees.length });
+        setSunUnavail({ b: !bOk, v: !vOk });
+        const mod = await import('./sun-scene');
+        if (cancelled) return;
+        if (!sunSceneRef.current) sunSceneRef.current = mod.createSunScene(map);
+        // Instant COURANT (via refs) : correct même si un curseur a bougé pendant le fetch.
+        sunSceneRef.current.update({
+          buildings,
+          canopies,
+          timestamp: timestampFor(sunDateRef.current, sunMinutesRef.current),
+        });
+      } catch {
+        if (!cancelled) setSunError('Données 3D indisponibles (bâtiments ou végétation).');
+      } finally {
+        if (!cancelled) setSunLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // sunDate/sunMinutes exclus volontairement : l'instant initial suffit ici, l'effet suivant met à jour.
+  }, [sunActive, sunCentroid, mapReady]);
+
+  // Mise à jour de l'instant (heure + saison) et du ciel d'ambiance, sans recharger les données.
+  useEffect(() => {
+    if (!sunActive) return;
+    const map = mapRef.current;
+    const scene = sunSceneRef.current;
+    const data = sunDataRef.current;
+    if (scene && data) {
+      scene.update({
+        buildings: data.buildings,
+        canopies: data.canopies,
+        timestamp: timestampFor(sunDate, sunMinutes),
+      });
+    }
+    if (map && sunPos) {
+      try {
+        map.setSky(ambienceForAltitude(sunPos.altitudeDeg).sky);
+      } catch {
+        // ciel indisponible : rien de bloquant.
+      }
+    }
+  }, [sunActive, sunDate, sunMinutes, sunPos]);
+
+  // Démontage du composant : retirer la scène deck.gl si encore montée.
+  useEffect(() => {
+    return () => {
+      sunSceneRef.current?.destroy();
+      sunSceneRef.current = null;
+    };
+  }, []);
 
   // Initialisation de la carte (une seule fois, côté navigateur uniquement).
   useEffect(() => {
@@ -659,7 +848,7 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
           aria-label="Fond de carte"
           style={{
             alignSelf: 'flex-start',
-            display: 'inline-flex',
+            display: sunActive ? 'none' : 'inline-flex',
             background: PANEL,
             border: `1px solid ${BORDER}`,
             borderRadius: '9px',
@@ -765,6 +954,121 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
           >
             {error}
           </span>
+        )}
+
+        {/* Déclencheur de l'analyse d'ensoleillement (en place, quand une parcelle est sélectionnée) */}
+        {selection.length > 0 && !sunActive && (
+          <button
+            type="button"
+            onClick={() => setSunActive(true)}
+            style={{
+              alignSelf: 'flex-start',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '7px',
+              background: INDIGO,
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '9px',
+              padding: '9px 13px',
+              fontFamily: SANS,
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              boxShadow: FLOAT_SHADOW,
+            }}
+          >
+            <span aria-hidden="true">☀</span>
+            Analyser l&apos;ensoleillement
+          </button>
+        )}
+
+        {/* Panneau de contrôle de l'analyse (heure + saison), en place */}
+        {sunActive && (
+          <div
+            role="group"
+            aria-label="Analyse d'ensoleillement"
+            style={{
+              width: '320px',
+              maxWidth: 'calc(100% - 32px)',
+              background: PANEL,
+              border: `1px solid ${BORDER}`,
+              borderRadius: '11px',
+              padding: '12px 14px',
+              boxShadow: FLOAT_SHADOW,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '9px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span style={microLabel}>Ensoleillement (3D)</span>
+              <button
+                type="button"
+                onClick={() => setSunActive(false)}
+                style={{ border: 'none', background: 'transparent', color: SUB, fontFamily: SANS, fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', padding: 0 }}
+              >
+                Quitter l&apos;analyse
+              </button>
+            </div>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: SUB }}>
+                <span>Heure</span>
+                <span style={{ fontFamily: MONO, color: TEXT }}>
+                  {pad2(Math.floor(sunMinutes / 60))}:{pad2(sunMinutes % 60)}
+                </span>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={1439}
+                step={5}
+                value={sunMinutes}
+                onChange={(e) => setSunMinutes(Number(e.target.value))}
+                aria-label="Heure de la journée"
+                style={{ width: '100%' }}
+              />
+            </label>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: SUB }}>
+                <span>Saison</span>
+                <span style={{ color: TEXT }}>
+                  {seasonLabel(sunDate)} · {sunDate}
+                </span>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={364}
+                step={1}
+                value={dayOfYear(sunDate)}
+                onChange={(e) => setSunDate(dateForDayOfYear(Number(sunDate.slice(0, 4)), Number(e.target.value)))}
+                aria-label="Période de l'année"
+                style={{ width: '100%' }}
+              />
+            </label>
+
+            <p style={{ margin: 0, fontSize: '12px', color: TEXT }}>
+              {sunPos == null
+                ? 'Parcelle sans géométrie.'
+                : sunPos.altitudeDeg > 0.5
+                  ? `Soleil à ${Math.round(sunPos.altitudeDeg)}° de hauteur.`
+                  : "Soleil sous l'horizon (nuit)."}
+            </p>
+            <p
+              role={sunError ? 'alert' : 'status'}
+              aria-live="polite"
+              style={{ margin: 0, fontSize: '11px', color: SUB }}
+            >
+              {sunLoading
+                ? 'Chargement des volumes 3D...'
+                : sunError
+                  ? sunError
+                  : `${sunUnavail.b ? 'Bâtiments indisponibles' : `${sunCounts.b} bâtiment${sunCounts.b > 1 ? 's' : ''}`}, ${sunUnavail.v ? 'végétation indisponible' : `${sunCounts.v} zone${sunCounts.v > 1 ? 's' : ''} boisée${sunCounts.v > 1 ? 's' : ''}`}. Canopée approximée. Ombres du bâti et de la végétation ; relief indicatif (non ombrant, à venir).`}
+            </p>
+          </div>
         )}
       </div>
     </div>

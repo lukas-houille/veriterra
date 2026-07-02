@@ -37,6 +37,7 @@ model Organisation {
   parcelles   TerrainParcelle[]
   projets     Projet[]
   enrichments EnrichmentBlock[]
+  documents   TerrainDocument[]
 }
 
 /// Type de maison visé par le projet de l'acheteur (nombre de niveaux).
@@ -126,6 +127,7 @@ model Terrain {
   projet       Projet?           @relation(fields: [projetId], references: [id], onDelete: SetNull)
   parcelles    TerrainParcelle[]
   enrichments  EnrichmentBlock[]
+  documents    TerrainDocument[]
 
   @@index([organisationId])
   @@index([projetId])
@@ -205,6 +207,49 @@ model EnrichmentBlock {
   terrain      Terrain      @relation(fields: [terrainId], references: [id], onDelete: Cascade)
 
   @@unique([terrainId, type])
+  @@index([organisationId])
+  @@index([terrainId])
+}
+
+/// Nature d'une pièce jointe (Tranche « documents »). Déduite du type MIME à l'upload :
+/// une image donne PHOTO (affichée en grille), tout le reste DOCUMENT (listé, téléchargeable).
+enum DocumentKind {
+  PHOTO
+  DOCUMENT
+}
+
+/// Catégorie métier d'un document (facultative, choisie par l'utilisateur). Sert au libellé
+/// et au tri du dossier ; AUTRE couvre tout le reste sans forcer une case.
+enum DocumentType {
+  ETUDE_SOL
+  BORNAGE
+  CERTIFICAT_URBANISME
+  DEVIS
+  DIAGNOSTIC
+  AUTRE
+}
+
+/// Pièce jointe (photo ou document) rattachée à un terrain (US-5.3 photos, US-5.8 documents).
+/// Table scopée au tenant (`organisationId`) : protégée par RLS (ENABLE + FORCE). Le fichier
+/// vit dans le stockage objet (MinIO/S3), repéré par `storageKey` opaque ; la base ne porte que
+/// les métadonnées et la provenance (déposé par, date), cohérent avec la règle des pièces datées.
+model TerrainDocument {
+  id             String       @id @default(uuid()) @db.Uuid
+  organisationId String       @db.Uuid
+  terrainId      String       @db.Uuid
+  kind           DocumentKind
+  docType        DocumentType?
+  label          String?
+  filename       String
+  contentType    String
+  sizeBytes      Int
+  storageKey     String       @unique
+  uploadedById   String?      @db.Uuid
+  createdAt      DateTime     @default(now())
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  terrain      Terrain      @relation(fields: [terrainId], references: [id], onDelete: Cascade)
+
   @@index([organisationId])
   @@index([terrainId])
 }

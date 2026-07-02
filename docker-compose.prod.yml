@@ -45,6 +45,20 @@ services:
       timeout: 5s
       retries: 5
 
+  # Stockage objet (pièces jointes). Sur le réseau INTERNE uniquement : jamais exposé à Caddy
+  # ni au navigateur (l'app proxifie upload et download). Aucun port publié. Identifiants via .env.
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - miniodata:/data
+    networks:
+      - internal
+
   # One-shot : applique les migrations (extension, rôle, RLS, tables) au démarrage.
   migrate:
     image: ghcr.io/lukas-houille/veriterra:41a7f275750796b69d43880e8f1298da90665ed0
@@ -84,6 +98,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio:
+        condition: service_started
       migrate:
         condition: service_completed_successfully
 
@@ -112,6 +128,7 @@ services:
 volumes:
   pgdata:
   redisdata:
+  miniodata:
 
 networks:
   internal:

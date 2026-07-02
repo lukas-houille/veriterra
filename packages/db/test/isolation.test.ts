@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { admin, prisma } from '../src/client';
 import { forOrg } from '../src/rls';
 import {
+  DOCUMENT_A_ID,
+  DOCUMENT_B_ID,
   ENRICHMENT_A_ID,
   ENRICHMENT_B_ID,
   ORG_A_ID,
@@ -113,6 +115,35 @@ describe('RLS tenant isolation', () => {
     await expect(
       db.enrichmentBlock.create({
         data: { organisationId: ORG_A_ID, terrainId: TERRAIN_A_ID, type: 'PLU' },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('org B sees only its own documents (TerrainDocument RLS)', async () => {
+    const db = forOrg(ORG_B_ID);
+    const docs = await db.terrainDocument.findMany();
+    expect(docs.map((d) => d.id)).toEqual([DOCUMENT_B_ID]);
+  });
+
+  it("org B cannot read org A's document by id", async () => {
+    const db = forOrg(ORG_B_ID);
+    const doc = await db.terrainDocument.findUnique({ where: { id: DOCUMENT_A_ID } });
+    expect(doc).toBeNull();
+  });
+
+  it('WITH CHECK blocks creating a document stamped with another org', async () => {
+    const db = forOrg(ORG_B_ID);
+    await expect(
+      db.terrainDocument.create({
+        data: {
+          organisationId: ORG_A_ID,
+          terrainId: TERRAIN_A_ID,
+          kind: 'DOCUMENT',
+          filename: 'x.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: 1,
+          storageKey: `org/${ORG_A_ID}/terrain/${TERRAIN_A_ID}/leak`,
+        },
       }),
     ).rejects.toThrow();
   });

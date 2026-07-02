@@ -841,11 +841,11 @@ export default async function TerrainPage({
           <TabsContent value="soleil">
             <div className="flex flex-col gap-4">
               <p className="text-sm text-muted-foreground">
-                Vue 3D de la parcelle et des bâtiments voisins (BD TOPO). Réglez la date et l'heure
-                pour voir les ombres portées au sol. Le relief et les ombres sur les bâtiments
-                viendront ensuite.
+                Vue 3D de la parcelle et des bâtiments voisins (BD TOPO), drapée sur le relief, avec
+                une ambiance jour/nuit. Réglez la date et l'heure pour voir les ombres portées au sol.
+                Les ombres bâtiment sur bâtiment viendront ensuite.
               </p>
-              <SunMap terrainId={terrain.id} parcelles={terrain.parcelles} />
+              <SunMap buildingsUrl={`/api/terrains/${terrain.id}/buildings`} parcelles={terrain.parcelles} />
             </div>
           </TabsContent>
 

@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Button, Input } from '@veriterra/ui';
 import type { SelectedParcelle } from '@/components/map/selection-map';
 import type { TerrainSummary } from '@/modules/terrains/types';
+import { parcellesCentroid } from '@/lib/geo/centroid';
 
 // Écran « Explorer » (création de terrain) : plein écran carte + panneau de détails flottant.
 // La logique (état, sélection de parcelles, appel API, redirection) est préservée à
@@ -29,6 +30,9 @@ const SelectionMap = dynamic(
     ),
   },
 );
+
+// La vue soleil (MapLibre 3D) n'est chargée qu'à l'ouverture, jamais côté serveur.
+const SunMap = dynamic(() => import('@/components/map/sun-map').then((m) => m.SunMap), { ssr: false });
 
 /** Champ de formulaire : label micro (capitales) au-dessus du contrôle. */
 function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
@@ -59,6 +63,7 @@ export default function NouveauTerrainPage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sunOpen, setSunOpen] = useState(false);
 
   const handleSelectionChange = useCallback((next: SelectedParcelle[]) => {
     setParcelles(next);
@@ -144,6 +149,22 @@ export default function NouveauTerrainPage() {
     parcelleCount > 1 ? 's' : ''
   }.`;
 
+  // Vue soleil : centroïde de la sélection + URL bâtiments par bbox (route non liée à un terrain).
+  const sunCentroid = useMemo(() => parcellesCentroid(parcelles), [parcelles]);
+  const sunBuildingsUrl = sunCentroid
+    ? `/api/buildings?lon=${sunCentroid.lon}&lat=${sunCentroid.lat}&radius=250`
+    : '';
+
+  // Fermeture de la modale soleil par la touche Échap (a11y).
+  useEffect(() => {
+    if (!sunOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSunOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sunOpen]);
+
   return (
     <div className="flex h-[calc(100dvh-3.625rem)] flex-col bg-background text-foreground">
       {/* MAP AREA (la barre de nav est fournie par le shell (app)) */}
@@ -223,6 +244,16 @@ export default function NouveauTerrainPage() {
                 </div>
               </div>
 
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                onClick={() => setSunOpen(true)}
+              >
+                Vue soleil (3D)
+              </Button>
+
               {error && (
                 <p
                   role="alert"
@@ -243,6 +274,21 @@ export default function NouveauTerrainPage() {
           </aside>
         )}
       </div>
+
+      {/* Vue soleil plein écran : simulateur monté seulement à l'ouverture (coût nul sinon). */}
+      {sunOpen && sunCentroid && (
+        <div className="fixed inset-0 z-40 flex flex-col bg-background" role="dialog" aria-modal="true" aria-label="Vue soleil">
+          <div className="flex h-[3.625rem] shrink-0 items-center justify-between border-b border-border bg-card px-4">
+            <h2 className="text-base font-bold text-foreground">Vue soleil (3D)</h2>
+            <Button type="button" variant="secondary" size="sm" autoFocus onClick={() => setSunOpen(false)}>
+              Fermer
+            </Button>
+          </div>
+          <div className="relative flex-1">
+            <SunMap fill buildingsUrl={sunBuildingsUrl} parcelles={parcelles} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

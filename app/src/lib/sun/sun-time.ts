@@ -1,13 +1,13 @@
-// Conversion heure/saison <-> timestamp pour piloter l'éclairage soleil (deck.gl _SunLight, qui
-// dérive la direction du soleil d'un timestamp et de la latitude/longitude de la vue). Pur et
-// testable. Le curseur « saison » est un jour de l'année (0..364) mappé sur une date ; le curseur
-// « heure » des minutes du jour (0..1439). On ignore le 29/02 pour un curseur d'année stable.
+// Conversion heure/saison <-> timestamp pour l'analyse d'ensoleillement : un epoch ms local dont on
+// dérive la position du soleil (SunCalc) à la latitude/longitude de la vue. Pur et testable. Le
+// curseur « saison » est un jour de l'année (0..364) mappé sur une date ; le curseur « heure » des
+// minutes du jour (0..1439). On ignore le 29/02 pour un curseur d'année stable.
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
 
-/** Epoch ms (heure locale) depuis une date AAAA-MM-JJ et des minutes du jour. Pilote _SunLight. */
+/** Epoch ms (heure locale) depuis une date AAAA-MM-JJ et des minutes du jour, d'où l'on dérive la position du soleil (SunCalc). */
 export function timestampFor(dateStr: string, minutes: number): number {
   const hh = pad(Math.floor(minutes / 60));
   const mm = pad(minutes % 60);

@@ -3,7 +3,8 @@ import { fetchRisquesGeorisques, type GeorisquesInput, type RisquesFetchResult }
 import { fetchPrixDvf, type DvfInput, type PrixDvfFetchResult } from './dvf';
 import { fetchPente, type PenteInput, type PenteFetchResult } from './pente';
 import { fetchServices, type ServicesInput, type ServicesFetchResult } from './services';
-import type { PenteData, PrixDvfData, RisquesData, ServicesData } from './types';
+import { fetchPlu, type PluInput, type PluFetchResult } from './plu';
+import type { PenteData, PluData, PrixDvfData, RisquesData, ServicesData } from './types';
 
 // Cache Redis best-effort autour des sources publiques (données réutilisables entre terrains
 // d'une même zone). Calqué sur app/src/lib/geo/apicarto.ts : préfixe à deux points, TTL long,
@@ -14,6 +15,7 @@ const PREFIX = 'enrich:georisques:';
 const DVF_PREFIX = 'enrich:dvf:';
 const PENTE_PREFIX = 'enrich:pente:';
 const SERVICES_PREFIX = 'enrich:services:';
+const PLU_PREFIX = 'enrich:plu:';
 const TTL_SECONDS = 60 * 60 * 24 * 30; // 30 jours (données publiques peu volatiles)
 
 function cacheKey(input: GeorisquesInput): string {
@@ -29,6 +31,10 @@ function penteCacheKey(input: PenteInput): string {
 function servicesCacheKey(input: ServicesInput): string {
   // Rayon fixe : arrondi ~110 m (3 décimales) pour mutualiser à l'échelle du voisinage.
   return `${SERVICES_PREFIX}${input.lat.toFixed(3)},${input.lon.toFixed(3)}`;
+}
+
+function pluCacheKey(input: PluInput): string {
+  return `${PLU_PREFIX}${input.lat.toFixed(4)},${input.lon.toFixed(4)}`;
 }
 
 function dvfCacheKey(input: DvfInput): string {
@@ -141,6 +147,34 @@ export async function getServicesCached(
     }
   }
   const result = await fetchServices(input);
+  if (!result.transientError) {
+    try {
+      await getRedisConnection().set(key, JSON.stringify(result.data), 'EX', TTL_SECONDS);
+    } catch {
+      // écriture best-effort.
+    }
+  }
+  return result;
+}
+
+/**
+ * Zonage PLU (API Carto GPU) avec cache Redis (mêmes garanties : `force` contourne, un résultat
+ * affecté par une panne transitoire n'est pas mis en cache).
+ */
+export async function getPluCached(
+  input: PluInput,
+  opts: { force?: boolean } = {},
+): Promise<PluFetchResult> {
+  const key = pluCacheKey(input);
+  if (!opts.force) {
+    try {
+      const cached = await getRedisConnection().get(key);
+      if (cached) return { data: JSON.parse(cached) as PluData, transientError: false };
+    } catch {
+      // cache indisponible : on poursuit sans.
+    }
+  }
+  const result = await fetchPlu(input);
   if (!result.transientError) {
     try {
       await getRedisConnection().set(key, JSON.stringify(result.data), 'EX', TTL_SECONDS);

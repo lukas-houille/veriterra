@@ -84,6 +84,28 @@ export interface ServicesData {
   note: string | null;
 }
 
+/** Payload du bloc PLU (zonage d'urbanisme, IGN API Carto GPU). Sans IA : attributs + lien règlement. */
+export interface PluData {
+  /** Type de zone normalisé U / AU / A / N (champ fiable), null si indisponible. */
+  typezone: string | null;
+  /** Libellé local de la zone (ex. "UPp"), non standardisé d'une commune à l'autre. */
+  zoneLibelle: string | null;
+  /** Description longue de la zone (libelong). */
+  zoneDescription: string | null;
+  /** Type de document d'urbanisme (PLU, PLUi, POS, CC, PSMV). */
+  documentType: string | null;
+  /** Nom du document (ex. "PLUI GRAND LYON LA METROPOLE"). */
+  documentName: string | null;
+  /** Date de validité du document (AAAAMMJJ). */
+  dateValidite: string | null;
+  /** Lien vers le règlement / les pièces du document (Géoportail de l'Urbanisme), null si absent. */
+  reglementUrl: string | null;
+  /** Vrai si la commune est au RNU (pas de PLU/POS). */
+  isRnu: boolean;
+  /** Raison d'indisponibilité (RNU, hors couverture GPU), jamais une zone par défaut (règle 3). */
+  note: string | null;
+}
+
 /** Statut de synthèse d'un bloc, aligné sur l'enum Prisma EnrichmentStatus. */
 export type BlockStatus = 'OK' | 'UNAVAILABLE' | 'ERROR';
 

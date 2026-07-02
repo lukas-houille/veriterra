@@ -86,11 +86,12 @@ L'exploration est la feature phare. Le parcours : définir mon projet (onboardin
 
 ## Epic 2 — Enrichissement automatique
 
-**US-2.1 [MVP] Extraction PLU par IA.** Je veux les règles d'urbanisme structurées afin de connaître la constructibilité.
-- Zonage récupéré via API Carto GpU.
-- Le règlement est parsé par IA en emprise au sol, hauteur, reculs, stationnement.
-- Chaque valeur cite l'article source et un indice de confiance ; les cas incertains sont signalés à vérifier.
-- Le règlement est parsé une fois par document et mis en cache (réutilisé pour toutes les parcelles de la zone).
+**US-2.1 [MVP] Extraction PLU par IA. PARTIELLE (zonage livré, IA à venir).** Je veux les règles d'urbanisme structurées afin de connaître la constructibilité.
+- Zonage récupéré via API Carto GpU. **LIVRÉ** (`feat/enrichissement-plu`) : bloc PLU déterministe sans IA (type de zone U/AU/A/N + libellé + description, document PLU/PLUi + date, lien vers le règlement sur le Géoportail de l'Urbanisme), statut RNU et hors couverture gérés en indisponible explicite (règle 3).
+- Le règlement est parsé par IA en emprise au sol, hauteur, reculs, stationnement. **RESTE À FAIRE** (slice IA : `ANTHROPIC_API_KEY` côté worker).
+- Chaque valeur cite l'article source et un indice de confiance ; les cas incertains sont signalés à vérifier. (Partie IA.)
+- Le règlement est parsé une fois par document et mis en cache (réutilisé pour toutes les parcelles de la zone). (Partie IA.)
+- Fast-follow possible sans IA : prescriptions graphiques et servitudes (emplacements réservés, EBC, marges de recul, SUP) via les endpoints GPU `prescription-*` / `assiette-sup-*`.
 
 **US-2.2 [MVP] Risques Géorisques.** Je veux les risques afin d'écarter les terrains à problème.
 - Argile (RGA), inondation, radon, sismicité, sites pollués récupérés et affichés avec source et date.

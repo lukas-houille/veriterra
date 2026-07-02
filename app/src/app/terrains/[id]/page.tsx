@@ -17,7 +17,7 @@ import {
   UnavailableState,
   type PortfolioStatus,
 } from '@veriterra/ui';
-import type { PenteData, PrixDvfData, RisquesData, ServicesData } from '@veriterra/enrichment';
+import type { PenteData, PluData, PrixDvfData, RisquesData, ServicesData } from '@veriterra/enrichment';
 import { auth } from '@/auth';
 import { getTerrain, getTerrainEnrichment } from '@/modules/terrains/service';
 import { listDocuments } from '@/modules/terrains/documents';
@@ -477,6 +477,112 @@ function ServicesBlock({ block }: { block: EnrichmentBlockView }) {
   );
 }
 
+/** Famille de zone lisible depuis le code typezone (AU avant U : "AU" commence aussi par A). */
+function zoneFamily(typezone: string | null): string | null {
+  if (!typezone) return null;
+  const t = typezone.toUpperCase();
+  if (t.startsWith('AU')) return 'à urbaniser';
+  if (t.startsWith('U')) return 'urbaine';
+  if (t.startsWith('A')) return 'agricole';
+  if (t.startsWith('N')) return 'naturelle';
+  return null;
+}
+
+/** Formate une date GPU AAAAMMJJ en JJ/MM/AAAA, ou null si absente/malformée. */
+function formatGpuDate(yyyymmdd: string | null): string | null {
+  if (!yyyymmdd || !/^\d{8}$/.test(yyyymmdd)) return null;
+  return `${yyyymmdd.slice(6, 8)}/${yyyymmdd.slice(4, 6)}/${yyyymmdd.slice(0, 4)}`;
+}
+
+/** Rend le bloc PLU (API Carto GPU) : zone d'urbanisme, document et lien règlement (sans IA). */
+function PluBlock({ block }: { block: EnrichmentBlockView }) {
+  const title = 'PLU (zonage)';
+  if (block.status === 'PENDING') {
+    return (
+      <section aria-busy="true">
+        <BlockHeader title={title} />
+        <div className="h-20 animate-pulse rounded-lg border border-border bg-neutral-100" />
+        <p className="mt-2 text-xs text-muted-foreground">Recherche du zonage...</p>
+      </section>
+    );
+  }
+  if (block.status === 'ERROR') {
+    return (
+      <section>
+        <BlockHeader title={title} />
+        <UnavailableState label="Récupération impossible pour l'instant, réessayez avec Actualiser" />
+      </section>
+    );
+  }
+  const data = block.data as PluData | null;
+  if (block.status === 'UNAVAILABLE' || !data || (!data.typezone && !data.zoneLibelle)) {
+    return (
+      <section>
+        <BlockHeader title={title} />
+        <UnavailableState label={data?.note ?? 'Zonage indisponible'} />
+      </section>
+    );
+  }
+  const meta = [
+    block.source,
+    block.fetchedAt ? formatDate(block.fetchedAt) : null,
+    block.confidence ? `confiance ${CONFIDENCE_LABEL[block.confidence] ?? block.confidence.toLowerCase()}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const family = zoneFamily(data.typezone);
+  const dateLabel = formatGpuDate(data.dateValidite);
+
+  return (
+    <section>
+      <BlockHeader title={title} meta={meta} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Zone d'urbanisme</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">
+            {data.zoneLibelle ?? data.typezone}
+            {family ? ` · zone ${family}` : ''}
+          </p>
+          {data.zoneDescription ? (
+            <p className="mt-1 text-xs text-neutral-500">{data.zoneDescription}</p>
+          ) : null}
+        </div>
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Document d'urbanisme</p>
+          <p className="mt-1 text-sm text-foreground">
+            {data.documentType ?? 'Document'}
+            {data.documentName ? ` · ${data.documentName}` : ''}
+          </p>
+          {dateLabel ? <p className="mt-0.5 text-xs text-neutral-500">Validé le {dateLabel}</p> : null}
+          {data.reglementUrl ? (
+            <a
+              href={data.reglementUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-indigo-500 hover:underline"
+            >
+              Règlement et pièces du document
+              <ExternalLinkIcon />
+            </a>
+          ) : null}
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] text-neutral-500">
+        Zonage sourcé (non normalisé) ; les règles chiffrées (hauteur, emprise, reculs) vivent dans le
+        règlement, dont l'extraction viendra dans une prochaine étape.
+      </p>
+      {block.sourceUrl ? (
+        <p className="mt-1 text-[10.5px] text-neutral-400">
+          Source ·{' '}
+          <a href={block.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">
+            {block.source ?? "Géoportail de l'Urbanisme"}
+          </a>
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export default async function TerrainPage({
   params,
 }: {
@@ -669,14 +775,9 @@ export default async function TerrainPage({
                 if (block.type === 'RISQUES') return <RisquesBlock key={block.type} block={block} />;
                 if (block.type === 'PENTE') return <PenteBlock key={block.type} block={block} />;
                 if (block.type === 'SERVICES') return <ServicesBlock key={block.type} block={block} />;
+                if (block.type === 'PLU') return <PluBlock key={block.type} block={block} />;
                 return null;
               })}
-
-              {/* Bloc à venir dans la prochaine slice (jamais silencieux, règle n°3). */}
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">PLU</p>
-                <UnavailableState label="À venir" />
-              </div>
             </div>
           </TabsContent>
 

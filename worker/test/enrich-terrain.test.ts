@@ -66,6 +66,16 @@ describe('runEnrichTerrain', () => {
             { lat: 45.7512, lon: 4.8305, tags: { amenity: 'school' } },
           ] }), { status: 200 });
         }
+        // API Carto GPU (PLU) : commune non RNU, zone U, document PLU.
+        if (url.includes('/api/gpu/municipality')) {
+          return new Response(JSON.stringify({ features: [{ properties: { is_rnu: false, name: 'LYON' } }] }), { status: 200 });
+        }
+        if (url.includes('/api/gpu/zone-urba')) {
+          return new Response(JSON.stringify({ features: [{ properties: { typezone: 'U', libelle: 'UA', partition: 'DU_69381', datvalid: '20240101' } }] }), { status: 200 });
+        }
+        if (url.includes('/api/gpu/document')) {
+          return new Response(JSON.stringify({ features: [{ properties: { du_type: 'PLU', grid_title: 'PLU LYON' } }] }), { status: 200 });
+        }
         const body = url.includes('/rga')
           ? { codeExposition: '2', exposition: 'Exposition moyenne' }
           : url.includes('/zonage_sismique')
@@ -83,6 +93,7 @@ describe('runEnrichTerrain', () => {
       { type: 'PRIX_DVF', status: 'OK' },
       { type: 'PENTE', status: 'OK' },
       { type: 'SERVICES', status: 'OK' },
+      { type: 'PLU', status: 'OK' },
     ]);
 
     const risques = await admin.enrichmentBlock.findFirst({ where: { terrainId: TERRAIN_ID, type: 'RISQUES' } });
@@ -128,6 +139,24 @@ describe('runEnrichTerrain', () => {
     const svc = await admin.enrichmentBlock.findFirst({ where: { terrainId: TERRAIN_ID, type: 'SERVICES' } });
     expect(svc?.status).toBe('ERROR');
     expect(svc?.error).toBeTruthy();
+  });
+
+  it('une panne GPU (503) écrit un bloc PLU ERROR, jamais un faux « pas de PLU » (règle 3)', async () => {
+    // Les endpoints GPU échouent (transitoire), les autres sources répondent (peu importe le contenu).
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('/api/gpu/')
+          ? new Response('', { status: 503 })
+          : new Response(JSON.stringify({}), { status: 200 }),
+      ),
+    );
+    await expect(
+      runEnrichTerrain({ organizationId: ORG_ID, terrainId: TERRAIN_ID, force: true }),
+    ).rejects.toThrow(/injoignable/i);
+    const plu = await admin.enrichmentBlock.findFirst({ where: { terrainId: TERRAIN_ID, type: 'PLU' } });
+    expect(plu?.status).toBe('ERROR');
+    expect(plu?.error).toBeTruthy();
   });
 
   it('un terrain inexistant ne produit aucun bloc et ne jette pas', async () => {

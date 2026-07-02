@@ -8,6 +8,8 @@ interface BanRawFeature {
     citycode: string;
     city: string;
     postcode: string;
+    /** housenumber | street | locality | municipality (optionnel selon la réponse BAN). */
+    type?: string;
     score: number;
   };
   geometry: { coordinates: [number, number] };
@@ -19,10 +21,25 @@ function toBanFeature(f: BanRawFeature): BanFeature {
     citycode: f.properties.citycode,
     city: f.properties.city,
     postcode: f.properties.postcode,
+    type: f.properties.type ?? '',
     lon: f.geometry.coordinates[0],
     lat: f.geometry.coordinates[1],
     score: f.properties.score,
   };
+}
+
+// Zoom cible selon la granularité du résultat BAN : une commune se cadre large, un numéro serré
+// (le zoom 18 fixe « zoomait trop » sur une ville). Pur et testable.
+const ZOOM_BY_BAN_TYPE: Record<string, number> = {
+  municipality: 13,
+  locality: 14,
+  street: 16,
+  housenumber: 17,
+};
+
+/** Zoom de survol adapté au type de résultat BAN, 15 par défaut pour un type inconnu. */
+export function zoomForBanType(type: string): number {
+  return ZOOM_BY_BAN_TYPE[type] ?? 15;
 }
 
 /**

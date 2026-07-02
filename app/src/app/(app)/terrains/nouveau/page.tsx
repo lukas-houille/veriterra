@@ -1,46 +1,21 @@
 'use client';
 
-import { useCallback, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import { useCallback, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import { Button, Input } from '@veriterra/ui';
 import type { SelectedParcelle } from '@/components/map/selection-map';
 import type { TerrainSummary } from '@/modules/terrains/types';
 
-// Écran « Explorer » (création de terrain). Reproduction fidèle de la maquette
-// designée (docs/design/handoff/Explorer.dc.html) : plein écran carte, barre de
-// recherche flottante et panneau de détails. La logique (état, sélection de
-// parcelles, appel API, redirection) est préservée à l'identique.
+// Écran « Explorer » (création de terrain) : plein écran carte + panneau de détails flottant.
+// La logique (état, sélection de parcelles, appel API, redirection) est préservée à
+// l'identique ; la présentation est en tokens du design system, sous le shell commun.
 
-const SANS = "'Archivo', system-ui, sans-serif";
-const MONO = "'Spline Sans Mono', ui-monospace, monospace";
-
-// Jetons de couleur (mode clair de la maquette).
-const PANEL = '#FFFFFF';
-const BORDER = '#DADEE8';
-const TEXT = '#161A2E';
-const SUB = '#6C7488';
-const MICRO = '#98A0B0';
-const NAVY = '#2F3B6E';
-
-const microLabel: CSSProperties = {
-  fontSize: '10px',
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  color: MICRO,
-  fontWeight: 600,
-};
-const fieldInput: CSSProperties = {
-  width: '100%',
-  border: `1px solid ${BORDER}`,
-  background: PANEL,
-  borderRadius: '9px',
-  padding: '9px 12px',
-  fontSize: '14px',
-  fontFamily: SANS,
-  color: TEXT,
-  outline: 'none',
-};
+// Style commun aux champs textarea, aligné sur le composant Input (@veriterra/ui).
+const fieldClass =
+  'flex w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-foreground ' +
+  'placeholder:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-indigo-400';
 
 // La carte MapLibre ne doit jamais être rendue côté serveur (accès à window).
 const SelectionMap = dynamic(
@@ -48,24 +23,24 @@ const SelectionMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div
-        style={{
-          display: 'flex',
-          height: '100%',
-          width: '100%',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: '#E9ECF2',
-          color: SUB,
-          fontFamily: SANS,
-          fontSize: '14px',
-        }}
-      >
+      <div className="flex h-full w-full items-center justify-center bg-neutral-100 text-sm text-neutral-500">
         Chargement de la carte...
       </div>
     ),
   },
 );
+
+/** Champ de formulaire : label micro (capitales) au-dessus du contrôle. */
+function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={htmlFor} className="text-[10px] font-semibold uppercase tracking-[0.06em] text-neutral-400">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
 
 /** Découpe le code INSEE (5 premiers caractères) d'un IDU cadastral. */
 function inseeFromIdu(idu: string): string {
@@ -163,77 +138,43 @@ export default function NouveauTerrainPage() {
     }
   }
 
+  // Le panneau de détails n'apparaît qu'après sélection : ce libellé décrit donc toujours au moins une parcelle.
   const parcelleCount = parcelles.length;
-  const cardDescription =
-    parcelleCount === 0
-      ? 'Sélectionnez au moins une parcelle sur la carte pour continuer.'
-      : `${parcelleCount} parcelle${parcelleCount > 1 ? 's' : ''} sélectionnée${parcelleCount > 1 ? 's' : ''}.`;
+  const cardDescription = `${parcelleCount} parcelle${parcelleCount > 1 ? 's' : ''} sélectionnée${
+    parcelleCount > 1 ? 's' : ''
+  }.`;
 
   return (
-    <div
-      style={{
-        height: 'calc(100dvh - 3.625rem)',
-        display: 'flex',
-        flexDirection: 'column',
-        fontFamily: SANS,
-        background: '#F5F6FA',
-        color: TEXT,
-      }}
-    >
+    <div className="flex h-[calc(100dvh-3.625rem)] flex-col bg-background text-foreground">
       {/* MAP AREA (la barre de nav est fournie par le shell (app)) */}
-      <div style={{ position: 'relative', flex: 1, overflow: 'hidden', background: '#E9ECF2' }}>
-        <div style={{ position: 'absolute', inset: 0 }}>
+      <div className="relative flex-1 overflow-hidden bg-neutral-100">
+        <div className="absolute inset-0">
           <SelectionMap onSelectionChange={handleSelectionChange} onAddressPick={handleAddressPick} />
         </div>
 
-        {/* PANNEAU DÉTAILS (carte contextuelle, haut-droite) */}
-        <aside
-          aria-label="Détails du terrain"
-          style={{
-            position: 'absolute',
-            right: '16px',
-            top: '16px',
-            width: '360px',
-            maxWidth: 'calc(100% - 32px)',
-            maxHeight: 'calc(100% - 32px)',
-            display: 'flex',
-            flexDirection: 'column',
-            background: PANEL,
-            border: `1px solid ${BORDER}`,
-            borderRadius: '14px',
-            boxShadow: '0 18px 40px -14px rgba(16,20,34,0.5)',
-            zIndex: 20,
-            overflow: 'hidden',
-          }}
-        >
-          <form
-            onSubmit={handleSubmit}
-            style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '16px' }}
+        {/* PANNEAU DÉTAILS : n'apparaît qu'après sélection d'au moins une parcelle. */}
+        {parcelleCount > 0 && (
+          <aside
+            aria-label="Détails du terrain"
+            className="absolute right-4 top-4 z-20 flex max-h-[calc(100%-2rem)] w-[360px] max-w-[calc(100%-2rem)] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg"
           >
-            <div style={{ marginBottom: '14px' }}>
-              <h1 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: TEXT }}>Détails du terrain</h1>
-              <p style={{ margin: '3px 0 0', fontSize: '12.5px', color: SUB, lineHeight: 1.4 }}>{cardDescription}</p>
-            </div>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3 overflow-y-auto p-4">
+              <div>
+                <h1 className="text-base font-bold text-foreground">Détails du terrain</h1>
+                <p className="mt-0.5 text-xs leading-snug text-neutral-500">{cardDescription}</p>
+              </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '13px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <label htmlFor="address" style={microLabel}>
-                  Adresse
-                </label>
-                <input
+              <Field label="Adresse" htmlFor="address">
+                <Input
                   id="address"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="12 rue des Terrains, 33000 Bordeaux"
-                  style={fieldInput}
                 />
-              </div>
+              </Field>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <label htmlFor="prix" style={microLabel}>
-                  Prix demandé (€)
-                </label>
-                <input
+              <Field label="Prix demandé (€)" htmlFor="prix">
+                <Input
                   id="prix"
                   type="number"
                   inputMode="numeric"
@@ -241,129 +182,66 @@ export default function NouveauTerrainPage() {
                   value={prixDemande}
                   onChange={(e) => setPrixDemande(e.target.value)}
                   placeholder="150000"
-                  style={{ ...fieldInput, fontFamily: MONO }}
+                  className="font-mono"
                 />
-              </div>
+              </Field>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <label htmlFor="lien" style={microLabel}>
-                  Lien de l&apos;annonce
-                </label>
-                <input
+              <Field label="Lien de l'annonce" htmlFor="lien">
+                <Input
                   id="lien"
                   type="url"
                   value={lienAnnonce}
                   onChange={(e) => setLienAnnonce(e.target.value)}
                   placeholder="https://..."
-                  style={fieldInput}
                 />
-              </div>
+              </Field>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <label htmlFor="notes" style={microLabel}>
-                  Notes
-                </label>
+              <Field label="Notes" htmlFor="notes">
                 <textarea
                   id="notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
                   placeholder="Observations, contexte, points à vérifier..."
-                  style={{ ...fieldInput, resize: 'vertical', lineHeight: 1.5 }}
+                  className={`${fieldClass} resize-y leading-relaxed`}
                 />
+              </Field>
+
+              {/* Surface totale sourcée (une sélection existe forcément ici) */}
+              <div className="mt-1 border-t border-border pt-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-neutral-400">
+                    Surface totale
+                  </span>
+                  <span className="font-mono text-lg font-medium tabular-nums text-foreground">
+                    {Math.round(totalSurface).toLocaleString('fr-FR')} m²
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+                  <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-info" />
+                  <span>Source · IGN API Carto Cadastre</span>
+                </div>
               </div>
-            </div>
 
-            {/* Surface totale sourcée */}
-            <div
-              style={{
-                marginTop: '14px',
-                borderTop: `1px solid ${BORDER}`,
-                paddingTop: '13px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '8px' }}>
-                <span style={microLabel}>Surface totale</span>
-                <span style={{ fontFamily: MONO, fontSize: '18px', fontWeight: 500, color: TEXT }}>
-                  {parcelleCount === 0
-                    ? 'Donnée indisponible'
-                    : `${Math.round(totalSurface).toLocaleString('fr-FR')} m²`}
-                </span>
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  marginTop: '8px',
-                  fontSize: '10.5px',
-                  color: MICRO,
-                }}
-              >
-                <span
-                  aria-hidden="true"
-                  style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2F6E8F', flexShrink: 0 }}
-                />
-                <span>Source · IGN API Carto Cadastre</span>
-              </div>
-            </div>
+              {error && (
+                <p
+                  role="alert"
+                  className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                  {error}
+                </p>
+              )}
 
-            {error && (
-              <p
-                role="alert"
-                style={{
-                  marginTop: '13px',
-                  marginBottom: 0,
-                  border: '1px solid #E7C4BC',
-                  background: '#F8E7E2',
-                  color: '#C0432E',
-                  borderRadius: '9px',
-                  padding: '9px 12px',
-                  fontSize: '13px',
-                }}
-              >
-                {error}
-              </p>
-            )}
+              <Button type="submit" disabled={!canSubmit} className="mt-1 w-full">
+                {submitting ? 'Création...' : 'Créer le terrain'}
+              </Button>
 
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              style={{
-                marginTop: '16px',
-                width: '100%',
-                textAlign: 'center',
-                background: canSubmit ? NAVY : '#AEB4C6',
-                color: '#FFFFFF',
-                fontFamily: SANS,
-                fontSize: '13.5px',
-                fontWeight: 600,
-                padding: '11px',
-                borderRadius: '9px',
-                border: 'none',
-                cursor: canSubmit ? 'pointer' : 'not-allowed',
-              }}
-            >
-              {submitting ? 'Création...' : 'Créer le terrain'}
-            </button>
-
-            <Link
-              href="/dashboard"
-              style={{
-                marginTop: '8px',
-                display: 'block',
-                textAlign: 'center',
-                color: SUB,
-                fontSize: '13px',
-                fontWeight: 500,
-                padding: '8px',
-                borderRadius: '9px',
-              }}
-            >
-              Retour au tableau de bord
-            </Link>
-          </form>
-        </aside>
+              <Button asChild variant="ghost" size="sm" className="w-full">
+                <Link href="/dashboard">Retour au tableau de bord</Link>
+              </Button>
+            </form>
+          </aside>
+        )}
       </div>
     </div>
   );

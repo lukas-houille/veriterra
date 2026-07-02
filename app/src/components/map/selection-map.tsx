@@ -16,7 +16,7 @@ import {
   FRANCE_ZOOM,
   type BasemapId,
 } from './map-style';
-import { searchAddress } from '@/lib/geo/ban';
+import { searchAddress, zoomForBanType } from '@/lib/geo/ban';
 import {
   fetchParcelleAtPoint,
   fetchParcellesInBbox,
@@ -321,7 +321,9 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
       setShowSuggestions(false);
       setSuggestions([]);
       onAddressPick({ insee: feature.citycode, address: feature.label });
-      mapRef.current?.flyTo({ center: [feature.lon, feature.lat], zoom: 18 });
+      // Zoom adapté à la granularité du résultat : une commune ne doit pas cadrer comme un
+      // numéro de rue (le zoom 18 fixe « zoomait trop » sur une ville).
+      mapRef.current?.flyTo({ center: [feature.lon, feature.lat], zoom: zoomForBanType(feature.type) });
     },
     [onAddressPick],
   );

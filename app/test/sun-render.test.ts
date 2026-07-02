@@ -38,20 +38,20 @@ describe('sunShadowsFor', () => {
     expect(sansHauteur).toBe(1); // le bâtiment sans hauteur
   });
 
-  it('garde une ombre indicative la nuit (altitude bornée par le plancher, pas de disparition brutale)', () => {
+  it("ne projette aucune ombre la nuit (soleil sous l'horizon) : l'ombre disparaît complètement", () => {
     const nuit: SunPos = { azimuthDeg: 0, altitudeDeg: -10 };
     const { shadows } = sunShadowsFor([{ geometry: square, hauteur: 15 }], [{ geometry: square, hauteur: 12 }], nuit);
-    expect(shadows).toHaveLength(2); // ombre conservée, sa visibilité est gérée par l'opacité (fondu)
+    expect(shadows).toHaveLength(0);
   });
 });
 
 describe('shadowFadeOpacity', () => {
-  it('plancher la nuit, croissant avec la hauteur du soleil, borné', () => {
-    const nuit = shadowFadeOpacity(-10);
+  it('nulle la nuit, réapparaît en fondu au lever, croissante puis bornée', () => {
+    expect(shadowFadeOpacity(-10)).toBe(0); // sous l'horizon : ombre disparue
+    expect(shadowFadeOpacity(0)).toBe(0); // au ras de l'horizon : encore nulle
     const bas = shadowFadeOpacity(5);
     const haut = shadowFadeOpacity(60);
-    expect(nuit).toBeCloseTo(0.06, 5); // présente mais faible
-    expect(bas).toBeGreaterThan(nuit);
+    expect(bas).toBeGreaterThan(0); // fondu au lever
     expect(haut).toBeGreaterThan(bas);
     expect(haut).toBeLessThanOrEqual(0.32);
   });

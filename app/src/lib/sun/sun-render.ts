@@ -29,41 +29,35 @@ export function toExtrusionFC(items: SunVolume[]): FeatureCollection {
   };
 }
 
-// Plancher d'altitude solaire pour le CALCUL de l'ombre : on garde une ombre INDICATIVE même soleil
-// bas ou sous l'horizon (direction = azimut réel, longueur bornée par ce plancher) au lieu de la
-// faire disparaître d'un coup. La visibilité (fondu) est gérée à part par `shadowFadeOpacity`.
-const MIN_SHADOW_ALT_DEG = 3;
-
 /**
- * Ombres au sol du bâti ET de la végétation, agrégées (Turf). Un volume sans hauteur ne projette
- * pas d'ombre (jamais d'ombre inventée) ; `sansHauteur` les compte pour l'afficher honnêtement.
- * L'altitude du soleil est bornée en bas (plancher) : l'ombre reste présente et orientée à l'azimut
- * réel au crépuscule et la nuit, elle s'estompe visuellement via l'opacité (pas d'apparition brutale).
+ * Ombres au sol du bâti ET de la végétation, agrégées (Turf). Un volume sans hauteur, ou le soleil
+ * sous l'horizon, ne projette pas d'ombre (jamais d'ombre inventée) : la nuit, aucune géométrie
+ * n'est produite (l'ombre disparaît complètement). `sansHauteur` compte les volumes exclus faute de
+ * hauteur, pour l'afficher honnêtement. La visibilité de jour suit un fondu (`shadowFadeOpacity`).
  */
 export function sunShadowsFor(
   buildings: SunVolume[],
   canopies: SunVolume[],
   sun: SunPos,
 ): { shadows: Array<Feature<Polygon>>; sansHauteur: number } {
-  const clamped: SunPos = { azimuthDeg: sun.azimuthDeg, altitudeDeg: Math.max(sun.altitudeDeg, MIN_SHADOW_ALT_DEG) };
   const inputs: ShadowBuilding[] = [...buildings, ...canopies].map((v) => ({
     geometry: v.geometry,
     hauteur: v.hauteur,
   }));
-  return allShadows(inputs, clamped);
+  return allShadows(inputs, sun);
 }
 
 /**
- * Opacité de l'ombre au sol en fondu doux selon la hauteur du soleil : faible mais PRÉSENTE la nuit
- * (plancher), plus dense quand le soleil monte. « Mappe » l'intensité et fait apparaître l'ombre
- * progressivement au lever, sans on/off brutal. Rendu, pas de la donnée (règles 1 et 3).
+ * Opacité de l'ombre au sol en fondu selon la hauteur du soleil : NULLE sous l'horizon (l'ombre a
+ * complètement disparu la nuit), puis elle réapparaît en fondu au lever et se densifie quand le
+ * soleil monte. « Mappe » l'intensité, sans on/off brutal. Rendu, pas de la donnée (règles 1 et 3).
  */
 export function shadowFadeOpacity(altitudeDeg: number): number {
-  const FLOOR = 0.06;
   const MAX = 0.32;
-  const t = Math.min(1, Math.max(0, altitudeDeg / 45));
+  if (altitudeDeg <= 0) return 0; // soleil sous l'horizon : aucune ombre
+  const t = Math.min(1, altitudeDeg / 20); // fondu du lever (0°) jusqu'à 20° de hauteur
   const smooth = t * t * (3 - 2 * t); // smoothstep
-  return FLOOR + (MAX - FLOOR) * smooth;
+  return MAX * smooth;
 }
 
 /**

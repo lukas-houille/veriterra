@@ -15,8 +15,10 @@ const CACHE_PREFIX = 'geo:vegetation:';
 const CACHE_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 jours (couvert végétal stable)
 const MAX_ELEMENTS = 400;
 
-/** Hauteur de canopée APPROXIMÉE par type d'occupation (m). Approximation visuelle, pas une mesure. */
-const CANOPY_HEIGHT_M: Record<string, number> = { wood: 12, forest: 12, scrub: 3 };
+/** Hauteur de canopée APPROXIMÉE par type d'occupation (m). Approximation visuelle, pas une mesure.
+ * Volontairement basse (les emprises OSM englobent souvent des lisières et des trouées) pour ne pas
+ * sur-évaluer l'ombre portée des zones boisées. */
+const CANOPY_HEIGHT_M: Record<string, number> = { wood: 10, forest: 10, scrub: 2 };
 
 /** Emprise de canopée : géométrie + hauteur approximée. Même forme que BatimentFeature (uniforme). */
 export interface CanopyFeature {

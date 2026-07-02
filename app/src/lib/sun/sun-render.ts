@@ -29,19 +29,48 @@ export function toExtrusionFC(items: SunVolume[]): FeatureCollection {
   };
 }
 
+// Plancher d'altitude solaire pour le CALCUL de l'ombre : on garde une ombre INDICATIVE même soleil
+// bas ou sous l'horizon (direction = azimut réel, longueur bornée par ce plancher) au lieu de la
+// faire disparaître d'un coup. La visibilité (fondu) est gérée à part par `shadowFadeOpacity`.
+const MIN_SHADOW_ALT_DEG = 3;
+
 /**
- * Ombres au sol du bâti ET de la végétation, agrégées (Turf). Un volume sans hauteur ou de nuit ne
- * projette pas d'ombre (jamais d'ombre inventée). `sansHauteur` compte les volumes exclus faute de
- * hauteur, pour l'afficher honnêtement.
+ * Ombres au sol du bâti ET de la végétation, agrégées (Turf). Un volume sans hauteur ne projette
+ * pas d'ombre (jamais d'ombre inventée) ; `sansHauteur` les compte pour l'afficher honnêtement.
+ * L'altitude du soleil est bornée en bas (plancher) : l'ombre reste présente et orientée à l'azimut
+ * réel au crépuscule et la nuit, elle s'estompe visuellement via l'opacité (pas d'apparition brutale).
  */
 export function sunShadowsFor(
   buildings: SunVolume[],
   canopies: SunVolume[],
   sun: SunPos,
 ): { shadows: Array<Feature<Polygon>>; sansHauteur: number } {
+  const clamped: SunPos = { azimuthDeg: sun.azimuthDeg, altitudeDeg: Math.max(sun.altitudeDeg, MIN_SHADOW_ALT_DEG) };
   const inputs: ShadowBuilding[] = [...buildings, ...canopies].map((v) => ({
     geometry: v.geometry,
     hauteur: v.hauteur,
   }));
-  return allShadows(inputs, sun);
+  return allShadows(inputs, clamped);
+}
+
+/**
+ * Opacité de l'ombre au sol en fondu doux selon la hauteur du soleil : faible mais PRÉSENTE la nuit
+ * (plancher), plus dense quand le soleil monte. « Mappe » l'intensité et fait apparaître l'ombre
+ * progressivement au lever, sans on/off brutal. Rendu, pas de la donnée (règles 1 et 3).
+ */
+export function shadowFadeOpacity(altitudeDeg: number): number {
+  const FLOOR = 0.06;
+  const MAX = 0.32;
+  const t = Math.min(1, Math.max(0, altitudeDeg / 45));
+  const smooth = t * t * (3 - 2 * t); // smoothstep
+  return FLOOR + (MAX - FLOOR) * smooth;
+}
+
+/**
+ * Exagération de l'ombrage du relief (hillshade) selon la hauteur du soleil : plus marquée quand le
+ * soleil est bas (versants longuement ombrés), plus plate au zénith. Rendu visuel, pas une mesure.
+ */
+export function hillshadeExaggeration(altitudeDeg: number): number {
+  const t = Math.min(1, Math.max(0, altitudeDeg / 45));
+  return 0.75 - 0.45 * t; // 0.75 (soleil bas) -> 0.30 (soleil haut)
 }

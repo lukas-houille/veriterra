@@ -27,8 +27,14 @@ import type { BanFeature, GeoJsonGeometry } from '@/lib/geo/types';
 import { parcellesCentroid } from '@/lib/geo/centroid';
 import { ambienceForAltitude } from '@/lib/sun/ambience';
 import { sunPosition } from '@/lib/sun/shadows';
-import { sunShadowsFor, toExtrusionFC, type SunVolume } from '@/lib/sun/sun-render';
-import { dateForDayOfYear, dayOfYear, seasonLabel, timestampFor } from '@/lib/sun/sun-time';
+import {
+  hillshadeExaggeration,
+  shadowFadeOpacity,
+  sunShadowsFor,
+  toExtrusionFC,
+  type SunVolume,
+} from '@/lib/sun/sun-render';
+import { dateForDayOfYear, dayOfYear, seasonLabel, seasonMarks, timestampFor } from '@/lib/sun/sun-time';
 
 /** Parcelle retenue dans la sélection courante (remontée au parent). */
 export interface SelectedParcelle {
@@ -114,6 +120,16 @@ const microLabel: CSSProperties = {
   textTransform: 'uppercase',
   color: MICRO,
   fontWeight: 600,
+};
+
+const presetChip: CSSProperties = {
+  border: 'none',
+  borderRadius: '7px',
+  padding: '4px 9px',
+  fontFamily: SANS,
+  fontSize: '11.5px',
+  fontWeight: 600,
+  cursor: 'pointer',
 };
 
 const EMPTY_FC = { type: 'FeatureCollection' as const, features: [] as unknown[] };
@@ -233,6 +249,28 @@ function installSunLayers(map: MaplibreMap): void {
   for (const id of [SUN_SHADOW_SOURCE, SUN_BUILDING_SOURCE, SUN_CANOPY_SOURCE]) {
     if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: EMPTY_FC as SetDataArg });
   }
+  // Ombrage du relief piloté par le soleil (hillshade natif sur le MNT), tout en bas de la pile
+  // applicative (sous les résultats/sélection), pour que le relief cesse d'être plat face au soleil.
+  // Ce n'est pas une ombre projetée à distance : les versants à contre-jour s'assombrissent, la
+  // direction et l'intensité suivent l'heure et la saison (mis à jour dans l'effet). Rendu, pas de la donnée.
+  if (!map.getLayer('sun-hillshade')) {
+    const under = map.getLayer('surface-fill') ? 'surface-fill' : undefined;
+    map.addLayer(
+      {
+        id: 'sun-hillshade',
+        type: 'hillshade',
+        source: SUN_TERRAIN_SOURCE,
+        paint: {
+          'hillshade-illumination-anchor': 'map',
+          'hillshade-illumination-direction': 315,
+          'hillshade-exaggeration': 0.5,
+          'hillshade-shadow-color': '#2a2f45',
+          'hillshade-highlight-color': '#fff3df',
+        },
+      },
+      under,
+    );
+  }
   if (!map.getLayer('sun-shadow-fill')) {
     // Sous le liseré de contour (selection-casing), donc au-dessus du fond ambre : ombre visible sur la parcelle.
     const beforeId = map.getLayer('selection-casing') ? 'selection-casing' : undefined;
@@ -274,7 +312,7 @@ function installSunLayers(map: MaplibreMap): void {
 
 /** Retire les calques et sources de l'analyse d'ensoleillement (retour à la vue 2D). */
 function removeSunLayers(map: MaplibreMap): void {
-  for (const id of ['sun-buildings-3d', 'sun-canopy-3d', 'sun-shadow-fill']) {
+  for (const id of ['sun-buildings-3d', 'sun-canopy-3d', 'sun-shadow-fill', 'sun-hillshade']) {
     if (map.getLayer(id)) map.removeLayer(id);
   }
   for (const id of [SUN_SHADOW_SOURCE, SUN_BUILDING_SOURCE, SUN_CANOPY_SOURCE]) {
@@ -352,6 +390,22 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
     () => (sunActive && sunPos ? ambienceForAltitude(sunPos.altitudeDeg) : null),
     [sunActive, sunPos],
   );
+  // Repères d'extrêmes (solstices/équinoxes) de l'année courante, pour sauter aux cas limites.
+  const sunPresets = useMemo(() => {
+    const year = Number(sunDate.slice(0, 4)) || new Date().getFullYear();
+    const marks = seasonMarks(year);
+    return [
+      { label: 'Printemps', date: marks.printemps },
+      { label: 'Été', date: marks.ete },
+      { label: 'Automne', date: marks.automne },
+      { label: 'Hiver', date: marks.hiver },
+    ];
+  }, [sunDate]);
+  // Remise à l'instant courant (aujourd'hui, 14:00).
+  const resetSun = useCallback(() => {
+    setSunDate(todayStr());
+    setSunMinutes(14 * 60);
+  }, []);
 
   // Entrée/sortie du mode : pitch 3D + relief natif + calques bâti/canopée/ombres + chargement des données.
   useEffect(() => {
@@ -454,6 +508,7 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
     }
     if (sunPos) {
       const amb = ambienceForAltitude(sunPos.altitudeDeg);
+      const azimuth = Math.round((((sunPos.azimuthDeg % 360) + 360) % 360));
       try {
         map.setSky(amb.sky);
         if (map.getLayer('sun-buildings-3d')) {
@@ -461,7 +516,14 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
         }
         if (map.getLayer('sun-shadow-fill')) {
           map.setPaintProperty('sun-shadow-fill', 'fill-color', amb.shadowColor);
-          map.setPaintProperty('sun-shadow-fill', 'fill-opacity', amb.shadowOpacity);
+          // Opacité en FONDU (plancher la nuit, croissant avec la hauteur du soleil) : plus de
+          // disparition brutale de l'ombre à l'horizon, l'intensité suit la course du soleil.
+          map.setPaintProperty('sun-shadow-fill', 'fill-opacity', shadowFadeOpacity(sunPos.altitudeDeg));
+        }
+        if (map.getLayer('sun-hillshade')) {
+          // Le relief s'ombre dans la direction du soleil (azimut), plus marqué quand il est bas.
+          map.setPaintProperty('sun-hillshade', 'hillshade-illumination-direction', azimuth);
+          map.setPaintProperty('sun-hillshade', 'hillshade-exaggeration', hillshadeExaggeration(sunPos.altitudeDeg));
         }
       } catch {
         // style transitoirement indisponible : rien de bloquant.
@@ -1138,6 +1200,32 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
               />
             </label>
 
+            {/* Repères d'extrêmes (solstices/équinoxes) + remise à l'instant courant */}
+            <div role="group" aria-label="Repères de saison" style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+              {sunPresets.map((p) => {
+                const active = sunDate === p.date;
+                return (
+                  <button
+                    key={p.label}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setSunDate(p.date)}
+                    style={{ ...presetChip, background: active ? INDIGO : '#EEF0F5', color: active ? '#FFFFFF' : TEXT }}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={resetSun}
+                title="Revenir à aujourd'hui, 14:00"
+                style={{ ...presetChip, marginLeft: 'auto', background: 'transparent', color: SUB }}
+              >
+                Aujourd&apos;hui
+              </button>
+            </div>
+
             <p style={{ margin: 0, fontSize: '12px', color: TEXT }}>
               {sunPos == null
                 ? 'Parcelle sans géométrie.'
@@ -1154,7 +1242,7 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
                 ? 'Chargement des volumes 3D...'
                 : sunError
                   ? sunError
-                  : `${sunUnavail.b ? 'Bâtiments indisponibles' : `${sunCounts.b} bâtiment${sunCounts.b > 1 ? 's' : ''}`}${sunSansHauteur > 0 ? ` (dont ${sunSansHauteur} sans hauteur connue, non ombré${sunSansHauteur > 1 ? 's' : ''})` : ''}, ${sunUnavail.v ? 'végétation indisponible' : `${sunCounts.v} zone${sunCounts.v > 1 ? 's' : ''} boisée${sunCounts.v > 1 ? 's' : ''}`}. Ombres du bâti et de la végétation projetées au sol (méthode simplifiée), drapées sur le relief (MNT, exagéré 1,2x). Canopée approximée.`}
+                  : `${sunUnavail.b ? 'Bâtiments indisponibles' : `${sunCounts.b} bâtiment${sunCounts.b > 1 ? 's' : ''}`}${sunSansHauteur > 0 ? ` (dont ${sunSansHauteur} sans hauteur connue, non ombré${sunSansHauteur > 1 ? 's' : ''})` : ''}, ${sunUnavail.v ? 'végétation indisponible' : `${sunCounts.v} zone${sunCounts.v > 1 ? 's' : ''} boisée${sunCounts.v > 1 ? 's' : ''}`}. Ombres du bâti et de la végétation projetées au sol (méthode simplifiée), sur le relief ombré selon le soleil (MNT, exagéré 1,2x). Canopée approximée.`}
             </p>
           </div>
         )}

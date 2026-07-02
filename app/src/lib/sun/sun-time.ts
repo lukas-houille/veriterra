@@ -32,6 +32,23 @@ export function dayOfYear(dateStr: string): number {
   return Math.max(0, Math.min(364, Math.round((day - start) / 86_400_000)));
 }
 
+/** Dates repères d'une année (hémisphère nord) pour sauter aux extrêmes du soleil. Approximation à
+ * un jour près (les instants exacts varient), suffisante pour visualiser les cas limites. */
+export interface SeasonMarks {
+  printemps: string;
+  ete: string;
+  automne: string;
+  hiver: string;
+}
+export function seasonMarks(year: number): SeasonMarks {
+  return {
+    printemps: `${year}-03-20`, // équinoxe de printemps
+    ete: `${year}-06-21`, // solstice d'été (jour le plus long)
+    automne: `${year}-09-22`, // équinoxe d'automne
+    hiver: `${year}-12-21`, // solstice d'hiver (jour le plus court)
+  };
+}
+
 /** Libellé de saison (hémisphère nord) d'une date, pour l'affichage du curseur. */
 export function seasonLabel(dateStr: string): string {
   const m = Number(dateStr.split('-')[1] ?? '1');

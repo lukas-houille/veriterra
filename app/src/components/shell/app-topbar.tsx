@@ -53,16 +53,17 @@ export function AppTopBar({ userInitials, userLabel }: AppTopBarProps) {
       </nav>
 
       <div className="ml-auto flex items-center gap-3">
-        <Link href="/onboarding" className={cn(navBase, navIdle)}>
-          Mon projet
+        <Link href="/profil" className={cn(navBase, navIdle)}>
+          Profil
         </Link>
-        <span
+        <Link
+          href="/profil"
           title={userLabel}
-          aria-hidden="true"
-          className="flex h-[38px] w-[38px] select-none items-center justify-center rounded-full bg-indigo-500 text-[13px] font-bold tracking-[0.02em] text-white"
+          aria-label={userLabel ? `Profil (${userLabel})` : 'Profil'}
+          className="flex h-[38px] w-[38px] select-none items-center justify-center rounded-full bg-indigo-500 text-[13px] font-bold tracking-[0.02em] text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {userInitials}
-        </span>
+        </Link>
         <form action={signOutAction}>
           <button
             type="submit"

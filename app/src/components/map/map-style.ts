@@ -159,6 +159,13 @@ const PCI_SOURCE = 'pci-cadastre';
 const PCI_TILES = 'https://data.geopf.fr/tms/1.0.0/PCI/{z}/{x}/{y}.pbf';
 const CADASTRE_LINE = '#8A93AD';
 const CADASTRE_LABEL = '#2F3B6E';
+// Sous-couche RASTER du cadastre (US-1.12) : les tuiles VECTORIELLES PCI ne portent aucune parcelle
+// sous z15 (plancher du jeu de tuiles IGN). Pour se repérer plus tôt, on pose le cadastre raster IGN
+// PARCELLAIRE_EXPRESS en fond léger visible ~z13-15, masqué à z15+ où le vectoriel interrogeable prend
+// le relais. Visuel seulement (non interrogeable, contrairement à la couche vectorielle).
+const CADASTRE_RASTER_SOURCE = 'pci-raster';
+const CADASTRE_RASTER_MIN_Z = 13;
+const CADASTRE_RASTER_MAX_Z = 15;
 
 /**
  * Installe (idempotent) la surcouche cadastre PCI sur le style courant, sur les deux fonds : d'abord
@@ -182,6 +189,29 @@ export function ensureCadastreOverlay(map: MaplibreMap): void {
         // couche absente ou renommée : on continue.
       }
     }
+  }
+
+  // Sous-couche raster (US-1.12), posée EN PREMIER pour rester SOUS les calques vectoriels : parcelles
+  // visibles plus tôt (~z13-15), masquée à z15+ (le vectoriel prend le relais, handoff net à z15).
+  if (!map.getSource(CADASTRE_RASTER_SOURCE)) {
+    map.addSource(CADASTRE_RASTER_SOURCE, {
+      type: 'raster',
+      tiles: [wmtsTiles('CADASTRALPARCELS.PARCELLAIRE_EXPRESS', 'image/png')],
+      tileSize: 256,
+      minzoom: CADASTRE_RASTER_MIN_Z,
+      maxzoom: CADASTRE_RASTER_MAX_Z,
+      attribution: 'Cadastre : IGN PCI (data.geopf.fr)',
+    });
+  }
+  if (!map.getLayer('pci-raster')) {
+    map.addLayer({
+      id: 'pci-raster',
+      type: 'raster',
+      source: CADASTRE_RASTER_SOURCE,
+      minzoom: CADASTRE_RASTER_MIN_Z,
+      maxzoom: CADASTRE_RASTER_MAX_Z,
+      paint: { 'raster-opacity': 0.55 },
+    });
   }
 
   if (!map.getSource(PCI_SOURCE)) {

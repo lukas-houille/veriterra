@@ -21,7 +21,11 @@ export type TabsListProps = React.ComponentProps<typeof TabsPrimitive.List>;
 export function TabsList({ className, ...props }: TabsListProps) {
   return (
     <TabsPrimitive.List
-      className={cn('flex border-b border-neutral-200', className)}
+      // overflow-x-auto : sur mobile, une liste d'onglets aux libellés longs défile
+      // horizontalement au lieu de déborder. overflow-x non visible force overflow-y à
+      // 'auto' (conteneur de clip) : py-0.5/-my-0.5 réserve 2px verticaux pour que
+      // l'anneau de focus des onglets ne soit pas rogné, sans changer l'empreinte visuelle.
+      className={cn('flex overflow-x-auto border-b border-neutral-200 py-0.5 -my-0.5', className)}
       {...props}
     />
   );

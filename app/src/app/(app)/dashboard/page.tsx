@@ -113,7 +113,7 @@ export default async function DashboardPage() {
           </div>
 
           {/* Carte */}
-          <div className="sticky top-[74px] min-w-[320px] flex-[1_1_360px]">
+          <div className="sticky top-[3.625rem] min-w-[320px] flex-[1_1_360px]">
             <div className="relative h-[520px] w-full overflow-hidden rounded-lg border border-border bg-neutral-100 shadow-sm">
               <DashboardMap terrains={terrains} className="absolute inset-0 h-full w-full" />
               <div className="absolute bottom-3 left-3 z-[1] rounded-lg border border-border bg-white/95 p-3 backdrop-blur-sm">

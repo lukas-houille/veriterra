@@ -9,13 +9,14 @@ import { AppTopBar } from './app-topbar';
 export interface AppShellProps {
   userInitials: string;
   userLabel?: string;
+  isPlatformAdmin?: boolean;
   children: ReactNode;
 }
 
-export function AppShell({ userInitials, userLabel, children }: AppShellProps) {
+export function AppShell({ userInitials, userLabel, isPlatformAdmin, children }: AppShellProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-background font-sans text-foreground">
-      <AppTopBar userInitials={userInitials} userLabel={userLabel} />
+      <AppTopBar userInitials={userInitials} userLabel={userLabel} isPlatformAdmin={isPlatformAdmin} />
       <main className="flex-1">{children}</main>
     </div>
   );

@@ -1,6 +1,7 @@
 import NextAuth from 'next-auth';
 import { authConfig } from './auth.config';
 import { bootstrapUserOrganisation, refreshTenantContext } from './lib/bootstrap';
+import { isPlatformAdmin } from './lib/platform-admin';
 
 /**
  * Full Auth.js instance (Node runtime). At sign-in the `jwt` callback runs the Prisma-backed
@@ -25,6 +26,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.userId = ctx.userId;
         token.orgId = ctx.orgId;
         token.role = ctx.role;
+        // Admin plateforme : n'accepter l'e-mail comme éligible QUE s'il est VÉRIFIÉ par l'IdP
+        // (`email_verified`). Un e-mail non vérifié est potentiellement contrôlé par l'attaquant :
+        // le prendre en compte laisserait usurper une adresse de l'allowlist (bris de la règle 2).
+        // On le conserve dans un champ dédié (jamais `token.email`, qui reste l'affichage) pour
+        // recalculer le statut à chaque requête.
+        const emailVerified = (profile as { email_verified?: boolean }).email_verified === true;
+        const verifiedEmail = emailVerified && typeof profile.email === 'string' ? profile.email : undefined;
+        token.platformEmail = verifiedEmail;
+        token.platformAdmin = isPlatformAdmin(verifiedEmail);
         return token;
       }
       // Later requests: re-validate the live membership/role so revocation and role changes
@@ -40,6 +50,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.role = undefined;
         }
       }
+      // Recalcul du statut admin plateforme à chaque requête (l'allowlist ADMIN_EMAILS peut changer
+      // au déploiement) : comme le rôle d'org, il est re-validé sans re-login. `platformEmail` n'est
+      // présent que s'il a été vérifié au sign-in, donc ce recalcul reste sûr.
+      token.platformAdmin = isPlatformAdmin(
+        typeof token.platformEmail === 'string' ? token.platformEmail : undefined,
+      );
       return token;
     },
   },

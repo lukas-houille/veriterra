@@ -28,7 +28,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const label: string | undefined = session.user.name ?? session.user.email ?? undefined;
 
   return (
-    <AppShell userInitials={initials(session.user.name, session.user.email)} userLabel={label}>
+    <AppShell
+      userInitials={initials(session.user.name, session.user.email)}
+      userLabel={label}
+      isPlatformAdmin={session.user.platformAdmin}
+    >
       {children}
     </AppShell>
   );

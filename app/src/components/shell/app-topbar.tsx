@@ -19,6 +19,8 @@ export interface AppTopBarProps {
   userInitials: string;
   /** Libellé complet du compte (title de la bulle, ex. e-mail). */
   userLabel?: string;
+  /** Admin plateforme : affiche le lien vers la zone /admin. */
+  isPlatformAdmin?: boolean;
 }
 
 const navBase =
@@ -30,7 +32,7 @@ const navIdle = 'font-medium text-neutral-500 hover:bg-neutral-100 hover:text-ne
 const menuItem =
   'flex min-h-11 items-center rounded-md px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
-export function AppTopBar({ userInitials, userLabel }: AppTopBarProps) {
+export function AppTopBar({ userInitials, userLabel, isPlatformAdmin }: AppTopBarProps) {
   const pathname = usePathname() ?? '';
   const isExplorer = pathname.startsWith('/terrains/nouveau');
   const isTerrains = !isExplorer && (pathname.startsWith('/dashboard') || pathname.startsWith('/terrains'));
@@ -94,6 +96,11 @@ export function AppTopBar({ userInitials, userLabel }: AppTopBarProps) {
 
       {/* Cluster compte inline (>= sm). */}
       <div className="ml-auto hidden items-center gap-3 sm:flex">
+        {isPlatformAdmin && (
+          <Link href="/admin" className={cn(navBase, navIdle)}>
+            Administration
+          </Link>
+        )}
         <Link
           href="/profil"
           aria-current={isProfil ? 'page' : undefined}
@@ -170,6 +177,11 @@ export function AppTopBar({ userInitials, userLabel }: AppTopBarProps) {
             >
               Mes terrains
             </Link>
+            {isPlatformAdmin && (
+              <Link href="/admin" className={cn(menuItem, navIdle)}>
+                Administration
+              </Link>
+            )}
             <Link
               href="/profil"
               aria-current={isProfil ? 'page' : undefined}

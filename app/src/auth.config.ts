@@ -32,10 +32,11 @@ export const authConfig = {
     // Surface the tenant context baked into the token (by the Node `jwt` callback) onto
     // the session so server code can scope queries with `forOrg(session.user.orgId)`.
     session({ session, token }) {
-      const t = token as { userId?: string; orgId?: string; role?: string };
+      const t = token as { userId?: string; orgId?: string; role?: string; platformAdmin?: boolean };
       if (t.userId) session.user.id = t.userId;
       if (t.orgId) session.user.orgId = t.orgId;
       if (t.role) session.user.role = t.role;
+      session.user.platformAdmin = t.platformAdmin === true;
       return session;
     },
   },

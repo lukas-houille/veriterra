@@ -12,6 +12,7 @@ import {
   applyVeriterraPlanTint,
   basemapStyle,
   DEFAULT_BASEMAP,
+  ensureCadastreOverlay,
   FRANCE_CENTER,
   FRANCE_ZOOM,
   type BasemapId,
@@ -179,6 +180,8 @@ function installOverlays(
 
   // Relief chargé en permanence (les deux fonds) : rejoué ici car setStyle remet le terrain à zéro.
   ensureTerrain(map);
+  // Surcouche cadastre UNIQUE (PCI, paliers) sur les deux fonds : seul l'image de fond change en satellite.
+  ensureCadastreOverlay(map);
 
   if (!map.getSource(SURFACE_SOURCE)) {
     map.addSource(SURFACE_SOURCE, { type: 'geojson', data: EMPTY_FC as SetDataArg });
@@ -255,7 +258,8 @@ function installSunLayers(map: MaplibreMap): void {
   // Ce n'est pas une ombre projetée à distance : les versants à contre-jour s'assombrissent, la
   // direction et l'intensité suivent l'heure et la saison (mis à jour dans l'effet). Rendu, pas de la donnée.
   if (!map.getLayer('sun-hillshade')) {
-    const under = map.getLayer('surface-fill') ? 'surface-fill' : undefined;
+    // Sous la surcouche cadastre et les résultats/sélection : l'ombrage du relief ne masque pas le cadastre.
+    const under = ['pci-departement', 'pci-commune', 'pci-parcelle', 'surface-fill'].find((id) => map.getLayer(id));
     map.addLayer(
       {
         id: 'sun-hillshade',

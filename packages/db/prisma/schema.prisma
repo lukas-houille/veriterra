@@ -25,6 +25,15 @@ enum Role {
   MEMBER
 }
 
+/// Cycle de vie d'une invitation à rejoindre une organisation. PENDING = en attente qu'un
+/// utilisateur se connecte avec cet e-mail, ACCEPTED = adhésion créée au login, REVOKED = annulée
+/// par un OWNER/ADMIN avant acceptation.
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
 /// Tenant racine. Une organisation par utilisateur en Tranche 0 (créée en silence à
 /// la première connexion). Le partage multi-membres viendra plus tard, sans migration.
 model Organisation {
@@ -38,6 +47,31 @@ model Organisation {
   projets     Projet[]
   enrichments EnrichmentBlock[]
   documents   TerrainDocument[]
+  invitations Invitation[]
+}
+
+/// Invitation à rejoindre une organisation, adressée à un e-mail (l'identité OIDC pouvant ne pas
+/// exister encore). Table scopée au tenant (`organisationId`) : protégée par RLS. Créée/révoquée par
+/// un OWNER/ADMIN via les clients scopés ; ACCEPTÉE au login par le bootstrap (voie privilégiée, qui
+/// franchit la frontière tenant comme la création d'organisation). L'e-mail est stocké en minuscules
+/// (comparaison insensible à la casse au login). Une seule invitation vivante par couple (org, e-mail).
+model Invitation {
+  id               String           @id @default(uuid()) @db.Uuid
+  organisationId   String           @db.Uuid
+  email            String
+  role             Role             @default(MEMBER)
+  status           InvitationStatus @default(PENDING)
+  invitedByUserId  String?          @db.Uuid
+  acceptedByUserId String?          @db.Uuid
+  acceptedAt       DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@unique([organisationId, email])
+  @@index([organisationId])
+  @@index([email])
 }
 
 /// Type de maison visé par le projet de l'acheteur (nombre de niveaux).

@@ -4,10 +4,11 @@ import { getActiveProjet } from '@/modules/projet/service';
 import { getOrgOverview, type OrgRole } from '@/modules/organisation/service';
 import { ProjetForm } from './projet-form';
 import { OrgSettings } from './org-settings';
+import { OrgMembers } from './org-members';
 
 // Section profil : le compte, le projet (critères qui pilotent le scoring, éditables) et
-// l'organisation (nom + membres). Sous le shell (app). L'invitation de membres arrive dans une
-// slice dédiée (pré-autorisation par e-mail + multi-org), non incluse ici.
+// l'organisation (nom, membres, invitations). Sous le shell (app). L'invitation par e-mail
+// pré-autorise l'adhésion : l'invité rejoint l'organisation à sa prochaine connexion.
 
 export const metadata = { title: 'Profil · Veriterra' };
 
@@ -41,9 +42,14 @@ export default async function ProfilPage() {
   if (!session?.user?.orgId) redirect('/sign-in');
   const orgId = session.user.orgId;
 
-  const [projet, org] = await Promise.all([getActiveProjet(orgId), getOrgOverview(orgId)]);
   const role = (session.user.role as OrgRole) ?? 'MEMBER';
   const canManageOrg = role === 'OWNER' || role === 'ADMIN';
+  // `canManageOrg` conditionne le chargement des invitations : leurs e-mails ne sont sérialisés vers
+  // le client que pour un OWNER/ADMIN (pas pour un simple membre).
+  const [projet, org] = await Promise.all([
+    getActiveProjet(orgId),
+    getOrgOverview(orgId, canManageOrg),
+  ]);
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8">
@@ -70,35 +76,18 @@ export default async function ProfilPage() {
 
       <Section
         title="Organisation"
-        description="Le nom de votre organisation et ses membres. L'invitation de nouveaux membres arrive bientôt."
+        description="Le nom de votre organisation, ses membres et les invitations en attente."
       >
         <div className="flex flex-col gap-5">
           <OrgSettings initialName={org?.name ?? ''} canManage={canManageOrg} />
 
-          <div>
-            <div className="mb-2 text-xs font-semibold text-neutral-500">
-              Membres ({org?.members.length ?? 0})
-            </div>
-            <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-              {(org?.members ?? []).map((m) => (
-                <li
-                  key={m.userId}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-background px-3.5 py-2.5"
-                >
-                  <span className="text-sm text-foreground">
-                    {m.name ?? m.email ?? 'Membre'}
-                    {m.userId === session.user.id && (
-                      <span className="ml-2 text-xs text-neutral-500">(vous)</span>
-                    )}
-                    {m.email && m.name && <span className="ml-2 text-xs text-neutral-500">{m.email}</span>}
-                  </span>
-                  <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-500">
-                    {ROLE_LABEL[m.role] ?? m.role}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <OrgMembers
+            members={org?.members ?? []}
+            invitations={org?.invitations ?? []}
+            canManage={canManageOrg}
+            isOwner={role === 'OWNER'}
+            currentUserId={session.user.id}
+          />
         </div>
       </Section>
     </div>

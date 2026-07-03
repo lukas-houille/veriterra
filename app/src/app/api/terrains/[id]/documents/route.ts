@@ -2,11 +2,17 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { isUuid } from '@/lib/uuid';
 import { readCappedBody } from '@/lib/http';
+import { withinOrgRateLimit } from '@/lib/rate-limit';
 import { createDocument, listDocuments } from '@/modules/terrains/documents';
 import { maxUploadBytes } from '@/lib/storage/s3';
 import { getTerrain } from '@/modules/terrains/service';
 
 export const runtime = 'nodejs';
+
+// L'upload est l'endpoint le plus coûteux en mémoire (le corps est bufferisé plusieurs fois pendant le
+// parsing multipart) et écrit dans le stockage objet partagé : limite de débit par organisation pour
+// éviter qu'un membre sature la mémoire du conteneur (OOM => DoS de tous les tenants) ou le stockage.
+const UPLOAD_RATE_LIMIT = 20; // par minute et par organisation
 
 // Codes de refus de validation (documents.ts / validate.ts) vers statut HTTP.
 const CODE_STATUS: Record<string, number> = {
@@ -41,6 +47,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const session = await auth();
   if (!session?.user?.orgId) {
     return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
+  }
+  if (!(await withinOrgRateLimit(session.user.orgId, 'doc-upload', UPLOAD_RATE_LIMIT))) {
+    return NextResponse.json(
+      { error: "Trop d'envois de fichiers, réessayez dans un instant." },
+      { status: 429 },
+    );
   }
   const { id } = await params;
   if (!isUuid(id)) {

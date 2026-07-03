@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState, type FormEvent, ty
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { Button, Input } from '@veriterra/ui';
+import { Button, Input, cn } from '@veriterra/ui';
 import type { SelectedParcelle } from '@/components/map/selection-map';
 import type { TerrainSummary } from '@/modules/terrains/types';
 
@@ -67,6 +67,9 @@ function NouveauTerrainInner() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Sur mobile, le panneau de détails est une feuille inférieure repliable : replié, il ne montre
+  // que son en-tête et rend la carte de nouveau visible (retour porteur : « prend toute la place »).
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
 
   // Précharge les parcelles du terrain focalisé (scoped côté serveur) avant de monter la carte, pour
   // que la sélection initiale soit disponible au premier rendu (la carte l'utilise comme graine).
@@ -221,16 +224,89 @@ function NouveauTerrainInner() {
 
         {/* PANNEAU DÉTAILS : création uniquement (masqué en mode focus, où le terrain existe déjà). */}
         {!focusTerrainId && parcelleCount > 0 && (
-          <aside
+          <>
+            {/* Pastille repliée (mobile) : rouvre la feuille sans masquer les outils de la carte. */}
+            {panelCollapsed && (
+              <button
+                type="button"
+                onClick={() => setPanelCollapsed(false)}
+                aria-label="Déplier les détails du terrain"
+                aria-expanded={false}
+                aria-controls="terrain-details-form"
+                className="absolute bottom-4 right-4 z-20 flex items-center gap-2 rounded-full border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
+              >
+                Détails du terrain
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-500 px-1 text-xs font-bold text-white">
+                  {parcelleCount}
+                </span>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="18 15 12 9 6 15" />
+                </svg>
+              </button>
+            )}
+            <aside
             aria-label="Détails du terrain"
-            className="absolute right-4 top-4 z-20 flex max-h-[calc(100%-2rem)] w-[360px] max-w-[calc(100%-2rem)] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg"
+            className={cn(
+              // Mobile : feuille inférieure pleine largeur, plafonnée pour laisser voir la carte.
+              'absolute inset-x-0 bottom-0 z-20 flex max-h-[70dvh] flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-lg',
+              // >= sm : panneau flottant en haut à droite (comportement d'origine).
+              'sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-4 sm:max-h-[calc(100%-2rem)] sm:w-[360px] sm:max-w-[calc(100%-2rem)] sm:rounded-xl',
+              // Replié sur mobile : la feuille cède la place à la pastille (les outils carte restent joignables).
+              panelCollapsed && 'hidden sm:flex',
+            )}
           >
-            <form onSubmit={handleSubmit} className="flex flex-col gap-3 overflow-y-auto p-4">
-              <div>
+            {/* Poignée visuelle de feuille inférieure (mobile). */}
+            <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-neutral-300 sm:hidden" aria-hidden="true" />
+
+            {/* En-tête toujours visible : titre + bouton de repli (mobile uniquement). */}
+            <div className="flex shrink-0 items-start gap-2 px-4 pt-3 sm:pt-4">
+              <div className="min-w-0 flex-1">
                 <h1 className="text-base font-bold text-foreground">Détails du terrain</h1>
                 <p className="mt-0.5 text-xs leading-snug text-neutral-500">{cardDescription}</p>
               </div>
+              <button
+                type="button"
+                onClick={() => setPanelCollapsed((c) => !c)}
+                aria-expanded={!panelCollapsed}
+                aria-controls="terrain-details-form"
+                aria-label={panelCollapsed ? 'Déplier le formulaire' : 'Replier le formulaire'}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className={cn('transition-transform', panelCollapsed ? '' : 'rotate-180')}
+                >
+                  <polyline points="18 15 12 9 6 15" />
+                </svg>
+              </button>
+            </div>
 
+            <form
+              id="terrain-details-form"
+              onSubmit={handleSubmit}
+              className={cn(
+                'flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4 pt-3',
+                panelCollapsed && 'hidden sm:flex',
+              )}
+            >
               <Field label="Adresse" htmlFor="address">
                 <Input
                   id="address"
@@ -307,7 +383,8 @@ function NouveauTerrainInner() {
                 <Link href="/dashboard">Retour au tableau de bord</Link>
               </Button>
             </form>
-          </aside>
+            </aside>
+          </>
         )}
       </div>
     </div>

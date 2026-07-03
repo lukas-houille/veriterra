@@ -137,9 +137,41 @@ export function TerrainsTable({ terrains }: { terrains: TerrainListItem[] }) {
         />
       </div>
 
-      <div className="min-w-[640px] overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-        {/* En-têtes de colonnes (tri au clic) */}
-        <div className="flex h-[42px] items-center gap-3 border-b border-border bg-neutral-50 px-4">
+      {/* Tri mobile : les en-têtes de colonnes (tri au clic) sont masqués sous `sm`, on offre
+          donc ici un contrôle de tri compact équivalent. */}
+      <div className="mb-3 flex items-center gap-2 sm:hidden">
+        <label htmlFor="mobile-sort" className="text-xs font-semibold text-neutral-500">
+          Trier
+        </label>
+        <select
+          id="mobile-sort"
+          value={sortKey}
+          onChange={(e) => {
+            const key = e.target.value as TerrainSortKey;
+            setSortKey(key);
+            setDirection(defaultDirection(key));
+          }}
+          className="h-11 flex-1 rounded-md border border-neutral-200 bg-white px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="recent">Plus récents</option>
+          <option value="label">Nom</option>
+          <option value="score">Score</option>
+          <option value="surface">Surface</option>
+          <option value="prixTotal">Prix</option>
+        </select>
+        <button
+          type="button"
+          onClick={() => setDirection((d) => (d === 'asc' ? 'desc' : 'asc'))}
+          aria-label={direction === 'asc' ? 'Tri croissant, inverser' : 'Tri décroissant, inverser'}
+          className="flex h-11 w-11 items-center justify-center rounded-md border border-neutral-200 bg-white text-sm text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span aria-hidden="true">{direction === 'asc' ? '▲' : '▼'}</span>
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm sm:min-w-[640px]">
+        {/* En-têtes de colonnes (tri au clic) : masqués sur mobile (cartes empilées). */}
+        <div className="hidden h-[42px] items-center gap-3 border-b border-border bg-neutral-50 px-4 sm:flex">
           <div className="min-w-[170px] flex-1">
             <SortHeader label="Terrain" sortAs="label" {...headerProps} />
           </div>
@@ -168,35 +200,39 @@ export function TerrainsTable({ terrains }: { terrains: TerrainListItem[] }) {
               <Link
                 key={terrain.id}
                 href={`/terrains/${terrain.id}`}
-                className="flex items-center gap-3 border-b border-neutral-100 px-4 py-3 text-foreground transition-colors last:border-b-0 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                className="flex flex-col gap-2 border-b border-neutral-100 px-4 py-3 text-foreground transition-colors last:border-b-0 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:flex-row sm:items-center sm:gap-3"
               >
-                <div className="min-w-[170px] flex-1">
+                <div className="min-w-0 sm:min-w-[170px] sm:flex-1">
                   <div className="text-sm font-semibold leading-tight text-foreground">{terrain.label}</div>
                   <div className="text-xs text-neutral-500">{terrain.address}</div>
                 </div>
-                <ScoreCell score={terrain.score} redFlags={terrain.redFlags} />
-                <div className="w-[104px] text-right font-mono text-xs tabular-nums text-neutral-700">
-                  {surfaceFormat.format(terrain.surfaceTotaleM2)} m²
-                </div>
-                <div className="w-[150px] text-right">
-                  {terrain.prixDemande != null ? (
-                    <>
-                      <div className="font-mono text-[13px] tabular-nums text-foreground">
-                        {prixFormat.format(terrain.prixDemande)}
-                      </div>
-                      {pm2 != null ? (
-                        <div className="font-mono text-[11px] tabular-nums text-neutral-400">
-                          {surfaceFormat.format(pm2)} €/m²
+                {/* Mobile : les métriques s'enroulent sous le libellé. `sm:contents` dissout ce
+                    conteneur au-delà de `sm` pour restituer exactement les colonnes du tableau. */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 sm:contents">
+                  <ScoreCell score={terrain.score} redFlags={terrain.redFlags} />
+                  <div className="font-mono text-xs tabular-nums text-neutral-700 sm:w-[104px] sm:text-right">
+                    {surfaceFormat.format(terrain.surfaceTotaleM2)} m²
+                  </div>
+                  <div className="sm:w-[150px] sm:text-right">
+                    {terrain.prixDemande != null ? (
+                      <>
+                        <div className="font-mono text-[13px] tabular-nums text-foreground">
+                          {prixFormat.format(terrain.prixDemande)}
                         </div>
-                      ) : null}
-                    </>
-                  ) : (
-                    <div className="text-xs italic text-neutral-400">Indisponible</div>
-                  )}
-                </div>
-                <div className="flex w-[118px] items-center gap-2">
-                  <StatusPin status={meta.pin} />
-                  <Badge variant={meta.badge}>{meta.label}</Badge>
+                        {pm2 != null ? (
+                          <div className="font-mono text-[11px] tabular-nums text-neutral-400">
+                            {surfaceFormat.format(pm2)} €/m²
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <div className="text-xs italic text-neutral-400">Indisponible</div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 sm:w-[118px]">
+                    <StatusPin status={meta.pin} />
+                    <Badge variant={meta.badge}>{meta.label}</Badge>
+                  </div>
                 </div>
               </Link>
             );

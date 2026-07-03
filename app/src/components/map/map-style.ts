@@ -3,11 +3,14 @@ import type { Map as MaplibreMap, StyleSpecification } from 'maplibre-gl';
 // Fonds de carte Veriterra, via la Géoplateforme IGN (data.geopf.fr, ouvert sans clé).
 //
 // Deux fonds au choix de l'utilisateur (basemap toggle) :
-//  - « plan » : style vectoriel « gris » du Plan IGN (déjà épuré, proche Positron), forké
-//    à chaud et recoloré à la palette Veriterra (applyVeriterraPlanTint). Vectoriel = net à
-//    tout zoom et bâtiments extrudables plus tard (base 3D-ready, Tranche 4).
-//  - « satellite » : orthophoto IGN (raster) + cadastre, pour juger le terrain réel.
-// Dans les deux cas, les parcelles cadastrales sont présentes en calque.
+//  - « plan » : style vectoriel « gris » du Plan IGN, forké à chaud et recoloré à la palette
+//    Veriterra (applyVeriterraPlanTint). Son cadastre intégré est MASQUÉ (PLAN_CADASTRE_HIDDEN) au
+//    profit de la surcouche unique ci-dessous.
+//  - « satellite » : orthophoto IGN (raster) seule, pour juger le terrain réel.
+// Le CADASTRE est une SURCOUCHE UNIQUE (ensureCadastreOverlay) posée par-dessus les deux fonds :
+// tuiles vectorielles PCI IGN stylées par paliers (départements -> communes -> parcelles + numéros),
+// calquées sur le viewer cadastre officiel. Basculer plan/satellite ne change ainsi que l'image de
+// fond, le cadastre reste identique par-dessus.
 
 const GEOPF_WMTS = 'https://data.geopf.fr/wmts';
 
@@ -26,10 +29,12 @@ function wmtsTiles(layer: string, format: string): string {
   );
 }
 
-/** Fond satellite complet et autonome : orthophoto IGN + calque cadastre. */
+/** Fond satellite : orthophoto IGN seule. Le cadastre est une surcouche partagée (ensureCadastreOverlay).
+ *  Glyphs = endpoint IGN (le même que le plan) pour que les libellés de la surcouche cadastre
+ *  s'affichent aussi sur le satellite (police Source Sans Pro servie par cet endpoint). */
 export const veriterraSatelliteStyle: StyleSpecification = {
   version: 8,
-  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+  glyphs: 'https://data.geopf.fr/annexes/ressources/vectorTiles/fonts/{fontstack}/{range}.pbf',
   sources: {
     ortho: {
       type: 'raster',
@@ -38,19 +43,8 @@ export const veriterraSatelliteStyle: StyleSpecification = {
       attribution: 'IGN Géoplateforme',
       maxzoom: 19,
     },
-    cadastre: {
-      type: 'raster',
-      tiles: [wmtsTiles('CADASTRALPARCELS.PARCELLAIRE_EXPRESS', 'image/png')],
-      tileSize: 256,
-      attribution: 'IGN Cadastre',
-      maxzoom: 19,
-    },
   },
-  layers: [
-    { id: 'ortho', type: 'raster', source: 'ortho' },
-    // Cadastre raster allégé (0.85 encombrait l'ortho) : le liseré de sélection ambre ressort mieux.
-    { id: 'cadastre', type: 'raster', source: 'cadastre', paint: { 'raster-opacity': 0.6 } },
-  ],
+  layers: [{ id: 'ortho', type: 'raster', source: 'ortho' }],
 };
 
 /** Identité de fond de carte choisie par l'utilisateur. */
@@ -73,12 +67,15 @@ export const veriterraMapStyle: StyleSpecification = veriterraSatelliteStyle;
 // --- Recoloration « Positron Veriterra » du plan IGN gris -------------------------------
 
 const PLAN_BG = '#F6F7FB';
-// Liseré cadastral assombri (l'ancien #B7BFD3 très clair/fin était quasi invisible).
-const PLAN_CADASTRE_LINE = '#8A93AD';
-const PLAN_CADASTRE_LAYER = 'veriterra-plan-cadastre';
-const PLAN_PARCELLE_LABEL_LAYER = 'veriterra-plan-parcelle-num';
-/** Source vectorielle du style gris IGN (voir gris.json). */
-const PLAN_IGN_SOURCE = 'plan_ign';
+
+// Source-layers du cadastre INTÉGRÉ au PLAN.IGN : masqués au profit de la surcouche PCI unique
+// (sinon double cadastre). On GARDE toponyme_parcellaire_adresse_ponc (numéros de rue / adresses).
+const PLAN_CADASTRE_HIDDEN = new Set([
+  'parcellaire_parcelle',
+  'parcellaire_section',
+  'toponyme_parcellaire_parcelle',
+  'toponyme_parcellaire_section',
+]);
 
 interface Tint {
   fill?: string;
@@ -153,60 +150,127 @@ function firstSymbolFont(map: MaplibreMap): string[] | undefined {
   return undefined;
 }
 
-/**
- * Ajoute sur le plan : (1) un liseré cadastral vectoriel net (parcelles en calque, source-layer
- * `parcellaire_parcelle` qui ne porte QUE la géométrie), et (2) les NUMÉROS de parcelle, portés
- * par la source-layer `toponyme_parcellaire_parcelle` (champ `texte`) que le style gris IGN ne
- * rend pas, d'où leur absence auparavant. Idempotent (chaque calque n'est ajouté qu'une fois).
- */
-function ensurePlanCadastre(map: MaplibreMap): void {
-  if (!map.getSource(PLAN_IGN_SOURCE)) return;
+// --- Surcouche cadastre UNIQUE (tuiles vectorielles PCI IGN) ------------------------------------
+// Une seule source vectorielle PCI posée sur les DEUX fonds, stylée par paliers (comme le viewer
+// cadastre officiel) : départements très dézoomé, communes (avec libellés), puis parcelles + numéros
+// zoomé. Sans clé, CORS ouvert. Les numéros n'apparaissent qu'à z17 (limite des tuiles PCI). Les
+// attributs (idu, numero, section, contenance) restent interrogeables pour la sélection.
+const PCI_SOURCE = 'pci-cadastre';
+const PCI_TILES = 'https://data.geopf.fr/tms/1.0.0/PCI/{z}/{x}/{y}.pbf';
+const CADASTRE_LINE = '#8A93AD';
+const CADASTRE_LABEL = '#2F3B6E';
 
-  // (1) Liseré des parcelles. minzoom 13 (US-1.12) : découpage visible dès l'échelle quartier.
-  // Trait assombri et un peu épaissi par rapport à l'ancien (quasi invisible sous z15).
-  if (!map.getLayer(PLAN_CADASTRE_LAYER)) {
-    map.addLayer({
-      id: PLAN_CADASTRE_LAYER,
-      type: 'line',
-      source: PLAN_IGN_SOURCE,
-      'source-layer': 'parcellaire_parcelle',
-      minzoom: 13,
-      paint: {
-        'line-color': PLAN_CADASTRE_LINE,
-        'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.4, 15, 0.9, 18, 1.8],
-      },
-    });
+/**
+ * Installe (idempotent) la surcouche cadastre PCI sur le style courant, sur les deux fonds : d'abord
+ * MASQUE le cadastre intégré du plan IGN s'il est présent (évite le doublon ; sans effet sur le
+ * satellite), puis pose une source vectorielle et des calques filtrés par zoom (départements ->
+ * communes + libellés -> parcelles -> numéros). À rappeler après chaque chargement de style (setStyle
+ * remet tout à zéro). Les symboles reprennent une police réellement servie par le style courant
+ * (firstSymbolFont) ou, en repli (satellite, sans calque symbole), Source Sans Pro Regular servie par
+ * les glyphs IGN désormais configurés sur le style satellite.
+ */
+export function ensureCadastreOverlay(map: MaplibreMap): void {
+  // Masque le cadastre INTÉGRÉ du plan IGN (parcelles/sections), remplacé par la surcouche PCI, pour
+  // éviter le doublon. Les adresses (toponyme_parcellaire_adresse_ponc) ne sont PAS masquées. Sur le
+  // satellite aucune de ces couches n'existe : la boucle est simplement sans effet.
+  for (const layer of map.getStyle().layers ?? []) {
+    const sourceLayer = (layer as { 'source-layer'?: string })['source-layer'];
+    if (sourceLayer && PLAN_CADASTRE_HIDDEN.has(sourceLayer)) {
+      try {
+        map.setLayoutProperty(layer.id, 'visibility', 'none');
+      } catch {
+        // couche absente ou renommée : on continue.
+      }
+    }
   }
 
-  // (2) Numéros de parcelle (dès z16 pour éviter la surdensité), halo blanc pour la lisibilité.
-  if (!map.getLayer(PLAN_PARCELLE_LABEL_LAYER)) {
-    const font = firstSymbolFont(map);
+  if (!map.getSource(PCI_SOURCE)) {
+    map.addSource(PCI_SOURCE, {
+      type: 'vector',
+      tiles: [PCI_TILES],
+      minzoom: 5,
+      maxzoom: 19,
+      attribution: 'Cadastre : IGN PCI (data.geopf.fr)',
+    });
+  }
+  const font = firstSymbolFont(map) ?? ['Source Sans Pro Regular'];
+
+  // Départements (très dézoomé) : contour discret.
+  if (!map.getLayer('pci-departement')) {
     map.addLayer({
-      id: PLAN_PARCELLE_LABEL_LAYER,
+      id: 'pci-departement',
+      type: 'line',
+      source: PCI_SOURCE,
+      'source-layer': 'departement',
+      maxzoom: 11,
+      paint: { 'line-color': CADASTRE_LINE, 'line-width': 0.8, 'line-opacity': 0.6 },
+    });
+  }
+  // Communes : contour + libellé (nom_com).
+  if (!map.getLayer('pci-commune')) {
+    map.addLayer({
+      id: 'pci-commune',
+      type: 'line',
+      source: PCI_SOURCE,
+      'source-layer': 'commune',
+      minzoom: 11,
+      maxzoom: 16,
+      paint: { 'line-color': CADASTRE_LINE, 'line-width': ['interpolate', ['linear'], ['zoom'], 11, 0.6, 15, 1.2] },
+    });
+  }
+  if (!map.getLayer('pci-commune-label')) {
+    map.addLayer({
+      id: 'pci-commune-label',
       type: 'symbol',
-      source: PLAN_IGN_SOURCE,
-      'source-layer': 'toponyme_parcellaire_parcelle',
-      minzoom: 16,
+      source: PCI_SOURCE,
+      'source-layer': 'commune',
+      minzoom: 11,
+      maxzoom: 15,
       layout: {
-        'text-field': ['get', 'texte'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 16, 10, 18, 12, 19, 13],
-        'symbol-placement': 'point',
-        ...(font ? { 'text-font': font } : {}),
+        'text-field': ['get', 'nom_com'],
+        'text-font': font,
+        'text-size': 12,
+        'text-transform': 'uppercase',
+        'text-letter-spacing': 0.05,
       },
-      paint: {
-        'text-color': '#2F3B6E',
-        'text-halo-color': '#FFFFFF',
-        'text-halo-width': 1.4,
+      paint: { 'text-color': CADASTRE_LABEL, 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.4 },
+    });
+  }
+  // Parcelles (zoomé) : contour net.
+  if (!map.getLayer('pci-parcelle')) {
+    map.addLayer({
+      id: 'pci-parcelle',
+      type: 'line',
+      source: PCI_SOURCE,
+      'source-layer': 'parcelle',
+      minzoom: 15,
+      paint: { 'line-color': CADASTRE_LINE, 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 0.5, 18, 1.6] },
+    });
+  }
+  // Numéros de parcelle (z17+, limite des tuiles PCI), portés par le point `localisant`.
+  if (!map.getLayer('pci-numero')) {
+    map.addLayer({
+      id: 'pci-numero',
+      type: 'symbol',
+      source: PCI_SOURCE,
+      'source-layer': 'localisant',
+      minzoom: 17,
+      layout: {
+        'text-field': ['get', 'numero'],
+        'text-font': font,
+        'text-size': ['interpolate', ['linear'], ['zoom'], 17, 10, 19, 13],
       },
+      paint: { 'text-color': CADASTRE_LABEL, 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.4 },
     });
   }
 }
 
 /**
- * Recolore à chaud le plan IGN gris à la palette Veriterra et ajoute le calque cadastre.
- * À appeler après chaque chargement de style (`load` / `styledata`) quand le fond « plan »
- * est actif. Idempotent et tolérant : un id de couche IGN qui changerait est simplement
- * ignoré (le fond garde alors le gris IGN d'origine).
+ * Recolore à chaud le plan IGN gris à la palette Veriterra (teinte seulement). À appeler après chaque
+ * chargement de style (`load` / `styledata`) quand le fond « plan » est actif. Idempotent et tolérant :
+ * un id de couche IGN qui changerait est simplement ignoré (le fond garde alors le gris IGN d'origine).
+ * Le cadastre intégré du plan est masqué par `ensureCadastreOverlay` (couplé à la pose de la surcouche
+ * PCI), PAS ici : un appelant qui ne pose pas la surcouche garde ainsi le cadastre natif du plan.
  */
 export function applyVeriterraPlanTint(map: MaplibreMap): void {
   const layers = map.getStyle().layers ?? [];
@@ -235,7 +299,6 @@ export function applyVeriterraPlanTint(map: MaplibreMap): void {
       // Couche IGN absente ou renommée : on continue, le rendu reste correct.
     }
   }
-  ensurePlanCadastre(map);
 }
 
 /** Centre par défaut (France métropolitaine) et zoom initial. */

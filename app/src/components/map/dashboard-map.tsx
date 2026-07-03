@@ -10,6 +10,7 @@ import {
   applyVeriterraPlanTint,
   basemapStyle,
   DEFAULT_BASEMAP,
+  ensureCadastreOverlay,
   FRANCE_CENTER,
   FRANCE_ZOOM,
   STATUS_COLORS,
@@ -157,6 +158,8 @@ function installTerrainLayers(
   points: FeatureCollection,
 ): void {
   if (basemap === 'plan') applyVeriterraPlanTint(map);
+  // Surcouche cadastre unique (PCI, paliers) sur les deux fonds, comme l'explorer.
+  ensureCadastreOverlay(map);
 
   const source = map.getSource(SOURCE_ID) as maplibre.GeoJSONSource | undefined;
   if (source) source.setData(fc);

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Map as MaplibreMap, NavigationControl, type GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { FeatureCollection } from 'geojson';
-import { applyVeriterraPlanTint, basemapStyle } from './map-style';
+import { applyVeriterraPlanTint, basemapStyle, ensureCadastreOverlay } from './map-style';
 import { parcellesCentroid } from '@/lib/geo/centroid';
 import { allShadows, sunPosition, type ShadowBuilding, type SunPos } from '@/lib/sun/shadows';
 import { ambienceForAltitude, type Ambience } from '@/lib/sun/ambience';
@@ -66,6 +66,8 @@ function parcelleFC(parcelles: Array<{ geojson: GeoJsonGeometry }>): FeatureColl
 /** Installe (idempotent) les sources et couches sur le style courant. */
 function installLayers(map: MaplibreMap, parcelles: Array<{ geojson: GeoJsonGeometry }>): void {
   applyVeriterraPlanTint(map);
+  // Surcouche cadastre unique (PCI) : même trame parcellaire + numéros que l'explorer, autour de la parcelle.
+  ensureCadastreOverlay(map);
 
   for (const [id, data] of [
     [SHADOW_SOURCE, EMPTY_FC],

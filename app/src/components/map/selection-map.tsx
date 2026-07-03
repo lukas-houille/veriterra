@@ -27,6 +27,20 @@ import {
 import type { BanFeature, GeoJsonGeometry } from '@/lib/geo/types';
 import { parcellesCentroid } from '@/lib/geo/centroid';
 import { boundsOfGeometries } from '@/lib/geo/bbox';
+import {
+  fetchElevations,
+  formatMeters,
+  formatPercent,
+  formatSignedMeters,
+  formatSquareMeters,
+  isSelfIntersectingRing,
+  lineLengthMeters,
+  nearestBoundaryDistance,
+  polygonAreaMeters,
+  polygonPerimeterMeters,
+  slopeBetween,
+  type LngLat,
+} from '@/lib/geo/measure';
 import { ambienceForAltitude } from '@/lib/sun/ambience';
 import { sunPosition } from '@/lib/sun/shadows';
 import {
@@ -78,6 +92,68 @@ const SUN_CANOPY_SOURCE = 'sun-canopies';
 const SUN_BUILDING_COLOR = '#c7ccda';
 const SUN_CANOPY_COLOR = '#5c8a4a';
 const SUN_RADIUS_M = 250;
+
+// --- Outils de mesure (US-1.5) ------------------------------------------------------------------
+// Distance (polyligne), surface (polygone), dénivelé (2 points, RGE ALTI) et recul (point -> contour
+// de parcelle). Cœur de calcul PUR dans lib/geo/measure.ts (testé) ; ici seulement le rendu carte et
+// l'interaction. Couleur teal distincte de l'ambre (sélection) et de l'indigo (recherche par surface).
+const MEASURE_SOURCE = 'measure';
+const MEASURE_COLOR = '#0E7490';
+
+type MeasureTool = 'distance' | 'surface' | 'denivele' | 'recul';
+
+/** Recul calculé : point cliqué, point le plus proche du contour, et distance (m). */
+interface ReculResult {
+  point: LngLat;
+  nearestPoint: LngLat;
+  distanceM: number;
+}
+
+/** État de la mesure de dénivelé (RGE ALTI est asynchrone ; hors couverture = indisponible, règle 3). */
+type DeniveleState =
+  | { state: 'partial' }
+  | { state: 'loading' }
+  | { state: 'error' }
+  | { state: 'unavailable' }
+  | { state: 'ok'; zA: number; zB: number; deltaZ: number; slopePct: number | null; horizM: number };
+
+/** Ferme un anneau de sommets pour le rendu du polygone de mesure de surface. */
+function closeMeasureRing(pts: LngLat[]): LngLat[] {
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  if (first && last && (first[0] !== last[0] || first[1] !== last[1])) return [...pts, first];
+  return pts;
+}
+
+/**
+ * FeatureCollection de la mesure courante : la ligne/le polygone selon l'outil, plus les sommets
+ * (points). Pour le recul, le segment point cliqué -> contour le plus proche.
+ */
+function buildMeasureFC(tool: MeasureTool | null, points: LngLat[], recul: ReculResult | null) {
+  const features: Array<{ type: 'Feature'; properties: Record<string, never>; geometry: unknown }> = [];
+  const addVertices = (pts: LngLat[]) => {
+    for (const p of pts) features.push({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: p } });
+  };
+  if (tool === 'surface') {
+    if (points.length >= 3) {
+      features.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [closeMeasureRing(points)] } });
+    } else if (points.length >= 2) {
+      features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: points } });
+    }
+    addVertices(points);
+  } else if (tool === 'distance' || tool === 'denivele') {
+    if (points.length >= 2) features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: points } });
+    addVertices(points);
+  } else if (tool === 'recul') {
+    if (recul) {
+      features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [recul.point, recul.nearestPoint] } });
+      addVertices([recul.point, recul.nearestPoint]);
+    } else {
+      addVertices(points);
+    }
+  }
+  return { type: 'FeatureCollection' as const, features };
+}
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -137,6 +213,18 @@ const presetChip: CSSProperties = {
   fontWeight: 600,
   cursor: 'pointer',
 };
+
+// Lignes du panneau de mesure (résultat principal en mono, détails en gris).
+const measureReadoutMain: CSSProperties = { margin: 0, fontSize: '13px', color: TEXT, fontFamily: MONO };
+const measureReadoutSub: CSSProperties = { margin: 0, fontSize: '12px', color: SUB };
+const measureMethod: CSSProperties = { margin: 0, fontSize: '11px', color: MICRO };
+
+const MEASURE_TOOL_LABELS: Array<{ id: MeasureTool; label: string }> = [
+  { id: 'distance', label: 'Distance' },
+  { id: 'surface', label: 'Surface' },
+  { id: 'denivele', label: 'Dénivelé' },
+  { id: 'recul', label: 'Recul' },
+];
 
 const EMPTY_FC = { type: 'FeatureCollection' as const, features: [] as unknown[] };
 
@@ -246,6 +334,53 @@ function installOverlays(
   (map.getSource(SURFACE_SOURCE) as GeoJSONSource | undefined)?.setData(
     toMatchCollection(matches) as SetDataArg,
   );
+
+  // Calques de mesure (US-1.5), tout en haut de la pile applicative : les tracés de mesure restent
+  // visibles au-dessus du cadastre et de la sélection. Les données sont (re)posées par un effet dédié.
+  installMeasureLayers(map);
+}
+
+/**
+ * Installe (idempotent) la source et les calques des outils de mesure sur le style courant : remplissage
+ * (polygone de surface), ligne (distance/dénivelé/recul, tirets) et sommets (cercles). À rappeler après
+ * chaque chargement de style (via installOverlays), sinon ils disparaissent à la bascule de fond.
+ */
+function installMeasureLayers(map: MaplibreMap): void {
+  if (!map.getSource(MEASURE_SOURCE)) {
+    map.addSource(MEASURE_SOURCE, { type: 'geojson', data: EMPTY_FC as SetDataArg });
+  }
+  if (!map.getLayer('measure-fill')) {
+    map.addLayer({
+      id: 'measure-fill',
+      type: 'fill',
+      source: MEASURE_SOURCE,
+      filter: ['==', ['geometry-type'], 'Polygon'],
+      paint: { 'fill-color': MEASURE_COLOR, 'fill-opacity': 0.15 },
+    });
+  }
+  if (!map.getLayer('measure-line')) {
+    map.addLayer({
+      id: 'measure-line',
+      type: 'line',
+      source: MEASURE_SOURCE,
+      filter: ['!=', ['geometry-type'], 'Point'],
+      paint: { 'line-color': MEASURE_COLOR, 'line-width': 2.5, 'line-dasharray': [2, 1.2] },
+    });
+  }
+  if (!map.getLayer('measure-points')) {
+    map.addLayer({
+      id: 'measure-points',
+      type: 'circle',
+      source: MEASURE_SOURCE,
+      filter: ['==', ['geometry-type'], 'Point'],
+      paint: {
+        'circle-radius': 4.5,
+        'circle-color': '#FFFFFF',
+        'circle-stroke-color': MEASURE_COLOR,
+        'circle-stroke-width': 2,
+      },
+    });
+  }
 }
 
 /**
@@ -404,6 +539,19 @@ export function SelectionMap({
 
   const [clickLoading, setClickLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Outils de mesure (US-1.5) : outil actif, sommets cliqués, finalisation (distance/surface),
+  // résultat dénivelé (asynchrone via RGE ALTI) et recul (calcul pur sur la sélection).
+  const [measureTool, setMeasureTool] = useState<MeasureTool | null>(null);
+  const [measurePoints, setMeasurePoints] = useState<LngLat[]>([]);
+  const [measureDone, setMeasureDone] = useState(false);
+  const [denivele, setDenivele] = useState<DeniveleState | null>(null);
+  const [reculResult, setReculResult] = useState<ReculResult | null>(null);
+  // Miroirs lus par les handlers de la carte (montés une seule fois, closures figées).
+  const measureToolRef = useRef(measureTool);
+  measureToolRef.current = measureTool;
+  const measureDoneRef = useRef(measureDone);
+  measureDoneRef.current = measureDone;
 
   // Analyse d'ensoleillement EN PLACE : bascule 3D + relief natif + bâti/canopée extrudés + ombres Turf.
   const [sunActive, setSunActive] = useState(false);
@@ -632,7 +780,32 @@ export function SelectionMap({
         return [...prev, parcelle];
       });
 
+    // Clic en mode mesure (US-1.5) : ajoute un sommet à la mesure au lieu de sélectionner une parcelle.
+    // Dénivelé = 2 points (un 3e recommence) ; recul = 1 point (remplacé) ; distance/surface = polyligne
+    // (un clic après finalisation recommence une nouvelle mesure).
+    const handleMeasureClick = (lngLat: LngLat) => {
+      const tool = measureToolRef.current;
+      setMeasurePoints((prev) => {
+        if (tool === 'denivele') return prev.length >= 2 ? [lngLat] : [...prev, lngLat];
+        if (tool === 'recul') return [lngLat];
+        if (measureDoneRef.current) return [lngLat];
+        return [...prev, lngLat];
+      });
+      if (measureDoneRef.current) setMeasureDone(false);
+    };
+
     map.on('click', (e) => {
+      // Mode mesure prioritaire (avant le garde lecture seule) : la mesure marche aussi dans la fiche.
+      const tool = measureToolRef.current;
+      if (tool) {
+        // Recul sans sélection : on laisse le clic SÉLECTIONNER d'abord une parcelle (sinon on ne
+        // pourrait plus en cliquer une en mode mesure). Les clics suivants mesureront le recul.
+        const needsParcelFirst = tool === 'recul' && selectionRef.current.length === 0;
+        if (!needsParcelFirst) {
+          handleMeasureClick([e.lngLat.lng, e.lngLat.lat]);
+          return;
+        }
+      }
       // Mode focalisé (fiche) : la sélection est fixe, le clic n'édite pas.
       if (readOnlyRef.current) return;
       setError(null);
@@ -669,6 +842,19 @@ export function SelectionMap({
           setError('Échec de la récupération de la parcelle (API Carto).');
         })
         .finally(() => setClickLoading(false));
+    });
+
+    // Double-clic : finalise une mesure de distance/surface (le zoom du double-clic est désactivé
+    // pendant la mesure par un effet dédié). Les DEUX clics du double-clic ont ajouté deux sommets
+    // quasi confondus : on retire TOUJOURS le dernier (le redondant), sans exiger une égalité stricte
+    // des coordonnées (la souris dérive de 1 à 3 px entre les deux clics, ce qui fausserait sinon la
+    // longueur/surface avec un segment parasite, règle 1).
+    map.on('dblclick', (e) => {
+      const tool = measureToolRef.current;
+      if (tool !== 'distance' && tool !== 'surface') return;
+      e.preventDefault();
+      setMeasureDone(true);
+      setMeasurePoints((prev) => (prev.length >= 2 ? prev.slice(0, -1) : prev));
     });
 
     return () => {
@@ -712,6 +898,111 @@ export function SelectionMap({
       );
     }
   }, [matches, mapReady]);
+
+  // --- Outils de mesure (US-1.5) : effets de rendu et de calcul -----------------------------------
+
+  // Rendu du tracé de mesure : (re)pose la géométrie courante dans la source `measure`. `mapReady`
+  // dans les deps : réapplique après un rechargement de style (bascule de fond, qui remet la source).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    (map.getSource(MEASURE_SOURCE) as GeoJSONSource | undefined)?.setData(
+      buildMeasureFC(measureTool, measurePoints, reculResult) as SetDataArg,
+    );
+  }, [measureTool, measurePoints, measureDone, reculResult, mapReady]);
+
+  // Dénivelé : altitudes des deux points via RGE ALTI (asynchrone). Hors couverture (null) => état
+  // "indisponible" (règle 3, jamais un 0) ; source injoignable => "erreur", distincte.
+  useEffect(() => {
+    if (measureTool !== 'denivele') {
+      setDenivele(null);
+      return;
+    }
+    if (measurePoints.length === 0) {
+      setDenivele(null);
+      return;
+    }
+    if (measurePoints.length === 1) {
+      setDenivele({ state: 'partial' });
+      return;
+    }
+    const a = measurePoints[0]!;
+    const b = measurePoints[1]!;
+    let cancelled = false;
+    setDenivele({ state: 'loading' });
+    void fetchElevations([a, b])
+      .then((zs) => {
+        if (cancelled) return;
+        const zA = zs[0];
+        const zB = zs[1];
+        if (zA == null || zB == null) {
+          setDenivele({ state: 'unavailable' });
+          return;
+        }
+        const horizM = lineLengthMeters([a, b]);
+        const { deltaZ, slopePct } = slopeBetween(zA, zB, horizM);
+        setDenivele({ state: 'ok', zA, zB, deltaZ, slopePct, horizM });
+      })
+      .catch(() => {
+        if (!cancelled) setDenivele({ state: 'error' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [measureTool, measurePoints]);
+
+  // Recul : distance la plus courte du point cliqué au contour de la/des parcelle(s) sélectionnée(s).
+  // Calcul PUR sur la géométrie déjà en state (aucun réseau). On garde le minimum sur la sélection.
+  useEffect(() => {
+    if (measureTool !== 'recul') {
+      setReculResult(null);
+      return;
+    }
+    const pt = measurePoints[0];
+    if (!pt) {
+      setReculResult(null);
+      return;
+    }
+    let best: ReculResult | null = null;
+    for (const p of selection) {
+      const nb = nearestBoundaryDistance(pt, p.geojson);
+      if (nb && (best === null || nb.distanceM < best.distanceM)) {
+        best = { point: pt, nearestPoint: nb.nearestPoint, distanceM: nb.distanceM };
+      }
+    }
+    setReculResult(best);
+  }, [measureTool, measurePoints, selection]);
+
+  // Curseur croix pendant la mesure + désactivation du zoom au double-clic pour TOUT outil de mesure
+  // (pas seulement distance/surface : un double-clic en dénivelé/recul zoomait la carte de façon
+  // inattendue et posait deux points confondus). Restaure le curseur au démontage/désactivation.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    if (measureTool) map.doubleClickZoom.disable();
+    else map.doubleClickZoom.enable();
+    const canvas = map.getCanvas();
+    canvas.style.cursor = measureTool ? 'crosshair' : '';
+    return () => {
+      canvas.style.cursor = '';
+    };
+  }, [measureTool, mapReady]);
+
+  // Échap : efface la mesure courante (sommets + finalisation), sans quitter l'outil. On ignore
+  // Échap quand le focus est dans un champ de saisie (recherche d'adresse) : sinon vider sa recherche
+  // effacerait aussi la mesure en cours.
+  useEffect(() => {
+    if (!measureTool) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      setMeasurePoints([]);
+      setMeasureDone(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [measureTool]);
 
   // Autocomplétion d'adresse avec debounce simple.
   useEffect(() => {
@@ -845,6 +1136,41 @@ export function SelectionMap({
   const clearSelection = useCallback(() => setSelection([]), []);
 
   const totalSurface = selection.reduce((acc, p) => acc + p.surfaceM2, 0);
+
+  // --- Outils de mesure (US-1.5) : métriques dérivées et actions ----------------------------------
+  const distanceMeters = useMemo(() => lineLengthMeters(measurePoints), [measurePoints]);
+  const areaMeters = useMemo(() => polygonAreaMeters(measurePoints), [measurePoints]);
+  const perimeterMeters = useMemo(() => polygonPerimeterMeters(measurePoints), [measurePoints]);
+  // Anneau auto-intersectant : l'aire Turf devient algébrique (trompeuse). On la signale « invalide »
+  // plutôt que d'afficher un chiffre faux (règles 1 et 3).
+  const areaInvalid = useMemo(
+    () => measureTool === 'surface' && measurePoints.length >= 3 && isSelfIntersectingRing(measurePoints),
+    [measureTool, measurePoints],
+  );
+
+  const selectMeasureTool = useCallback((t: MeasureTool) => {
+    // Mesure et analyse d'ensoleillement sont mutuellement exclusives : la vue 3D inclinée occulterait
+    // les tracés au sol, et deux grands panneaux empilés déborderaient sur petit écran.
+    setSunActive(false);
+    setMeasureTool(t);
+    setMeasurePoints([]);
+    setMeasureDone(false);
+    setDenivele(null);
+    setReculResult(null);
+  }, []);
+  const clearMeasure = useCallback(() => {
+    setMeasurePoints([]);
+    setMeasureDone(false);
+    setDenivele(null);
+    setReculResult(null);
+  }, []);
+  const exitMeasure = useCallback(() => {
+    setMeasureTool(null);
+    setMeasurePoints([]);
+    setMeasureDone(false);
+    setDenivele(null);
+    setReculResult(null);
+  }, []);
 
   return (
     <div style={{ position: 'relative', height: '100%', width: '100%', overflow: 'hidden' }}>
@@ -1114,6 +1440,10 @@ export function SelectionMap({
           flexDirection: 'column',
           gap: '8px',
           maxWidth: 'calc(100% - 32px)',
+          // Borne la hauteur et rend la colonne défilante : sur un écran court, un panneau ouvert
+          // (mesure ou ensoleillement) ne pousse plus la bascule de fond et la surface hors de vue.
+          maxHeight: 'calc(100% - 32px)',
+          overflowY: 'auto',
         }}
       >
         <div
@@ -1234,10 +1564,13 @@ export function SelectionMap({
         )}
 
         {/* Déclencheur de l'analyse d'ensoleillement (en place, quand une parcelle est sélectionnée) */}
-        {selection.length > 0 && !sunActive && (
+        {selection.length > 0 && !sunActive && !measureTool && (
           <button
             type="button"
-            onClick={() => setSunActive(true)}
+            onClick={() => {
+              exitMeasure();
+              setSunActive(true);
+            }}
             style={{
               alignSelf: 'flex-start',
               display: 'inline-flex',
@@ -1386,6 +1719,190 @@ export function SelectionMap({
                   ? sunError
                   : `${sunUnavail.b ? 'Bâtiments indisponibles' : `${sunCounts.b} bâtiment${sunCounts.b > 1 ? 's' : ''}`}${sunSansHauteur > 0 ? ` (dont ${sunSansHauteur} sans hauteur connue, non ombré${sunSansHauteur > 1 ? 's' : ''})` : ''}, ${sunUnavail.v ? 'végétation indisponible' : `${sunCounts.v} zone${sunCounts.v > 1 ? 's' : ''} boisée${sunCounts.v > 1 ? 's' : ''}`}. Ombres du bâti et de la végétation projetées au sol (méthode simplifiée), sur le relief ombré selon le soleil (MNT, exagéré 1,2x). Canopée approximée.`}
             </p>
+          </div>
+        )}
+
+        {/* Outils de mesure (US-1.5) : déclencheur, puis panneau distance / surface / dénivelé / recul.
+            Masqué pendant l'analyse d'ensoleillement (les deux modes sont mutuellement exclusifs). */}
+        {!measureTool && !sunActive && (
+          <button
+            type="button"
+            onClick={() => selectMeasureTool('distance')}
+            style={{
+              alignSelf: 'flex-start',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '7px',
+              background: PANEL,
+              color: TEXT,
+              border: `1px solid ${BORDER}`,
+              borderRadius: '9px',
+              padding: '8px 12px',
+              fontFamily: SANS,
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              boxShadow: FLOAT_SHADOW,
+            }}
+          >
+            <span aria-hidden="true">📐</span>
+            Mesurer
+          </button>
+        )}
+
+        {measureTool && (
+          <div
+            role="group"
+            aria-label="Outils de mesure"
+            style={{
+              width: '320px',
+              maxWidth: 'calc(100% - 32px)',
+              background: PANEL,
+              border: `1px solid ${BORDER}`,
+              borderRadius: '11px',
+              padding: '12px 14px',
+              boxShadow: FLOAT_SHADOW,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '9px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span style={microLabel}>Mesurer</span>
+              <button
+                type="button"
+                onClick={exitMeasure}
+                aria-label="Fermer les outils de mesure"
+                style={{
+                  border: `1px solid ${BORDER}`,
+                  background: PANEL,
+                  color: TEXT,
+                  fontFamily: SANS,
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  padding: '5px 10px',
+                  borderRadius: '8px',
+                }}
+              >
+                Fermer
+              </button>
+            </div>
+
+            <div role="group" aria-label="Type de mesure" style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+              {MEASURE_TOOL_LABELS.map((t) => {
+                const active = measureTool === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => selectMeasureTool(t.id)}
+                    style={{ ...presetChip, background: active ? INDIGO : '#EEF0F5', color: active ? '#FFFFFF' : TEXT }}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Lecture du résultat, selon l'outil actif (chiffres sourcés, indisponibilité explicite) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }} aria-live="polite">
+              {measureTool === 'distance' && (
+                <>
+                  <p style={measureReadoutMain}>
+                    {measurePoints.length < 2
+                      ? 'Cliquez au moins deux points sur la carte.'
+                      : `Distance : ${formatMeters(distanceMeters)}`}
+                  </p>
+                  {measurePoints.length >= 2 && <p style={measureMethod}>Mesure géométrique (géodésique).</p>}
+                </>
+              )}
+              {measureTool === 'surface' && (
+                <>
+                  <p style={measureReadoutMain}>
+                    {measurePoints.length < 3
+                      ? 'Cliquez au moins trois points sur la carte.'
+                      : areaInvalid
+                        ? 'Tracé invalide (arêtes croisées).'
+                        : `Surface : ${formatSquareMeters(areaMeters)}`}
+                  </p>
+                  {measurePoints.length >= 3 && areaInvalid && (
+                    <p style={measureReadoutSub}>Reprenez le contour sans croiser les côtés.</p>
+                  )}
+                  {measurePoints.length >= 3 && !areaInvalid && (
+                    <p style={measureReadoutSub}>{`Périmètre : ${formatMeters(perimeterMeters)}`}</p>
+                  )}
+                  {measurePoints.length >= 3 && !areaInvalid && (
+                    <p style={measureMethod}>Mesure géométrique (géodésique).</p>
+                  )}
+                </>
+              )}
+              {measureTool === 'denivele' && (
+                <>
+                  <p style={measureReadoutMain}>
+                    {denivele == null
+                      ? 'Cliquez deux points (A puis B).'
+                      : denivele.state === 'partial'
+                        ? 'Cliquez le second point (B).'
+                        : denivele.state === 'loading'
+                          ? 'Altitudes en cours...'
+                          : denivele.state === 'error'
+                            ? 'Altitude indisponible (source injoignable).'
+                            : denivele.state === 'unavailable'
+                              ? 'Altitude indisponible sur cette zone.'
+                              : `Dénivelé : ${formatSignedMeters(denivele.deltaZ)}`}
+                  </p>
+                  {denivele?.state === 'ok' && (
+                    <>
+                      <p style={measureReadoutSub}>
+                        {`Distance : ${formatMeters(denivele.horizM)}${denivele.slopePct != null ? ` · Pente : ${formatPercent(denivele.slopePct)}` : ''}`}
+                      </p>
+                      <p style={measureReadoutSub}>{`Alt. A : ${formatMeters(denivele.zA)} · Alt. B : ${formatMeters(denivele.zB)}`}</p>
+                      <p style={measureMethod}>Source : RGE ALTI (IGN).</p>
+                    </>
+                  )}
+                </>
+              )}
+              {measureTool === 'recul' && (
+                <>
+                  <p style={measureReadoutMain}>
+                    {selection.length === 0
+                      ? "Sélectionnez d'abord une parcelle."
+                      : reculResult
+                        ? `Recul : ${formatMeters(reculResult.distanceM)}`
+                        : measurePoints.length === 0
+                          ? 'Cliquez un point pour mesurer le recul.'
+                          : 'Recul indisponible (contour manquant).'}
+                  </p>
+                  {reculResult && <p style={measureMethod}>Distance au contour cadastral (IGN).</p>}
+                </>
+              )}
+            </div>
+
+            {/* Actions : finaliser (distance/surface) et effacer la mesure */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+              {(measureTool === 'distance' || measureTool === 'surface') &&
+                !measureDone &&
+                measurePoints.length >= (measureTool === 'surface' ? 3 : 2) && (
+                  <button
+                    type="button"
+                    onClick={() => setMeasureDone(true)}
+                    style={{ ...presetChip, background: INDIGO, color: '#FFFFFF' }}
+                  >
+                    Terminer
+                  </button>
+                )}
+              {measurePoints.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearMeasure}
+                  style={{ ...presetChip, background: 'transparent', color: SUB }}
+                >
+                  Effacer
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

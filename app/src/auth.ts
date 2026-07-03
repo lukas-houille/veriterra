@@ -18,20 +18,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, account, profile }) {
       // account + profile are only present at sign-in.
       if (account && profile?.sub) {
+        // N'accepter l'e-mail comme fondement d'un DROIT (rattachement d'invitation, éligibilité
+        // admin) QUE s'il est VÉRIFIÉ par l'IdP (`email_verified`). Un e-mail non vérifié est
+        // potentiellement contrôlé par l'attaquant : le prendre en compte laisserait rejoindre
+        // l'organisation d'autrui via une invitation en attente, ou usurper une adresse de
+        // l'allowlist admin (bris de la règle 2). Le bootstrap reçoit ce booléen et ne rattache
+        // une invitation (ni ne persiste l'e-mail) que s'il est vrai.
+        const emailVerified = (profile as { email_verified?: boolean }).email_verified === true;
         const ctx = await bootstrapUserOrganisation({
           sub: profile.sub,
           email: profile.email,
+          emailVerified,
           name: profile.name,
         });
         token.userId = ctx.userId;
         token.orgId = ctx.orgId;
         token.role = ctx.role;
-        // Admin plateforme : n'accepter l'e-mail comme éligible QUE s'il est VÉRIFIÉ par l'IdP
-        // (`email_verified`). Un e-mail non vérifié est potentiellement contrôlé par l'attaquant :
-        // le prendre en compte laisserait usurper une adresse de l'allowlist (bris de la règle 2).
-        // On le conserve dans un champ dédié (jamais `token.email`, qui reste l'affichage) pour
-        // recalculer le statut à chaque requête.
-        const emailVerified = (profile as { email_verified?: boolean }).email_verified === true;
+        // On conserve l'e-mail vérifié dans un champ dédié (jamais `token.email`, qui reste
+        // l'affichage) pour recalculer le statut admin plateforme à chaque requête.
         const verifiedEmail = emailVerified && typeof profile.email === 'string' ? profile.email : undefined;
         token.platformEmail = verifiedEmail;
         token.platformAdmin = isPlatformAdmin(verifiedEmail);

@@ -1,5 +1,5 @@
-import type { Feature, FeatureCollection, MultiPolygon, Polygon } from 'geojson';
-import { allShadows, type ShadowBuilding, type SunPos } from './shadows';
+import type { FeatureCollection, MultiPolygon, Polygon } from 'geojson';
+import { allShadows, type ShadowBuilding, type ShadowResult, type SunPos } from './shadows';
 
 // Préparation PURE et testable du rendu de l'analyse d'ensoleillement (extrusion native MapLibre +
 // ombres Turf), sans DOM ni réseau. Bâtiments et canopée sont des volumes uniformes (empreinte +
@@ -30,20 +30,19 @@ export function toExtrusionFC(items: SunVolume[]): FeatureCollection {
 }
 
 /**
- * Ombres au sol du bâti ET de la végétation, agrégées (Turf). Un volume sans hauteur, ou le soleil
- * sous l'horizon, ne projette pas d'ombre (jamais d'ombre inventée) : la nuit, aucune géométrie
- * n'est produite (l'ombre disparaît complètement). `sansHauteur` compte les volumes exclus faute de
- * hauteur, pour l'afficher honnêtement. La visibilité de jour suit un fondu (`shadowFadeOpacity`).
+ * Ombres au sol du bâti ET de la végétation, agrégées (Turf). Le bâti compact est ombré par
+ * enveloppe convexe ; la canopée (concave, étendue) par BALAYAGE, qui épouse les creux au lieu de
+ * les combler (une forêt ceinturant une cuvette n'ombre plus toute la cuvette). Un volume sans
+ * hauteur, ou le soleil sous l'horizon, ne projette pas d'ombre (jamais d'ombre inventée) : la nuit,
+ * aucune géométrie n'est produite (l'ombre disparaît complètement). `sansHauteur` compte les volumes
+ * exclus faute de hauteur, pour l'afficher honnêtement. La visibilité de jour suit un fondu
+ * (`shadowFadeOpacity`).
  */
-export function sunShadowsFor(
-  buildings: SunVolume[],
-  canopies: SunVolume[],
-  sun: SunPos,
-): { shadows: Array<Feature<Polygon>>; sansHauteur: number } {
-  const inputs: ShadowBuilding[] = [...buildings, ...canopies].map((v) => ({
-    geometry: v.geometry,
-    hauteur: v.hauteur,
-  }));
+export function sunShadowsFor(buildings: SunVolume[], canopies: SunVolume[], sun: SunPos): ShadowResult {
+  const inputs: ShadowBuilding[] = [
+    ...buildings.map((v) => ({ geometry: v.geometry, hauteur: v.hauteur, sweep: false })),
+    ...canopies.map((v) => ({ geometry: v.geometry, hauteur: v.hauteur, sweep: true })),
+  ];
   return allShadows(inputs, sun);
 }
 

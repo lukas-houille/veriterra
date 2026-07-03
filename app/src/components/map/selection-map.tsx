@@ -326,6 +326,34 @@ function removeSunLayers(map: MaplibreMap): void {
 }
 
 /**
+ * (Ré)injecte les volumes extrudés (bâti + canopée) et les ombres au sol de l'instant courant dans
+ * les sources d'analyse. Réutilisé à la fin du chargement initial ET après une bascule de fond de
+ * carte (le style est remis à zéro : on repeuple depuis les données déjà en mémoire, sans re-fetch).
+ */
+function populateSunSources(
+  map: MaplibreMap,
+  data: { buildings: SunVolume[]; canopies: SunVolume[] },
+  centroid: { lon: number; lat: number },
+  dateStr: string,
+  minutes: number,
+  onSansHauteur: (n: number) => void,
+): void {
+  (map.getSource(SUN_BUILDING_SOURCE) as GeoJSONSource | undefined)?.setData(
+    toExtrusionFC(data.buildings) as SetDataArg,
+  );
+  (map.getSource(SUN_CANOPY_SOURCE) as GeoJSONSource | undefined)?.setData(
+    toExtrusionFC(data.canopies) as SetDataArg,
+  );
+  const pos = sunPosition(new Date(timestampFor(dateStr, minutes)), centroid.lat, centroid.lon);
+  const { shadows, sansHauteur } = sunShadowsFor(data.buildings, data.canopies, pos);
+  onSansHauteur(sansHauteur);
+  (map.getSource(SUN_SHADOW_SOURCE) as GeoJSONSource | undefined)?.setData({
+    type: 'FeatureCollection',
+    features: shadows,
+  } as SetDataArg);
+}
+
+/**
  * Carte de sélection de parcelles (US-1.1 / US-1.2 / US-1.6). Fond de carte au choix
  * (plan vectoriel Veriterra ou satellite IGN, cadastre en calque), recherche d'adresse
  * (BAN) avec autocomplétion, sélection de parcelles au clic (API Carto Cadastre) surlignées
@@ -370,6 +398,10 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
   // Bâtiments sans hauteur BD TOPO : exclus des ombres et affichés honnêtement (règle 3).
   const [sunSansHauteur, setSunSansHauteur] = useState(0);
   const sunDataRef = useRef<{ buildings: SunVolume[]; canopies: SunVolume[] } | null>(null);
+  // Clé du centroïde effectivement CHARGÉ : distingue un simple rechargement de style (bascule de
+  // fond, même centroïde => on repeuple sans re-fetch ni re-cadrage) d'un changement de sélection
+  // (nouveau centroïde => on recharge et on recadre).
+  const sunFetchedKeyRef = useRef<string>('');
   // Miroirs de l'instant courant : la mise à jour d'après-chargement applique l'heure/saison
   // RÉELLES même si l'utilisateur a bougé un curseur pendant le fetch initial (closures fraîches).
   const sunDateRef = useRef(sunDate);
@@ -420,6 +452,7 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
     if (!sunActive || !sunCentroid) {
       removeSunLayers(map);
       sunDataRef.current = null;
+      sunFetchedKeyRef.current = '';
       // Le relief reste en place (permanent) : on repasse seulement à plat et on réinitialise le ciel.
       try {
         map.setSky({}); // réinitialise le ciel (retour en 2D).
@@ -432,14 +465,26 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
       return;
     }
 
+    // Le relief est déjà chargé (permanent) ; on (ré)ajoute les calques bâti/canopée/ombres/hillshade.
+    // Idempotent : rejoué aussi après une bascule de fond de carte (setStyle a remis le style à zéro,
+    // cet effet re-tourne via `mapReady`).
+    installSunLayers(map);
+
+    // Rechargement de style à centroïde INCHANGÉ (bascule Plan/Satellite) : on repeuple depuis les
+    // données déjà chargées, SANS re-fetch ni re-cadrage caméra (l'utilisateur garde sa vue 3D).
+    const cached = sunDataRef.current;
+    if (cached && sunFetchedKeyRef.current === centroidKey) {
+      populateSunSources(map, cached, sunCentroid, sunDateRef.current, sunMinutesRef.current, setSunSansHauteur);
+      return;
+    }
+
+    // Entrée dans l'analyse (ou changement de sélection) : on cadre la vue 3D et on charge les volumes.
     map.easeTo({
       center: [sunCentroid.lon, sunCentroid.lat],
       zoom: Math.max(map.getZoom(), 16.5),
       pitch: 55,
       bearing: -20,
     });
-    // Le relief est déjà chargé (permanent) ; on ajoute seulement les calques bâti/canopée/ombres/hillshade.
-    installSunLayers(map);
 
     let cancelled = false;
     setSunLoading(true);
@@ -464,27 +509,19 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
           (c: { geometry: SunVolume['geometry']; hauteur: number | null }) => ({ geometry: c.geometry, hauteur: c.hauteur ?? null }),
         );
         sunDataRef.current = { buildings, canopies };
+        sunFetchedKeyRef.current = centroidKey;
         setSunCounts({ b: buildings.length, v: canopies.length });
         setSunUnavail({ b: !bOk, v: !vOk });
         // Volumes extrudés (natif MapLibre) + ombres à l'instant COURANT (via refs : correct même
         // si un curseur a bougé pendant le fetch).
-        (map.getSource(SUN_BUILDING_SOURCE) as GeoJSONSource | undefined)?.setData(
-          toExtrusionFC(buildings) as SetDataArg,
+        populateSunSources(
+          map,
+          { buildings, canopies },
+          sunCentroid,
+          sunDateRef.current,
+          sunMinutesRef.current,
+          setSunSansHauteur,
         );
-        (map.getSource(SUN_CANOPY_SOURCE) as GeoJSONSource | undefined)?.setData(
-          toExtrusionFC(canopies) as SetDataArg,
-        );
-        const pos = sunPosition(
-          new Date(timestampFor(sunDateRef.current, sunMinutesRef.current)),
-          sunCentroid.lat,
-          sunCentroid.lon,
-        );
-        const { shadows, sansHauteur } = sunShadowsFor(buildings, canopies, pos);
-        setSunSansHauteur(sansHauteur);
-        (map.getSource(SUN_SHADOW_SOURCE) as GeoJSONSource | undefined)?.setData({
-          type: 'FeatureCollection',
-          features: shadows,
-        } as SetDataArg);
       } catch {
         if (!cancelled) setSunError('Données 3D indisponibles (bâtiments ou végétation).');
       } finally {
@@ -495,46 +532,59 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
       cancelled = true;
     };
     // sunDate/sunMinutes exclus volontairement : l'instant initial suffit ici, l'effet suivant met à jour.
-  }, [sunActive, sunCentroid, mapReady]);
+  }, [sunActive, sunCentroid, centroidKey, mapReady]);
 
   // Mise à jour de l'instant (heure + saison) : recalcule les ombres (Turf) et l'ambiance jour/nuit
   // (ciel, teinte des façades et des ombres), sans recharger les données.
+  //
+  // Coalescé sur une FRAME d'animation : le curseur d'heure émet des `onChange` en rafale pendant le
+  // glissement, et le recalcul des ombres de canopée (union booléenne par emprise boisée) est lourd.
+  // On ne garde qu'un recalcul par frame (le plus récent), la rafale d'événements ne compte plus.
   useEffect(() => {
     if (!sunActive) return;
     const map = mapRef.current;
     if (!map) return;
-    const data = sunDataRef.current;
-    if (data && sunPos) {
-      const { shadows } = sunShadowsFor(data.buildings, data.canopies, sunPos);
-      (map.getSource(SUN_SHADOW_SOURCE) as GeoJSONSource | undefined)?.setData({
-        type: 'FeatureCollection',
-        features: shadows,
-      } as SetDataArg);
-    }
-    if (sunPos) {
-      const amb = ambienceForAltitude(sunPos.altitudeDeg);
-      const azimuth = Math.round((((sunPos.azimuthDeg % 360) + 360) % 360));
-      try {
-        map.setSky(amb.sky);
-        if (map.getLayer('sun-buildings-3d')) {
-          map.setPaintProperty('sun-buildings-3d', 'fill-extrusion-color', amb.buildingColor);
-        }
-        if (map.getLayer('sun-shadow-fill')) {
-          map.setPaintProperty('sun-shadow-fill', 'fill-color', amb.shadowColor);
-          // Opacité en FONDU : NULLE sous l'horizon (l'ombre disparaît complètement la nuit), puis
-          // elle réapparaît au lever et se densifie quand le soleil monte (l'intensité suit sa course).
-          map.setPaintProperty('sun-shadow-fill', 'fill-opacity', shadowFadeOpacity(sunPos.altitudeDeg));
-        }
-        if (map.getLayer('sun-hillshade')) {
-          // Le relief s'ombre dans la direction du soleil (azimut), plus marqué quand il est bas.
-          map.setPaintProperty('sun-hillshade', 'hillshade-illumination-direction', azimuth);
-          map.setPaintProperty('sun-hillshade', 'hillshade-exaggeration', hillshadeExaggeration(sunPos.altitudeDeg));
-        }
-      } catch {
-        // style transitoirement indisponible : rien de bloquant.
+
+    const apply = () => {
+      const data = sunDataRef.current;
+      if (data && sunPos) {
+        const { shadows } = sunShadowsFor(data.buildings, data.canopies, sunPos);
+        (map.getSource(SUN_SHADOW_SOURCE) as GeoJSONSource | undefined)?.setData({
+          type: 'FeatureCollection',
+          features: shadows,
+        } as SetDataArg);
       }
-    }
-  }, [sunActive, sunDate, sunMinutes, sunPos]);
+      if (sunPos) {
+        const amb = ambienceForAltitude(sunPos.altitudeDeg);
+        const azimuth = Math.round((((sunPos.azimuthDeg % 360) + 360) % 360));
+        try {
+          map.setSky(amb.sky);
+          if (map.getLayer('sun-buildings-3d')) {
+            map.setPaintProperty('sun-buildings-3d', 'fill-extrusion-color', amb.buildingColor);
+          }
+          if (map.getLayer('sun-shadow-fill')) {
+            map.setPaintProperty('sun-shadow-fill', 'fill-color', amb.shadowColor);
+            // Opacité en FONDU : NULLE sous l'horizon (l'ombre disparaît complètement la nuit), puis
+            // elle réapparaît au lever et se densifie quand le soleil monte (l'intensité suit sa course).
+            map.setPaintProperty('sun-shadow-fill', 'fill-opacity', shadowFadeOpacity(sunPos.altitudeDeg));
+          }
+          if (map.getLayer('sun-hillshade')) {
+            // Le relief s'ombre dans la direction du soleil (azimut), plus marqué quand il est bas.
+            map.setPaintProperty('sun-hillshade', 'hillshade-illumination-direction', azimuth);
+            map.setPaintProperty('sun-hillshade', 'hillshade-exaggeration', hillshadeExaggeration(sunPos.altitudeDeg));
+          }
+        } catch {
+          // style transitoirement indisponible : rien de bloquant.
+        }
+      }
+    };
+
+    const raf = requestAnimationFrame(apply);
+    return () => cancelAnimationFrame(raf);
+    // `mapReady` : réapplique la peinture des ombres/relief après un rechargement de style (bascule
+    // de fond de carte), sinon `sun-shadow-fill` resterait à son opacité par défaut jusqu'au prochain
+    // pas de curseur.
+  }, [sunActive, sunDate, sunMinutes, sunPos, mapReady]);
 
   // Initialisation de la carte (une seule fois, côté navigateur uniquement).
   useEffect(() => {
@@ -1004,7 +1054,9 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
           aria-label="Fond de carte"
           style={{
             alignSelf: 'flex-start',
-            display: sunActive ? 'none' : 'inline-flex',
+            // Reste visible pendant l'analyse d'ensoleillement : on peut passer Plan/Satellite sans
+            // en sortir (la surcouche 3D est réinstallée après le rechargement de style).
+            display: 'inline-flex',
             background: PANEL,
             border: `1px solid ${BORDER}`,
             borderRadius: '9px',
@@ -1162,8 +1214,23 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
               <button
                 type="button"
                 onClick={() => setSunActive(false)}
-                style={{ border: 'none', background: 'transparent', color: SUB, fontFamily: SANS, fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                aria-label="Quitter l'analyse et revenir à la carte"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  border: `1px solid ${BORDER}`,
+                  background: PANEL,
+                  color: TEXT,
+                  fontFamily: SANS,
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  padding: '5px 10px',
+                  borderRadius: '8px',
+                }}
               >
+                <span aria-hidden="true">←</span>
                 Quitter l&apos;analyse
               </button>
             </div>

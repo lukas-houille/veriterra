@@ -19,6 +19,8 @@ export const ENRICHMENT_A_ID = '00000000-0000-0000-0000-0000000000a5';
 export const ENRICHMENT_B_ID = '00000000-0000-0000-0000-0000000000b5';
 export const DOCUMENT_A_ID = '00000000-0000-0000-0000-0000000000a6';
 export const DOCUMENT_B_ID = '00000000-0000-0000-0000-0000000000b6';
+export const INVITATION_A_ID = '00000000-0000-0000-0000-0000000000a7';
+export const INVITATION_B_ID = '00000000-0000-0000-0000-0000000000b7';
 
 // Petits carrés GeoJSON (WGS84) autour de Lyon, un par tenant.
 const POLY_A = {
@@ -210,6 +212,30 @@ export async function seed(): Promise<void> {
       sizeBytes: 4321,
       storageKey: `org/${ORG_B_ID}/terrain/${TERRAIN_B_ID}/${DOCUMENT_B_ID}`,
       uploadedById: USER_B_ID,
+    },
+  });
+
+  // Invitations en attente (une par tenant), pour les tests d'isolation RLS.
+  await admin.invitation.upsert({
+    where: { id: INVITATION_A_ID },
+    update: {},
+    create: {
+      id: INVITATION_A_ID,
+      organisationId: ORG_A_ID,
+      email: 'invitee-a@example.test',
+      role: 'MEMBER',
+      invitedByUserId: USER_A_ID,
+    },
+  });
+  await admin.invitation.upsert({
+    where: { id: INVITATION_B_ID },
+    update: {},
+    create: {
+      id: INVITATION_B_ID,
+      organisationId: ORG_B_ID,
+      email: 'invitee-b@example.test',
+      role: 'MEMBER',
+      invitedByUserId: USER_B_ID,
     },
   });
 }

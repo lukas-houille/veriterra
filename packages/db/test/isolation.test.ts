@@ -6,6 +6,8 @@ import {
   DOCUMENT_B_ID,
   ENRICHMENT_A_ID,
   ENRICHMENT_B_ID,
+  INVITATION_A_ID,
+  INVITATION_B_ID,
   ORG_A_ID,
   ORG_B_ID,
   PROJET_B_ID,
@@ -144,6 +146,27 @@ describe('RLS tenant isolation', () => {
           sizeBytes: 1,
           storageKey: `org/${ORG_A_ID}/terrain/${TERRAIN_A_ID}/leak`,
         },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('org B sees only its own invitations (Invitation RLS)', async () => {
+    const db = forOrg(ORG_B_ID);
+    const invitations = await db.invitation.findMany();
+    expect(invitations.map((i) => i.id)).toEqual([INVITATION_B_ID]);
+  });
+
+  it("org B cannot read org A's invitation by id", async () => {
+    const db = forOrg(ORG_B_ID);
+    const inv = await db.invitation.findUnique({ where: { id: INVITATION_A_ID } });
+    expect(inv).toBeNull();
+  });
+
+  it('WITH CHECK blocks creating an invitation stamped with another org', async () => {
+    const db = forOrg(ORG_B_ID);
+    await expect(
+      db.invitation.create({
+        data: { organisationId: ORG_A_ID, email: 'leak@example.test', role: 'MEMBER' },
       }),
     ).rejects.toThrow();
   });

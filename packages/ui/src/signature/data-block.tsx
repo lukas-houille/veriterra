@@ -79,7 +79,17 @@ export function DataBlock({
             <span className="font-mono text-xs text-neutral-500">
               {source} · {date}
             </span>
-            <ConfidenceDots confidence={confidence} showLabel={false} />
+            {/* Libellé « Confiance » explicite : sans lui, les 3 points étaient pris pour un menu
+                cliquable. Le title détaille au survol ; ConfidenceDots reste accessible (aria-label).
+                Conteneur <div> (et non <span>) : ConfidenceDots a une racine <div>, on évite un bloc
+                imbriqué dans un inline (HTML non conforme). */}
+            <div
+              className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-400"
+              title="Indice de confiance de la donnée (fiabilité de la source)"
+            >
+              Confiance
+              <ConfidenceDots confidence={confidence} showLabel={false} />
+            </div>
           </div>
         </>
       )}

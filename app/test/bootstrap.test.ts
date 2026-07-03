@@ -25,7 +25,7 @@ afterAll(async () => {
 
 describe('first-login bootstrap', () => {
   it('creates exactly one organisation + OWNER membership on first login', async () => {
-    const ctx = await bootstrapUserOrganisation({ sub: SUB, email: 'x@test.example', name: 'X' });
+    const ctx = await bootstrapUserOrganisation({ sub: SUB, email: 'x@test.example', emailVerified: true, name: 'X' });
     expect(ctx.role).toBe('OWNER');
 
     const user = await admin.user.findUniqueOrThrow({ where: { oidcSubject: SUB } });
@@ -35,8 +35,8 @@ describe('first-login bootstrap', () => {
   });
 
   it('is idempotent: a second login does not create a second organisation', async () => {
-    const first = await bootstrapUserOrganisation({ sub: SUB, email: 'x@test.example', name: 'X' });
-    const second = await bootstrapUserOrganisation({ sub: SUB, email: 'x2@test.example', name: 'X2' });
+    const first = await bootstrapUserOrganisation({ sub: SUB, email: 'x@test.example', emailVerified: true, name: 'X' });
+    const second = await bootstrapUserOrganisation({ sub: SUB, email: 'x2@test.example', emailVerified: true, name: 'X2' });
     expect(second.orgId).toBe(first.orgId);
 
     const user = await admin.user.findUniqueOrThrow({ where: { oidcSubject: SUB } });
@@ -93,7 +93,7 @@ describe('refreshTenantContext (révocation/rôle vivants)', () => {
   afterAll(cleanupRefresh);
 
   it('reflète le rôle vivant et le retrait de l\'adhésion active', async () => {
-    const ctx = await bootstrapUserOrganisation({ sub: RT_SUB, email: 'rt@test.example', name: 'RT' });
+    const ctx = await bootstrapUserOrganisation({ sub: RT_SUB, email: 'rt@test.example', emailVerified: true, name: 'RT' });
     const userId = ctx.userId;
 
     // Rôle vivant : une rétrogradation en base est reflétée sans re-login.
@@ -128,8 +128,8 @@ describe('invitation acceptance at login', () => {
       data: { organisationId: org.id, email: INV_EMAIL, role: 'ADMIN' },
     });
 
-    // Connexion avec l'e-mail invité (casse mixte : le rattachement est insensible à la casse).
-    const ctx = await bootstrapUserOrganisation({ sub: INV_SUB, email: 'Invitee@Test.Example', name: 'Invitee' });
+    // Connexion avec l'e-mail invité VÉRIFIÉ (casse mixte : le rattachement est insensible à la casse).
+    const ctx = await bootstrapUserOrganisation({ sub: INV_SUB, email: 'Invitee@Test.Example', emailVerified: true, name: 'Invitee' });
 
     // Org active = org d'invitation, rôle = celui de l'invitation, pas d'org personnelle.
     expect(ctx.orgId).toBe(org.id);
@@ -144,5 +144,32 @@ describe('invitation acceptance at login', () => {
     expect(after.status).toBe('ACCEPTED');
     expect(after.acceptedByUserId).toBe(user.id);
     expect(after.acceptedAt).not.toBeNull();
+  });
+
+  // Garde de sécurité (règle 2) : un e-mail NON vérifié ne doit JAMAIS accepter une invitation, sinon
+  // un attaquant présentant l'e-mail (non prouvé) d'une invitation rejoindrait l'organisation d'autrui.
+  it("n'accepte PAS une invitation si l'e-mail n'est pas vérifié (bris d'isolation évité)", async () => {
+    const org = await admin.organisation.create({ data: { name: 'Org invitante test' } });
+    const invitation = await admin.invitation.create({
+      data: { organisationId: org.id, email: INV_EMAIL, role: 'ADMIN' },
+    });
+
+    // Connexion avec l'e-mail de l'invitation mais NON vérifié (emailVerified: false).
+    const ctx = await bootstrapUserOrganisation({ sub: INV_SUB, email: INV_EMAIL, emailVerified: false, name: 'Attaquant' });
+
+    // L'attaquant N'a PAS rejoint l'org d'invitation : il obtient sa propre org personnelle (OWNER).
+    expect(ctx.orgId).not.toBe(org.id);
+    expect(ctx.role).toBe('OWNER');
+    const user = await admin.user.findUniqueOrThrow({ where: { oidcSubject: INV_SUB } });
+    const memberships = await admin.membership.findMany({ where: { userId: user.id } });
+    expect(memberships).toHaveLength(1);
+    expect(memberships[0]?.organisationId).not.toBe(org.id);
+    // E-mail non vérifié => non persisté (jamais affiché comme prouvé).
+    expect(user.email).toBeNull();
+
+    // L'invitation reste PENDING (jamais consommée par un e-mail non prouvé).
+    const after = await admin.invitation.findUniqueOrThrow({ where: { id: invitation.id } });
+    expect(after.status).toBe('PENDING');
+    expect(after.acceptedByUserId).toBeNull();
   });
 });

@@ -28,7 +28,7 @@ import type { EnrichmentBlockView } from '@/modules/terrains/types';
 import { EditTerrainForm } from './edit-terrain-form';
 import { EnrichmentActions } from './enrichment-actions';
 import { DocumentsPanel } from './documents-panel';
-import { SunMap } from '@/components/map/sun-map';
+import { FicheMap } from '@/components/map/fiche-map';
 
 // Fiche terrain (US-1.3 données rapides + amorce US-1.4 progressive disclosure).
 // Composant serveur : appelle directement le service (pas d'aller-retour HTTP), l'isolation
@@ -775,7 +775,7 @@ export default async function TerrainPage({
           <TabsList>
             <TabsTrigger value="apercu">Aperçu</TabsTrigger>
             <TabsTrigger value="enrichissement">Enrichissement</TabsTrigger>
-            <TabsTrigger value="soleil">Soleil</TabsTrigger>
+            <TabsTrigger value="soleil">Ensoleillement</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
           </TabsList>
 
@@ -879,15 +879,15 @@ export default async function TerrainPage({
             </div>
           </TabsContent>
 
-          {/* ----- Onglet Soleil : analyse solaire 3D, ombres portées des bâtiments (US-4.1) ----- */}
+          {/* ----- Onglet Ensoleillement : même carte que l'explorer, focalisée sur la parcelle (US-4.1) ----- */}
           <TabsContent value="soleil">
             <div className="flex flex-col gap-4">
               <p className="text-sm text-muted-foreground">
-                Vue 3D de la parcelle et des bâtiments voisins (BD TOPO), drapée sur le relief, avec
-                une ambiance jour/nuit. Réglez la date et l'heure pour voir les ombres portées au sol.
-                Les ombres bâtiment sur bâtiment viendront ensuite.
+                La parcelle sur la carte (plan ou satellite), avec le relief et le cadastre. Lancez
+                « Analyser l'ensoleillement » pour voir les ombres du bâti et de la végétation bouger
+                avec l'heure et la saison, ou ouvrez la vue en grand dans l'explorer.
               </p>
-              <SunMap buildingsUrl={`/api/terrains/${terrain.id}/buildings`} parcelles={terrain.parcelles} />
+              <FicheMap terrainId={terrain.id} parcelles={terrain.parcelles} />
             </div>
           </TabsContent>
 

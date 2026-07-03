@@ -26,6 +26,7 @@ import {
 } from '@/lib/geo/apicarto-core';
 import type { BanFeature, GeoJsonGeometry } from '@/lib/geo/types';
 import { parcellesCentroid } from '@/lib/geo/centroid';
+import { boundsOfGeometries } from '@/lib/geo/bbox';
 import { ambienceForAltitude } from '@/lib/sun/ambience';
 import { sunPosition } from '@/lib/sun/shadows';
 import {
@@ -49,9 +50,15 @@ export interface SelectedParcelle {
 
 interface SelectionMapProps {
   /** Notifie le parent à chaque changement de la sélection de parcelles. */
-  onSelectionChange: (parcelles: SelectedParcelle[]) => void;
+  onSelectionChange?: (parcelles: SelectedParcelle[]) => void;
   /** Notifie le parent quand une adresse est choisie (code INSEE + libellé). */
-  onAddressPick: (address: { insee: string; address: string }) => void;
+  onAddressPick?: (address: { insee: string; address: string }) => void;
+  /** Sélection initiale (fiche : parcelles du terrain, préchargées et centrées à l'ouverture). */
+  initialSelection?: SelectedParcelle[];
+  /** Mode focalisé lecture seule (fiche) : pas de recherche d'adresse/surface ni d'édition au clic. */
+  readOnly?: boolean;
+  /** Si fourni, affiche un bouton « agrandir » (ouvre l'explorer plein écran focalisé sur le terrain). */
+  onExpand?: () => void;
 }
 
 const AMBER = '#db9b2c';
@@ -361,12 +368,18 @@ function populateSunSources(
  * surlignées en indigo, cliquables pour les ajouter). Composant client, robuste au SSR :
  * la carte MapLibre n'est créée que dans un effet, côté navigateur.
  */
-export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapProps) {
+export function SelectionMap({
+  onSelectionChange,
+  onAddressPick,
+  initialSelection,
+  readOnly = false,
+  onExpand,
+}: SelectionMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
   const [mapReady, setMapReady] = useState(false);
 
-  const [selection, setSelection] = useState<SelectedParcelle[]>([]);
+  const [selection, setSelection] = useState<SelectedParcelle[]>(initialSelection ?? []);
   const [matches, setMatches] = useState<ParcelleInZone[]>([]);
   const [basemap, setBasemap] = useState<BasemapId>(DEFAULT_BASEMAP);
 
@@ -374,6 +387,11 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
   const selectionRef = useRef(selection);
   const matchesRef = useRef(matches);
   const basemapRef = useRef(basemap);
+  // Mode focalisé (fiche) : le clic sur la carte n'édite pas la sélection.
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
+  // Emprise à cadrer à l'ouverture (parcelles préchargées), une seule fois.
+  const focusDoneRef = useRef(false);
 
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<BanFeature[]>([]);
@@ -615,6 +633,8 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
       });
 
     map.on('click', (e) => {
+      // Mode focalisé (fiche) : la sélection est fixe, le clic n'édite pas.
+      if (readOnlyRef.current) return;
       setError(null);
       // Si le clic tombe sur une parcelle déjà trouvée par la recherche par surface, on
       // l'ajoute directement depuis la donnée en cache (déjà autoritative, aucun réseau).
@@ -658,7 +678,7 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
     };
   }, []);
 
-  // Synchronise le surlignage de sélection (ambre) et remonte la sélection au parent.
+  // Synchronise le surlignage de sélection (ambre) et remonte la sélection au parent (si demandé).
   useEffect(() => {
     selectionRef.current = selection;
     const map = mapRef.current;
@@ -667,8 +687,20 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
         toFeatureCollection(selection) as SetDataArg,
       );
     }
-    onSelectionChange(selection);
+    onSelectionChange?.(selection);
   }, [selection, mapReady, onSelectionChange]);
+
+  // Cadre la vue sur la sélection initiale (fiche/focus terrain) à l'ouverture, une seule fois.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || focusDoneRef.current) return;
+    const init = initialSelection ?? [];
+    if (init.length === 0) return;
+    const bounds = boundsOfGeometries(init.map((p) => p.geojson));
+    if (!bounds) return;
+    focusDoneRef.current = true;
+    map.fitBounds(bounds, { padding: 64, duration: 800, maxZoom: 17.5 });
+  }, [mapReady, initialSelection]);
 
   // Synchronise le surlignage des résultats par surface (indigo).
   useEffect(() => {
@@ -709,7 +741,7 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
       setQuery(feature.label);
       setShowSuggestions(false);
       setSuggestions([]);
-      onAddressPick({ insee: feature.citycode, address: feature.label });
+      onAddressPick?.({ insee: feature.citycode, address: feature.label });
       // Zoom adapté à la granularité du résultat : une commune ne doit pas cadrer comme un
       // numéro de rue (le zoom 18 fixe « zoomait trop » sur une ville).
       mapRef.current?.flyTo({ center: [feature.lon, feature.lat], zoom: zoomForBanType(feature.type) });
@@ -822,6 +854,40 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
         aria-label="Carte de sélection de parcelles"
       />
 
+      {/* Bouton « agrandir » (fiche) : ouvre l'explorer plein écran focalisé sur le terrain. */}
+      {onExpand && (
+        <button
+          type="button"
+          onClick={onExpand}
+          aria-label="Ouvrir en grand dans l'explorer"
+          title="Ouvrir en grand dans l'explorer"
+          style={{
+            position: 'absolute',
+            top: '12px',
+            right: '12px',
+            zIndex: 12,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '36px',
+            height: '36px',
+            background: PANEL,
+            border: `1px solid ${BORDER}`,
+            borderRadius: '9px',
+            boxShadow: FLOAT_SHADOW,
+            cursor: 'pointer',
+            color: TEXT,
+          }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+            <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+            <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+            <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+          </svg>
+        </button>
+      )}
+
       {/* Voile d'ambiance de l'analyse d'ensoleillement (sous les panneaux, sans capter les clics) */}
       {sunAmbience && sunAmbience.overlay.opacity > 0.001 ? (
         <div
@@ -847,7 +913,8 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
           width: '340px',
           maxWidth: 'calc(100% - 32px)',
           zIndex: 12,
-          display: 'flex',
+          // Masqué en mode focalisé (fiche) : pas de recherche d'adresse/surface, la sélection est fixe.
+          display: readOnly ? 'none' : 'flex',
           flexDirection: 'column',
           gap: '8px',
         }}
@@ -1110,24 +1177,26 @@ export function SelectionMap({ onSelectionChange, onAddressPick }: SelectionMapP
           ) : (
             <>
               <span style={{ fontFamily: MONO, fontSize: '14px', color: TEXT }}>{formatSurface(totalSurface)}</span>
-              <button
-                type="button"
-                onClick={clearSelection}
-                style={{
-                  alignSelf: 'flex-start',
-                  marginTop: '4px',
-                  border: 'none',
-                  background: 'transparent',
-                  padding: 0,
-                  color: AMBER,
-                  fontFamily: SANS,
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Réinitialiser la sélection
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  style={{
+                    alignSelf: 'flex-start',
+                    marginTop: '4px',
+                    border: 'none',
+                    background: 'transparent',
+                    padding: 0,
+                    color: AMBER,
+                    fontFamily: SANS,
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Réinitialiser la sélection
+                </button>
+              )}
             </>
           )}
         </div>

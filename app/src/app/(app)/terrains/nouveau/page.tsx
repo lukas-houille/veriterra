@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Button, Input } from '@veriterra/ui';
@@ -47,8 +47,16 @@ function inseeFromIdu(idu: string): string {
   return idu.slice(0, 5);
 }
 
-export default function NouveauTerrainPage() {
+function NouveauTerrainInner() {
   const router = useRouter();
+  // Mode « focus terrain » : ouvert depuis la fiche (bouton agrandir) via ?terrain=<id>. On précharge
+  // les parcelles du terrain, on les centre, et on offre un retour à la fiche (pas de création ici).
+  const searchParams = useSearchParams();
+  const focusTerrainId = searchParams.get('terrain');
+  const [focusInitial, setFocusInitial] = useState<SelectedParcelle[] | undefined>(undefined);
+  // Explorer normal (sans ?terrain) : prêt dès le premier rendu (la carte monte immédiatement, comme
+  // avant). Mode focus : on attend le préchargement des parcelles pour que la graine soit disponible.
+  const [focusReady, setFocusReady] = useState(!focusTerrainId);
 
   const [parcelles, setParcelles] = useState<SelectedParcelle[]>([]);
   const [address, setAddress] = useState('');
@@ -59,6 +67,41 @@ export default function NouveauTerrainPage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Précharge les parcelles du terrain focalisé (scoped côté serveur) avant de monter la carte, pour
+  // que la sélection initiale soit disponible au premier rendu (la carte l'utilise comme graine).
+  useEffect(() => {
+    if (!focusTerrainId) {
+      setFocusReady(true);
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/terrains/${focusTerrainId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { terrain?: { parcelles?: SelectedParcelle[] } } | null) => {
+        if (cancelled) return;
+        const ps = data?.terrain?.parcelles;
+        if (Array.isArray(ps)) {
+          setFocusInitial(
+            ps.map((p) => ({
+              idu: p.idu,
+              geojson: p.geojson,
+              surfaceM2: p.surfaceM2,
+              commune: p.commune,
+              section: p.section,
+              numero: p.numero,
+            })),
+          );
+        }
+        setFocusReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setFocusReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [focusTerrainId]);
 
   const handleSelectionChange = useCallback((next: SelectedParcelle[]) => {
     setParcelles(next);
@@ -146,14 +189,38 @@ export default function NouveauTerrainPage() {
 
   return (
     <div className="flex h-[calc(100dvh-3.625rem)] flex-col bg-background text-foreground">
+      {/* Barre de retour à la fiche (mode focus terrain uniquement). */}
+      {focusTerrainId && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border bg-card px-4 py-2">
+          <Link
+            href={`/terrains/${focusTerrainId}`}
+            className="inline-flex items-center gap-1.5 rounded-sm text-sm font-semibold text-indigo-500 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span aria-hidden="true">←</span>
+            Retour à la fiche
+          </Link>
+          <span className="text-xs text-neutral-500">Vue explorateur focalisée sur le terrain</span>
+        </div>
+      )}
+
       {/* MAP AREA (la barre de nav est fournie par le shell (app)) */}
       <div className="relative flex-1 overflow-hidden bg-neutral-100">
         <div className="absolute inset-0">
-          <SelectionMap onSelectionChange={handleSelectionChange} onAddressPick={handleAddressPick} />
+          {focusReady ? (
+            <SelectionMap
+              initialSelection={focusInitial}
+              onSelectionChange={handleSelectionChange}
+              onAddressPick={handleAddressPick}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-neutral-100 text-sm text-neutral-500">
+              Chargement du terrain...
+            </div>
+          )}
         </div>
 
-        {/* PANNEAU DÉTAILS : n'apparaît qu'après sélection d'au moins une parcelle. */}
-        {parcelleCount > 0 && (
+        {/* PANNEAU DÉTAILS : création uniquement (masqué en mode focus, où le terrain existe déjà). */}
+        {!focusTerrainId && parcelleCount > 0 && (
           <aside
             aria-label="Détails du terrain"
             className="absolute right-4 top-4 z-20 flex max-h-[calc(100%-2rem)] w-[360px] max-w-[calc(100%-2rem)] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg"
@@ -244,5 +311,20 @@ export default function NouveauTerrainPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// `useSearchParams` (mode focus terrain) exige une frontière Suspense.
+export default function NouveauTerrainPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-[calc(100dvh-3.625rem)] items-center justify-center bg-background text-sm text-neutral-500">
+          Chargement de la carte...
+        </div>
+      }
+    >
+      <NouveauTerrainInner />
+    </Suspense>
   );
 }

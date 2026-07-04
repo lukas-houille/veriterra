@@ -15,7 +15,9 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - '5432:5432'
+      # Lié à la loopback : accessible depuis l'hôte (pnpm dev, client SQL) mais PAS depuis le LAN.
+      # Les conteneurs (app/worker/migrate) joignent Postgres par le nom de service `db`, pas ce port.
+      - '127.0.0.1:5432:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 10s
@@ -28,7 +30,8 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - '6379:6379'
+      # Loopback uniquement (Redis dev sans mot de passe) : pas d'exposition LAN.
+      - '127.0.0.1:6379:6379'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
@@ -48,8 +51,9 @@ services:
     volumes:
       - miniodata:/data
     ports:
-      - '9000:9000'
-      - '9001:9001'
+      # Loopback uniquement : la console et l'API S3 (creds root) ne sont pas exposées au LAN.
+      - '127.0.0.1:9000:9000'
+      - '127.0.0.1:9001:9001'
 
   # One-shot: applies migrations (extension, roles, RLS, tables) as the privileged role.
   migrate:

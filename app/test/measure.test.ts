@@ -9,6 +9,8 @@ import {
   nearestBoundaryDistance,
   polygonAreaMeters,
   polygonPerimeterMeters,
+  ringCentroid,
+  segmentMidpoint,
   slopeBetween,
   type LngLat,
 } from '@/lib/geo/measure';
@@ -73,6 +75,21 @@ describe('polygonAreaMeters / polygonPerimeterMeters', () => {
     const p = polygonPerimeterMeters(square);
     expect(p).toBeGreaterThan(395);
     expect(p).toBeLessThan(405);
+  });
+});
+
+describe('segmentMidpoint / ringCentroid', () => {
+  it('milieu de segment = moyenne des extrémités', () => {
+    expect(segmentMidpoint([0, 0], [2, 4])).toEqual([1, 2]);
+    expect(segmentMidpoint([-1, -1], [1, 1])).toEqual([0, 0]);
+  });
+
+  it('centroïde d\'anneau = moyenne des sommets', () => {
+    expect(ringCentroid([[0, 0], [2, 0], [2, 2], [0, 2]])).toEqual([1, 1]);
+  });
+
+  it('centroïde null pour un anneau vide', () => {
+    expect(ringCentroid([])).toBeNull();
   });
 });
 

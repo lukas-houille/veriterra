@@ -38,6 +38,8 @@ import {
   nearestBoundaryDistance,
   polygonAreaMeters,
   polygonPerimeterMeters,
+  ringCentroid,
+  segmentMidpoint,
   slopeBetween,
   type LngLat,
 } from '@/lib/geo/measure';
@@ -93,29 +95,62 @@ const SUN_BUILDING_COLOR = '#c7ccda';
 const SUN_CANOPY_COLOR = '#5c8a4a';
 const SUN_RADIUS_M = 250;
 
-// --- Outils de mesure (US-1.5) ------------------------------------------------------------------
+// --- Outils de mesure (US-1.5 + v2) -------------------------------------------------------------
 // Distance (polyligne), surface (polygone), dénivelé (2 points, RGE ALTI) et recul (point -> contour
-// de parcelle). Cœur de calcul PUR dans lib/geo/measure.ts (testé) ; ici seulement le rendu carte et
-// l'interaction. Couleur teal distincte de l'ambre (sélection) et de l'indigo (recherche par surface).
+// de parcelle). Cœur de calcul PUR dans lib/geo/measure.ts (testé) ; ici le rendu carte, l'interaction,
+// les ÉTIQUETTES VIVANTES sur l'axe (v2, ruban élastique) et le CUMUL de plusieurs mesures sur le plan.
+// Couleur teal distincte de l'ambre (sélection) et de l'indigo (recherche par surface).
 const MEASURE_SOURCE = 'measure';
 const MEASURE_COLOR = '#0E7490';
 
 type MeasureTool = 'distance' | 'surface' | 'denivele' | 'recul';
 
-/** Recul calculé : point cliqué, point le plus proche du contour, et distance (m). */
+/** Résultat figé d'un dénivelé (altitudes RGE ALTI). */
+interface DeniveleResult {
+  zA: number;
+  zB: number;
+  deltaZ: number;
+  slopePct: number | null;
+  horizM: number;
+}
+/** Résultat figé d'un recul (point cliqué -> contour le plus proche). */
 interface ReculResult {
   point: LngLat;
   nearestPoint: LngLat;
   distanceM: number;
 }
 
-/** État de la mesure de dénivelé (RGE ALTI est asynchrone ; hors couverture = indisponible, règle 3). */
+/** Une mesure FIGÉE, cumulée sur le plan (v2 : plusieurs mesures coexistent). */
+interface Measurement {
+  id: number;
+  tool: MeasureTool;
+  points: LngLat[];
+  denivele?: DeniveleResult;
+  recul?: ReculResult;
+}
+
+/** État de la mesure de dénivelé EN COURS (RGE ALTI asynchrone ; hors couverture = indisponible,
+ *  règle 3). Le succès n'est PAS un état ici : il devient directement une mesure figée (Δ sur l'axe). */
 type DeniveleState =
   | { state: 'partial' }
   | { state: 'loading' }
   | { state: 'error' }
-  | { state: 'unavailable' }
-  | { state: 'ok'; zA: number; zB: number; deltaZ: number; slopePct: number | null; horizM: number };
+  | { state: 'unavailable' };
+
+// Feature GeoJSON minimal de la source de mesure. `t` distingue sommet (cercle) et étiquette (texte).
+// `sort` = priorité de placement des étiquettes : PLUS BAS = placé d'abord = GAGNE la collision. Le
+// brouillon vivant (priorité 0) prime ainsi sur les mesures figées (priorité 1), cœur de la v2.
+type MeasureFeature = {
+  type: 'Feature';
+  properties: { t?: 'vertex' | 'label'; label?: string; sort?: number };
+  geometry: unknown;
+};
+const DRAFT_PRIORITY = 0;
+const FROZEN_PRIORITY = 1;
+
+const vertexFeat = (p: LngLat): MeasureFeature => ({ type: 'Feature', properties: { t: 'vertex' }, geometry: { type: 'Point', coordinates: p } });
+const labelFeat = (p: LngLat, label: string, priority = FROZEN_PRIORITY): MeasureFeature => ({ type: 'Feature', properties: { t: 'label', label, sort: priority }, geometry: { type: 'Point', coordinates: p } });
+const lineFeat = (pts: LngLat[]): MeasureFeature => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: pts } });
 
 /** Ferme un anneau de sommets pour le rendu du polygone de mesure de surface. */
 function closeMeasureRing(pts: LngLat[]): LngLat[] {
@@ -125,33 +160,89 @@ function closeMeasureRing(pts: LngLat[]): LngLat[] {
   return pts;
 }
 
-/**
- * FeatureCollection de la mesure courante : la ligne/le polygone selon l'outil, plus les sommets
- * (points). Pour le recul, le segment point cliqué -> contour le plus proche.
- */
-function buildMeasureFC(tool: MeasureTool | null, points: LngLat[], recul: ReculResult | null) {
-  const features: Array<{ type: 'Feature'; properties: Record<string, never>; geometry: unknown }> = [];
-  const addVertices = (pts: LngLat[]) => {
-    for (const p of pts) features.push({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: p } });
-  };
-  if (tool === 'surface') {
-    if (points.length >= 3) {
-      features.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [closeMeasureRing(points)] } });
-    } else if (points.length >= 2) {
-      features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: points } });
-    }
-    addVertices(points);
-  } else if (tool === 'distance' || tool === 'denivele') {
-    if (points.length >= 2) features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: points } });
-    addVertices(points);
-  } else if (tool === 'recul') {
-    if (recul) {
-      features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [recul.point, recul.nearestPoint] } });
-      addVertices([recul.point, recul.nearestPoint]);
-    } else {
-      addVertices(points);
-    }
+/** Étiquettes de longueur au milieu de chaque segment (distance affichée SUR l'axe). */
+function segmentLabels(pts: LngLat[], priority: number): MeasureFeature[] {
+  const out: MeasureFeature[] = [];
+  for (let i = 1; i < pts.length; i += 1) {
+    const a = pts[i - 1]!;
+    const b = pts[i]!;
+    out.push(labelFeat(segmentMidpoint(a, b), formatMeters(lineLengthMeters([a, b])), priority));
   }
+  return out;
+}
+
+/** Features d'une polyligne (distance) : ligne + sommets + étiquettes de segment. */
+function polylineFeatures(pts: LngLat[], priority = FROZEN_PRIORITY): MeasureFeature[] {
+  const out: MeasureFeature[] = [];
+  if (pts.length >= 2) out.push(lineFeat(pts));
+  for (const p of pts) out.push(vertexFeat(p));
+  out.push(...segmentLabels(pts, priority));
+  return out;
+}
+
+/** Features d'une surface : polygone fermé + sommets + aire au centroïde (ou « tracé invalide »). */
+function surfaceFeatures(pts: LngLat[], priority = FROZEN_PRIORITY): MeasureFeature[] {
+  const out: MeasureFeature[] = [];
+  if (pts.length >= 3) {
+    out.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [closeMeasureRing(pts)] } });
+    const c = ringCentroid(pts);
+    if (c) out.push(labelFeat(c, isSelfIntersectingRing(pts) ? 'tracé invalide' : formatSquareMeters(polygonAreaMeters(pts)), priority));
+  } else if (pts.length >= 2) {
+    out.push(lineFeat(pts));
+  }
+  for (const p of pts) out.push(vertexFeat(p));
+  return out;
+}
+
+/** Ligne A-B + sommets pour le dénivelé (SANS étiquette de distance : le dénivelé mesure un Δ, pas la
+ *  distance horizontale ; le Δ n'existe qu'à la finalisation, cf. measurementFeatures). */
+function deniveleLineFeatures(pts: LngLat[]): MeasureFeature[] {
+  const out: MeasureFeature[] = [];
+  if (pts.length >= 2) out.push(lineFeat(pts));
+  for (const p of pts) out.push(vertexFeat(p));
+  return out;
+}
+
+/** Features d'une mesure FIGÉE selon son type (étiquette = valeur figée, priorité normale). */
+function measurementFeatures(m: Measurement): MeasureFeature[] {
+  if (m.tool === 'distance') return polylineFeatures(m.points);
+  if (m.tool === 'surface') return surfaceFeatures(m.points);
+  if (m.tool === 'denivele') {
+    const out = deniveleLineFeatures(m.points);
+    if (m.denivele && m.points.length >= 2) {
+      const d = m.denivele;
+      const label = `Δ ${formatSignedMeters(d.deltaZ)}${d.slopePct != null ? ` · ${formatPercent(d.slopePct)}` : ''}`;
+      out.push(labelFeat(segmentMidpoint(m.points[0]!, m.points[1]!), label));
+    }
+    return out;
+  }
+  if (m.recul) {
+    const seg: LngLat[] = [m.recul.point, m.recul.nearestPoint];
+    return [lineFeat(seg), vertexFeat(m.recul.point), vertexFeat(m.recul.nearestPoint), labelFeat(segmentMidpoint(seg[0]!, seg[1]!), formatMeters(m.recul.distanceM))];
+  }
+  return [];
+}
+
+/** Features du BROUILLON en cours (priorité 0 = prime sur les figées). Ruban élastique jusqu'au curseur
+ *  pour distance/surface ; pour le dénivelé, ruban A->curseur SEULEMENT tant qu'on place le 2e point, et
+ *  sans étiquette de distance (le Δ n'apparaît qu'à la finalisation, jamais un chiffre trompeur). */
+function draftFeatures(tool: MeasureTool | null, draft: LngLat[], hover: LngLat | null): MeasureFeature[] {
+  if (!tool || draft.length === 0) return [];
+  if (tool === 'recul') return draft.map(vertexFeat); // finalisé au clic, pas de brouillon persistant
+  if (tool === 'denivele') {
+    const pts = hover != null && draft.length < 2 ? [...draft, hover] : draft;
+    return deniveleLineFeatures(pts);
+  }
+  const pts = hover != null ? [...draft, hover] : draft;
+  if (tool === 'surface') return surfaceFeatures(pts, DRAFT_PRIORITY);
+  return polylineFeatures(pts, DRAFT_PRIORITY);
+}
+
+/** FeatureCollection complète : toutes les mesures figées + le brouillon en cours. */
+function buildMeasureFC(measurements: Measurement[], tool: MeasureTool | null, draft: LngLat[], hover: LngLat | null) {
+  const features: MeasureFeature[] = [];
+  for (const m of measurements) features.push(...measurementFeatures(m));
+  features.push(...draftFeatures(tool, draft, hover));
   return { type: 'FeatureCollection' as const, features };
 }
 
@@ -372,7 +463,7 @@ function installMeasureLayers(map: MaplibreMap): void {
       id: 'measure-points',
       type: 'circle',
       source: MEASURE_SOURCE,
-      filter: ['==', ['geometry-type'], 'Point'],
+      filter: ['==', ['get', 't'], 'vertex'],
       paint: {
         'circle-radius': 4.5,
         'circle-color': '#FFFFFF',
@@ -380,6 +471,46 @@ function installMeasureLayers(map: MaplibreMap): void {
         'circle-stroke-width': 2,
       },
     });
+  }
+  // Étiquettes de mesure SUR l'axe (v2). Police servie par les glyphs IGN sur les deux fonds (comme
+  // les libellés du cadastre) ; halo blanc pour rester lisible. Rendues au-dessus (symboles = dernier
+  // passage), donc visibles même sur le bâti 3D de l'analyse d'ensoleillement.
+  if (!map.getLayer('measure-labels')) {
+    map.addLayer({
+      id: 'measure-labels',
+      type: 'symbol',
+      source: MEASURE_SOURCE,
+      filter: ['==', ['get', 't'], 'label'],
+      layout: {
+        'text-field': ['get', 'label'],
+        'text-font': ['Source Sans Pro Regular'],
+        'text-size': 12,
+        'text-offset': [0, -0.7],
+        'text-allow-overlap': false,
+        // Priorité de placement : plus BAS = placé d'abord = gagne la collision. Le brouillon vivant
+        // (sort 0) prime donc sur les mesures figées (sort 1) quand deux étiquettes se chevauchent.
+        'symbol-sort-key': ['get', 'sort'],
+      },
+      paint: {
+        'text-color': '#0B4A57',
+        'text-halo-color': '#FFFFFF',
+        'text-halo-width': 1.6,
+      },
+    });
+  }
+}
+
+/** Remonte les calques de mesure au-dessus des autres (ex. après (ré)installation des calques soleil,
+ *  pour que le tracé et surtout les ÉTIQUETTES restent lisibles par-dessus le bâti 3D). Idempotent. */
+function raiseMeasureLayers(map: MaplibreMap): void {
+  for (const id of ['measure-fill', 'measure-line', 'measure-points', 'measure-labels']) {
+    if (map.getLayer(id)) {
+      try {
+        map.moveLayer(id);
+      } catch {
+        // calque transitoirement absent : sans effet.
+      }
+    }
   }
 }
 
@@ -540,18 +671,23 @@ export function SelectionMap({
   const [clickLoading, setClickLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Outils de mesure (US-1.5) : outil actif, sommets cliqués, finalisation (distance/surface),
-  // résultat dénivelé (asynchrone via RGE ALTI) et recul (calcul pur sur la sélection).
+  // Outils de mesure (US-1.5 + v2) : outil actif, brouillon en cours (sommets cliqués), mesures FIGÉES
+  // cumulées sur le plan, et état du dénivelé en cours (asynchrone via RGE ALTI).
   const [measureTool, setMeasureTool] = useState<MeasureTool | null>(null);
-  const [measurePoints, setMeasurePoints] = useState<LngLat[]>([]);
-  const [measureDone, setMeasureDone] = useState(false);
+  const [draftPoints, setDraftPoints] = useState<LngLat[]>([]);
+  const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [denivele, setDenivele] = useState<DeniveleState | null>(null);
-  const [reculResult, setReculResult] = useState<ReculResult | null>(null);
-  // Miroirs lus par les handlers de la carte (montés une seule fois, closures figées).
+  // Miroirs lus par les handlers de la carte (montés une seule fois, closures figées) et le rendu
+  // impératif du tracé (mousemove -> requestAnimationFrame, sans re-render React à chaque pixel).
   const measureToolRef = useRef(measureTool);
   measureToolRef.current = measureTool;
-  const measureDoneRef = useRef(measureDone);
-  measureDoneRef.current = measureDone;
+  const draftPointsRef = useRef(draftPoints);
+  draftPointsRef.current = draftPoints;
+  const measurementsRef = useRef(measurements);
+  measurementsRef.current = measurements;
+  const measureHoverRef = useRef<LngLat | null>(null);
+  const measureFrameRef = useRef<number | null>(null);
+  const measureIdRef = useRef(0);
 
   // Analyse d'ensoleillement EN PLACE : bascule 3D + relief natif + bâti/canopée extrudés + ombres Turf.
   const [sunActive, setSunActive] = useState(false);
@@ -635,6 +771,9 @@ export function SelectionMap({
     // Idempotent : rejoué aussi après une bascule de fond de carte (setStyle a remis le style à zéro,
     // cet effet re-tourne via `mapReady`).
     installSunLayers(map);
+    // Mesure et ensoleillement coexistent (retour porteur) : on remonte les calques de mesure AU-DESSUS
+    // des extrusions pour que le tracé et surtout les étiquettes restent lisibles sur le bâti 3D.
+    raiseMeasureLayers(map);
 
     // Rechargement de style à centroïde INCHANGÉ (bascule Plan/Satellite) : on repeuple depuis les
     // données déjà chargées, SANS re-fetch ni re-cadrage caméra (l'utilisateur garde sa vue 3D).
@@ -780,18 +919,40 @@ export function SelectionMap({
         return [...prev, parcelle];
       });
 
-    // Clic en mode mesure (US-1.5) : ajoute un sommet à la mesure au lieu de sélectionner une parcelle.
-    // Dénivelé = 2 points (un 3e recommence) ; recul = 1 point (remplacé) ; distance/surface = polyligne
-    // (un clic après finalisation recommence une nouvelle mesure).
+    // Rendu impératif du tracé de mesure (lit les refs) : appelé par l'effet d'état ET par le mousemove
+    // (via requestAnimationFrame) pour le ruban élastique, sans re-render React à chaque pixel.
+    const renderMeasureNow = () => {
+      (map.getSource(MEASURE_SOURCE) as GeoJSONSource | undefined)?.setData(
+        buildMeasureFC(measurementsRef.current, measureToolRef.current, draftPointsRef.current, measureHoverRef.current) as SetDataArg,
+      );
+    };
+
+    // Clic en mode mesure : distance/surface ajoutent un sommet au brouillon ; dénivelé accumule 2 points
+    // (un 3e recommence) ; recul FIGE immédiatement une mesure (distance point -> contour de la parcelle
+    // sélectionnée). Les mesures terminées se cumulent sur le plan (v2).
     const handleMeasureClick = (lngLat: LngLat) => {
       const tool = measureToolRef.current;
-      setMeasurePoints((prev) => {
-        if (tool === 'denivele') return prev.length >= 2 ? [lngLat] : [...prev, lngLat];
-        if (tool === 'recul') return [lngLat];
-        if (measureDoneRef.current) return [lngLat];
-        return [...prev, lngLat];
-      });
-      if (measureDoneRef.current) setMeasureDone(false);
+      if (!tool) return;
+      if (tool === 'recul') {
+        let best: ReculResult | null = null;
+        for (const p of selectionRef.current) {
+          const nb = nearestBoundaryDistance(lngLat, p.geojson);
+          if (nb && (best === null || nb.distanceM < best.distanceM)) {
+            best = { point: lngLat, nearestPoint: nb.nearestPoint, distanceM: nb.distanceM };
+          }
+        }
+        if (best) {
+          const rec = best;
+          const id = (measureIdRef.current += 1);
+          setMeasurements((prev) => [...prev, { id, tool: 'recul', points: [rec.point], recul: rec }]);
+        }
+        return;
+      }
+      if (tool === 'denivele') {
+        setDraftPoints((prev) => (prev.length >= 2 ? [lngLat] : [...prev, lngLat]));
+        return;
+      }
+      setDraftPoints((prev) => [...prev, lngLat]);
     };
 
     map.on('click', (e) => {
@@ -844,20 +1005,48 @@ export function SelectionMap({
         .finally(() => setClickLoading(false));
     });
 
-    // Double-clic : finalise une mesure de distance/surface (le zoom du double-clic est désactivé
-    // pendant la mesure par un effet dédié). Les DEUX clics du double-clic ont ajouté deux sommets
-    // quasi confondus : on retire TOUJOURS le dernier (le redondant), sans exiger une égalité stricte
-    // des coordonnées (la souris dérive de 1 à 3 px entre les deux clics, ce qui fausserait sinon la
-    // longueur/surface avec un segment parasite, règle 1).
+    // Ruban élastique : le curseur devient le dernier sommet PROVISOIRE du brouillon. On ne repeint que
+    // si un ruban est réellement possible (distance/surface/dénivelé AVEC au moins un sommet posé) :
+    // sinon (recul, ou aucun point cliqué) le survol ne change rien au rendu, inutile de reposer la
+    // source. Coalescé sur une frame (le mousemove émet en rafale ; un seul repeint par frame).
+    map.on('mousemove', (e) => {
+      const tool = measureToolRef.current;
+      if (!tool || tool === 'recul' || draftPointsRef.current.length === 0) return;
+      measureHoverRef.current = [e.lngLat.lng, e.lngLat.lat];
+      if (measureFrameRef.current != null) return;
+      measureFrameRef.current = requestAnimationFrame(() => {
+        measureFrameRef.current = null;
+        renderMeasureNow();
+      });
+    });
+    // Le curseur quitte la carte : plus de ruban élastique.
+    map.on('mouseout', () => {
+      if (measureHoverRef.current == null) return;
+      measureHoverRef.current = null;
+      renderMeasureNow();
+    });
+
+    // Double-clic : FIGE la mesure de distance/surface en cours (zoom du double-clic désactivé par un
+    // effet dédié). Retire TOUJOURS le sommet dupliqué des deux clics du double-clic (la souris dérive de
+    // 1 à 3 px, ce qui fausserait sinon la longueur/surface avec un segment parasite, règle 1).
     map.on('dblclick', (e) => {
       const tool = measureToolRef.current;
       if (tool !== 'distance' && tool !== 'surface') return;
       e.preventDefault();
-      setMeasureDone(true);
-      setMeasurePoints((prev) => (prev.length >= 2 ? prev.slice(0, -1) : prev));
+      const pts = draftPointsRef.current;
+      const deduped = pts.length >= 2 ? pts.slice(0, -1) : pts;
+      const min = tool === 'surface' ? 3 : 2;
+      if (deduped.length >= min) {
+        const id = (measureIdRef.current += 1);
+        setMeasurements((prev) => [...prev, { id, tool, points: deduped }]);
+        setDraftPoints([]);
+      } else {
+        setDraftPoints(deduped);
+      }
     });
 
     return () => {
+      if (measureFrameRef.current != null) cancelAnimationFrame(measureFrameRef.current);
       map.remove();
       mapRef.current = null;
       setMapReady(false);
@@ -899,35 +1088,45 @@ export function SelectionMap({
     }
   }, [matches, mapReady]);
 
-  // --- Outils de mesure (US-1.5) : effets de rendu et de calcul -----------------------------------
+  // --- Outils de mesure (US-1.5 + v2) : effets de rendu et de calcul ------------------------------
 
-  // Rendu du tracé de mesure : (re)pose la géométrie courante dans la source `measure`. `mapReady`
-  // dans les deps : réapplique après un rechargement de style (bascule de fond, qui remet la source).
+  // Rendu du tracé (mesures figées + brouillon) : (re)pose la FeatureCollection dans la source. Le
+  // ruban élastique (hover) est peint impérativement par le mousemove ; cet effet couvre les
+  // changements d'état (clic, finalisation) et le rechargement de style (`mapReady`, bascule de fond).
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     (map.getSource(MEASURE_SOURCE) as GeoJSONSource | undefined)?.setData(
-      buildMeasureFC(measureTool, measurePoints, reculResult) as SetDataArg,
+      buildMeasureFC(measurements, measureTool, draftPoints, measureHoverRef.current) as SetDataArg,
     );
-  }, [measureTool, measurePoints, measureDone, reculResult, mapReady]);
+  }, [measurements, draftPoints, measureTool, mapReady]);
 
-  // Dénivelé : altitudes des deux points via RGE ALTI (asynchrone). Hors couverture (null) => état
-  // "indisponible" (règle 3, jamais un 0) ; source injoignable => "erreur", distincte.
+  // Efface le curseur mémorisé quand le brouillon est vidé (finalisation / effacement) : un nouveau
+  // tracé ne doit pas partir d'un ruban élastique périmé (ancienne position du curseur) avant le
+  // premier mousemove.
+  useEffect(() => {
+    if (draftPoints.length === 0) measureHoverRef.current = null;
+  }, [draftPoints]);
+
+  // Dénivelé : altitudes des deux points via RGE ALTI (asynchrone). Au succès, la mesure est FIGÉE
+  // (poussée dans `measurements`, Δ affiché sur l'axe) et le brouillon vidé pour enchaîner. Hors
+  // couverture (null) => « indisponible » (règle 3, jamais un 0) ; source injoignable => « erreur »
+  // (le brouillon reste pour voir les 2 points et réessayer).
   useEffect(() => {
     if (measureTool !== 'denivele') {
       setDenivele(null);
       return;
     }
-    if (measurePoints.length === 0) {
+    if (draftPoints.length === 0) {
       setDenivele(null);
       return;
     }
-    if (measurePoints.length === 1) {
+    if (draftPoints.length === 1) {
       setDenivele({ state: 'partial' });
       return;
     }
-    const a = measurePoints[0]!;
-    const b = measurePoints[1]!;
+    const a = draftPoints[0]!;
+    const b = draftPoints[1]!;
     let cancelled = false;
     setDenivele({ state: 'loading' });
     void fetchElevations([a, b])
@@ -941,7 +1140,11 @@ export function SelectionMap({
         }
         const horizM = lineLengthMeters([a, b]);
         const { deltaZ, slopePct } = slopeBetween(zA, zB, horizM);
-        setDenivele({ state: 'ok', zA, zB, deltaZ, slopePct, horizM });
+        const result: DeniveleResult = { zA, zB, deltaZ, slopePct, horizM };
+        const id = (measureIdRef.current += 1);
+        setMeasurements((prev) => [...prev, { id, tool: 'denivele', points: [a, b], denivele: result }]);
+        setDenivele(null);
+        setDraftPoints([]);
       })
       .catch(() => {
         if (!cancelled) setDenivele({ state: 'error' });
@@ -949,29 +1152,7 @@ export function SelectionMap({
     return () => {
       cancelled = true;
     };
-  }, [measureTool, measurePoints]);
-
-  // Recul : distance la plus courte du point cliqué au contour de la/des parcelle(s) sélectionnée(s).
-  // Calcul PUR sur la géométrie déjà en state (aucun réseau). On garde le minimum sur la sélection.
-  useEffect(() => {
-    if (measureTool !== 'recul') {
-      setReculResult(null);
-      return;
-    }
-    const pt = measurePoints[0];
-    if (!pt) {
-      setReculResult(null);
-      return;
-    }
-    let best: ReculResult | null = null;
-    for (const p of selection) {
-      const nb = nearestBoundaryDistance(pt, p.geojson);
-      if (nb && (best === null || nb.distanceM < best.distanceM)) {
-        best = { point: pt, nearestPoint: nb.nearestPoint, distanceM: nb.distanceM };
-      }
-    }
-    setReculResult(best);
-  }, [measureTool, measurePoints, selection]);
+  }, [measureTool, draftPoints]);
 
   // Curseur croix pendant la mesure + désactivation du zoom au double-clic pour TOUT outil de mesure
   // (pas seulement distance/surface : un double-clic en dénivelé/recul zoomait la carte de façon
@@ -988,17 +1169,17 @@ export function SelectionMap({
     };
   }, [measureTool, mapReady]);
 
-  // Échap : efface la mesure courante (sommets + finalisation), sans quitter l'outil. On ignore
+  // Échap : efface le BROUILLON en cours (sans toucher aux mesures figées ni quitter l'outil). On ignore
   // Échap quand le focus est dans un champ de saisie (recherche d'adresse) : sinon vider sa recherche
-  // effacerait aussi la mesure en cours.
+  // effacerait aussi le brouillon en cours.
   useEffect(() => {
     if (!measureTool) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-      setMeasurePoints([]);
-      setMeasureDone(false);
+      setDraftPoints([]);
+      setDenivele(null);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -1137,39 +1318,51 @@ export function SelectionMap({
 
   const totalSurface = selection.reduce((acc, p) => acc + p.surfaceM2, 0);
 
-  // --- Outils de mesure (US-1.5) : métriques dérivées et actions ----------------------------------
-  const distanceMeters = useMemo(() => lineLengthMeters(measurePoints), [measurePoints]);
-  const areaMeters = useMemo(() => polygonAreaMeters(measurePoints), [measurePoints]);
-  const perimeterMeters = useMemo(() => polygonPerimeterMeters(measurePoints), [measurePoints]);
+  // --- Outils de mesure (US-1.5 + v2) : métriques du BROUILLON et actions -------------------------
+  const distanceMeters = useMemo(() => lineLengthMeters(draftPoints), [draftPoints]);
+  const areaMeters = useMemo(() => polygonAreaMeters(draftPoints), [draftPoints]);
+  const perimeterMeters = useMemo(() => polygonPerimeterMeters(draftPoints), [draftPoints]);
   // Anneau auto-intersectant : l'aire Turf devient algébrique (trompeuse). On la signale « invalide »
   // plutôt que d'afficher un chiffre faux (règles 1 et 3).
   const areaInvalid = useMemo(
-    () => measureTool === 'surface' && measurePoints.length >= 3 && isSelfIntersectingRing(measurePoints),
-    [measureTool, measurePoints],
+    () => measureTool === 'surface' && draftPoints.length >= 3 && isSelfIntersectingRing(draftPoints),
+    [measureTool, draftPoints],
   );
 
+  // Sélectionne un outil : démarre un nouveau brouillon, en GARDANT les mesures déjà posées (v2, cumul).
+  // Mesure et ensoleillement coexistent désormais (retour porteur) : on ne coupe plus le soleil.
   const selectMeasureTool = useCallback((t: MeasureTool) => {
-    // Mesure et analyse d'ensoleillement sont mutuellement exclusives : la vue 3D inclinée occulterait
-    // les tracés au sol, et deux grands panneaux empilés déborderaient sur petit écran.
-    setSunActive(false);
     setMeasureTool(t);
-    setMeasurePoints([]);
-    setMeasureDone(false);
+    setDraftPoints([]);
     setDenivele(null);
-    setReculResult(null);
   }, []);
-  const clearMeasure = useCallback(() => {
-    setMeasurePoints([]);
-    setMeasureDone(false);
+  // Finalise le brouillon distance/surface (bouton « Terminer »).
+  const finalizeDraft = useCallback(() => {
+    if (measureTool !== 'distance' && measureTool !== 'surface') return;
+    const min = measureTool === 'surface' ? 3 : 2;
+    if (draftPoints.length < min) return;
+    const id = (measureIdRef.current += 1);
+    const tool = measureTool;
+    setMeasurements((prev) => [...prev, { id, tool, points: draftPoints }]);
+    setDraftPoints([]);
+  }, [measureTool, draftPoints]);
+  // Efface le brouillon en cours (garde les mesures figées).
+  const clearDraft = useCallback(() => {
+    setDraftPoints([]);
     setDenivele(null);
-    setReculResult(null);
   }, []);
+  // Efface TOUTES les mesures (figées + brouillon).
+  const clearAllMeasures = useCallback(() => {
+    setMeasurements([]);
+    setDraftPoints([]);
+    setDenivele(null);
+  }, []);
+  // Quitte le mode mesure : retire l'outil et efface tout (le tracé disparaît du plan).
   const exitMeasure = useCallback(() => {
     setMeasureTool(null);
-    setMeasurePoints([]);
-    setMeasureDone(false);
+    setMeasurements([]);
+    setDraftPoints([]);
     setDenivele(null);
-    setReculResult(null);
   }, []);
 
   return (
@@ -1563,14 +1756,12 @@ export function SelectionMap({
           </span>
         )}
 
-        {/* Déclencheur de l'analyse d'ensoleillement (en place, quand une parcelle est sélectionnée) */}
-        {selection.length > 0 && !sunActive && !measureTool && (
+        {/* Déclencheur de l'analyse d'ensoleillement (en place, quand une parcelle est sélectionnée).
+            Coexiste avec la mesure (retour porteur) : on peut mesurer pendant l'analyse. */}
+        {selection.length > 0 && !sunActive && (
           <button
             type="button"
-            onClick={() => {
-              exitMeasure();
-              setSunActive(true);
-            }}
+            onClick={() => setSunActive(true)}
             style={{
               alignSelf: 'flex-start',
               display: 'inline-flex',
@@ -1722,9 +1913,9 @@ export function SelectionMap({
           </div>
         )}
 
-        {/* Outils de mesure (US-1.5) : déclencheur, puis panneau distance / surface / dénivelé / recul.
-            Masqué pendant l'analyse d'ensoleillement (les deux modes sont mutuellement exclusifs). */}
-        {!measureTool && !sunActive && (
+        {/* Outils de mesure (US-1.5 + v2) : déclencheur, puis panneau distance / surface / dénivelé /
+            recul. Disponible aussi pendant l'analyse d'ensoleillement (coexistence, retour porteur). */}
+        {!measureTool && (
           <button
             type="button"
             onClick={() => selectMeasureTool('distance')}
@@ -1806,34 +1997,35 @@ export function SelectionMap({
               })}
             </div>
 
-            {/* Lecture du résultat, selon l'outil actif (chiffres sourcés, indisponibilité explicite) */}
+            {/* Lecture du BROUILLON en cours (le total suit au clic ; le direct sur l'axe est porté par
+                les étiquettes carte). Chiffres sourcés, indisponibilité explicite. */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }} aria-live="polite">
               {measureTool === 'distance' && (
                 <>
                   <p style={measureReadoutMain}>
-                    {measurePoints.length < 2
-                      ? 'Cliquez au moins deux points sur la carte.'
+                    {draftPoints.length < 2
+                      ? 'Cliquez les points ; double-clic pour terminer.'
                       : `Distance : ${formatMeters(distanceMeters)}`}
                   </p>
-                  {measurePoints.length >= 2 && <p style={measureMethod}>Mesure géométrique (géodésique).</p>}
+                  {draftPoints.length >= 2 && <p style={measureMethod}>Mesure géométrique (géodésique).</p>}
                 </>
               )}
               {measureTool === 'surface' && (
                 <>
                   <p style={measureReadoutMain}>
-                    {measurePoints.length < 3
-                      ? 'Cliquez au moins trois points sur la carte.'
+                    {draftPoints.length < 3
+                      ? 'Cliquez au moins trois points ; double-clic pour fermer.'
                       : areaInvalid
                         ? 'Tracé invalide (arêtes croisées).'
                         : `Surface : ${formatSquareMeters(areaMeters)}`}
                   </p>
-                  {measurePoints.length >= 3 && areaInvalid && (
+                  {draftPoints.length >= 3 && areaInvalid && (
                     <p style={measureReadoutSub}>Reprenez le contour sans croiser les côtés.</p>
                   )}
-                  {measurePoints.length >= 3 && !areaInvalid && (
+                  {draftPoints.length >= 3 && !areaInvalid && (
                     <p style={measureReadoutSub}>{`Périmètre : ${formatMeters(perimeterMeters)}`}</p>
                   )}
-                  {measurePoints.length >= 3 && !areaInvalid && (
+                  {draftPoints.length >= 3 && !areaInvalid && (
                     <p style={measureMethod}>Mesure géométrique (géodésique).</p>
                   )}
                 </>
@@ -1849,19 +2041,9 @@ export function SelectionMap({
                           ? 'Altitudes en cours...'
                           : denivele.state === 'error'
                             ? 'Altitude indisponible (source injoignable).'
-                            : denivele.state === 'unavailable'
-                              ? 'Altitude indisponible sur cette zone.'
-                              : `Dénivelé : ${formatSignedMeters(denivele.deltaZ)}`}
+                            : 'Altitude indisponible sur cette zone.'}
                   </p>
-                  {denivele?.state === 'ok' && (
-                    <>
-                      <p style={measureReadoutSub}>
-                        {`Distance : ${formatMeters(denivele.horizM)}${denivele.slopePct != null ? ` · Pente : ${formatPercent(denivele.slopePct)}` : ''}`}
-                      </p>
-                      <p style={measureReadoutSub}>{`Alt. A : ${formatMeters(denivele.zA)} · Alt. B : ${formatMeters(denivele.zB)}`}</p>
-                      <p style={measureMethod}>Source : RGE ALTI (IGN).</p>
-                    </>
-                  )}
+                  <p style={measureMethod}>Source : RGE ALTI (IGN). Δ affiché sur l'axe.</p>
                 </>
               )}
               {measureTool === 'recul' && (
@@ -1869,37 +2051,34 @@ export function SelectionMap({
                   <p style={measureReadoutMain}>
                     {selection.length === 0
                       ? "Sélectionnez d'abord une parcelle."
-                      : reculResult
-                        ? `Recul : ${formatMeters(reculResult.distanceM)}`
-                        : measurePoints.length === 0
-                          ? 'Cliquez un point pour mesurer le recul.'
-                          : 'Recul indisponible (contour manquant).'}
+                      : 'Cliquez un point pour mesurer le recul.'}
                   </p>
-                  {reculResult && <p style={measureMethod}>Distance au contour cadastral (IGN).</p>}
+                  {selection.length > 0 && <p style={measureMethod}>Distance au contour cadastral (IGN).</p>}
                 </>
+              )}
+              {measurements.length > 0 && (
+                <p style={measureReadoutSub}>
+                  {measurements.length} mesure{measurements.length > 1 ? 's' : ''} sur le plan.
+                </p>
               )}
             </div>
 
-            {/* Actions : finaliser (distance/surface) et effacer la mesure */}
+            {/* Actions : finaliser (distance/surface), effacer le brouillon, tout effacer */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
               {(measureTool === 'distance' || measureTool === 'surface') &&
-                !measureDone &&
-                measurePoints.length >= (measureTool === 'surface' ? 3 : 2) && (
-                  <button
-                    type="button"
-                    onClick={() => setMeasureDone(true)}
-                    style={{ ...presetChip, background: INDIGO, color: '#FFFFFF' }}
-                  >
+                draftPoints.length >= (measureTool === 'surface' ? 3 : 2) && (
+                  <button type="button" onClick={finalizeDraft} style={{ ...presetChip, background: INDIGO, color: '#FFFFFF' }}>
                     Terminer
                   </button>
                 )}
-              {measurePoints.length > 0 && (
-                <button
-                  type="button"
-                  onClick={clearMeasure}
-                  style={{ ...presetChip, background: 'transparent', color: SUB }}
-                >
+              {draftPoints.length > 0 && (
+                <button type="button" onClick={clearDraft} style={{ ...presetChip, background: 'transparent', color: SUB }}>
                   Effacer
+                </button>
+              )}
+              {(measurements.length > 0 || draftPoints.length > 0) && (
+                <button type="button" onClick={clearAllMeasures} style={{ ...presetChip, background: 'transparent', color: AMBER }}>
+                  Tout effacer
                 </button>
               )}
             </div>

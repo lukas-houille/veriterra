@@ -47,6 +47,24 @@ export function polygonPerimeterMeters(ring: LngLat[]): number {
   return lineLengthMeters(closeRing(ring));
 }
 
+/** Milieu d'un segment (moyenne des extrémités). Suffisant pour POSER une étiquette de mesure sur
+ *  l'axe (courtes distances) : pas besoin d'un milieu géodésique. */
+export function segmentMidpoint(a: LngLat, b: LngLat): LngLat {
+  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+}
+
+/** Centroïde simple (moyenne des sommets) d'un anneau, pour poser l'étiquette d'aire au centre. */
+export function ringCentroid(ring: LngLat[]): LngLat | null {
+  if (ring.length === 0) return null;
+  let sx = 0;
+  let sy = 0;
+  for (const [x, y] of ring) {
+    sx += x;
+    sy += y;
+  }
+  return [sx / ring.length, sy / ring.length];
+}
+
 /**
  * Vrai si l'anneau se croise lui-même (nœud papillon). Turf `area` renvoie alors une aire ALGÉBRIQUE
  * (différence des lobes), trompeuse par rapport au tracé : on préfère la signaler « invalide » plutôt

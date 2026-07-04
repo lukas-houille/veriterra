@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { forOrg } from '@veriterra/db';
-import { deleteObject, maxUploadBytes, putObject } from '@/lib/storage/s3';
+import { deleteObject, maxUploadBytes, orgStorageQuotaBytes, putObject, wouldExceedOrgQuota } from '@/lib/storage/s3';
 import {
   buildStorageKey,
   HEAD_BYTES,
@@ -68,7 +68,7 @@ export interface UploadFile {
 
 export type CreateDocumentResult =
   | { ok: true; document: DocumentSummary }
-  | { ok: false; code: 'NOT_FOUND' | UploadRejectionCode; message: string };
+  | { ok: false; code: 'NOT_FOUND' | 'QUOTA' | UploadRejectionCode; message: string };
 
 /**
  * Dépose une pièce jointe : vérifie que le terrain est dans le tenant, valide le fichier
@@ -96,6 +96,22 @@ export async function createDocument(
     maxUploadBytes(),
   );
   if (!verdict.ok) return { ok: false, code: verdict.code, message: verdict.message };
+
+  // Quota de stockage agrégé par organisation (audit sécurité, finding LOW) : borne l'espace total
+  // du tenant pour éviter d'épuiser le stockage partagé. Le total courant est scopé RLS (forOrg).
+  const quotaBytes = orgStorageQuotaBytes();
+  if (quotaBytes > 0) {
+    const agg = (await db.terrainDocument.aggregate({ _sum: { sizeBytes: true } })) as {
+      _sum: { sizeBytes: number | null };
+    };
+    if (wouldExceedOrgQuota(agg._sum.sizeBytes ?? 0, file.bytes.length, quotaBytes)) {
+      return {
+        ok: false,
+        code: 'QUOTA',
+        message: "Quota de stockage de l'organisation atteint.",
+      };
+    }
+  }
 
   const documentId = randomUUID();
   const storageKey = buildStorageKey(orgId, terrainId, documentId);

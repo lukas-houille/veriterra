@@ -21,6 +21,7 @@ const CODE_STATUS: Record<string, number> = {
   TYPE: 415,
   SIZE: 413,
   CONTENT: 400,
+  QUOTA: 413, // quota de stockage de l'organisation atteint
 };
 
 // GET /api/terrains/[id]/documents : liste des pièces jointes via l'API. Complément : la fiche

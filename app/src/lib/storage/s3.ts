@@ -50,6 +50,21 @@ export function maxUploadBytes(): number {
   return getConfig().S3_MAX_UPLOAD_MB * 1024 * 1024;
 }
 
+/** Quota de stockage agrégé par organisation, en octets. 0 => illimité (quota désactivé). */
+export function orgStorageQuotaBytes(): number {
+  return getConfig().S3_ORG_QUOTA_MB * 1024 * 1024;
+}
+
+/**
+ * Vrai si ajouter `incomingBytes` ferait dépasser le quota de l'organisation. `quotaBytes <= 0`
+ * signifie illimité (jamais dépassé). Fonction pure et testable (le calcul du total courant et le
+ * garde vivent dans `createDocument`).
+ */
+export function wouldExceedOrgQuota(currentBytes: number, incomingBytes: number, quotaBytes: number): boolean {
+  if (quotaBytes <= 0) return false;
+  return currentBytes + incomingBytes > quotaBytes;
+}
+
 /**
  * Taille max en Mo pour l'affichage. Ne throw JAMAIS : repli à 25 si le stockage n'est pas
  * configuré OU s'il l'est partiellement (`loadStorageEnv` lève dans ce cas). La fiche terrain

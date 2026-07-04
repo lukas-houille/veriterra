@@ -51,6 +51,9 @@ const storageEnvSchema = z.object({
     .pipe(z.boolean()),
   // Taille maximale d'un fichier déposé (Mo). Bornée aussi côté route (défense en profondeur).
   S3_MAX_UPLOAD_MB: z.coerce.number().int().positive().default(25),
+  // Quota de stockage AGRÉGÉ par organisation (Mo) : borne l'espace total des pièces d'un tenant
+  // pour éviter l'épuisement du stockage partagé (audit sécurité, finding LOW). 0 = illimité.
+  S3_ORG_QUOTA_MB: z.coerce.number().int().nonnegative().default(5120),
 });
 
 export type StorageEnv = z.infer<typeof storageEnvSchema>;

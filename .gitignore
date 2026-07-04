@@ -40,3 +40,6 @@ pnpm-debug.log*
 
 # design handoff zips (extraits sous docs/design/handoff)
 *.zip
+
+# captures d'écran de test (locales, jamais versionnées)
+Screenshot*.png

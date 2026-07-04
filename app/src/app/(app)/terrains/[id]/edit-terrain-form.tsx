@@ -11,22 +11,12 @@ import { Button, Input } from '@veriterra/ui';
 interface EditTerrainInitial {
   label: string;
   address: string;
-  status: string;
   prixDemande: number | null;
   lienAnnonce: string | null;
   notes: string | null;
 }
 
-const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'A_ETUDIER', label: 'À étudier' },
-  { value: 'PROMETTEUR', label: 'Prometteur' },
-  { value: 'RESERVE', label: 'Réservé' },
-  { value: 'ECARTE', label: 'Écarté' },
-];
-
 const fieldLabel = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-500';
-const selectClass =
-  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 export function EditTerrainForm({
   terrainId,
@@ -39,7 +29,6 @@ export function EditTerrainForm({
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState(initial.label);
   const [address, setAddress] = useState(initial.address);
-  const [status, setStatus] = useState(initial.status);
   const [prix, setPrix] = useState(initial.prixDemande != null ? String(initial.prixDemande) : '');
   const [lien, setLien] = useState(initial.lienAnnonce ?? '');
   const [notes, setNotes] = useState(initial.notes ?? '');
@@ -50,7 +39,6 @@ export function EditTerrainForm({
   function reset() {
     setLabel(initial.label);
     setAddress(initial.address);
-    setStatus(initial.status);
     setPrix(initial.prixDemande != null ? String(initial.prixDemande) : '');
     setLien(initial.lienAnnonce ?? '');
     setNotes(initial.notes ?? '');
@@ -87,7 +75,6 @@ export function EditTerrainForm({
     const payload: Record<string, unknown> = {};
     if (trimmedLabel !== initial.label) payload.label = trimmedLabel;
     if (trimmedAddress !== initial.address) payload.address = trimmedAddress;
-    if (status !== initial.status) payload.status = status;
     if (parsedPrix !== initial.prixDemande) payload.prixDemande = parsedPrix;
     if (nextLien !== (initial.lienAnnonce ?? null)) payload.lienAnnonce = nextLien;
     if (nextNotes !== (initial.notes ?? null)) payload.notes = nextNotes;
@@ -124,7 +111,6 @@ export function EditTerrainForm({
         if (t) {
           setLabel(t.label);
           setAddress(t.address);
-          setStatus(t.status);
           setPrix(t.prixDemande != null ? String(t.prixDemande) : '');
           setLien(t.lienAnnonce ?? '');
           setNotes(t.notes ?? '');
@@ -185,23 +171,6 @@ export function EditTerrainForm({
             Libellé
           </label>
           <Input id="edit-label" value={label} onChange={(e) => setLabel(e.target.value)} />
-        </div>
-        <div>
-          <label htmlFor="edit-status" className={fieldLabel}>
-            Statut
-          </label>
-          <select
-            id="edit-status"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className={selectClass}
-          >
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
         </div>
         <div className="sm:col-span-2">
           <label htmlFor="edit-address" className={fieldLabel}>

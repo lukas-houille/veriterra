@@ -13,9 +13,9 @@ import {
   ensureCadastreOverlay,
   FRANCE_CENTER,
   FRANCE_ZOOM,
-  STATUS_COLORS,
   type BasemapId,
 } from './map-style';
+import { statusMeta } from '@/modules/terrains/status';
 
 /** Terrain minimal nécessaire à l'affichage cartographique (contours + statut + infos survol). */
 export interface DashboardMapTerrain {
@@ -43,9 +43,6 @@ const PANEL = '#FFFFFF';
 const BORDER = '#DADEE8';
 const SUB = '#6C7488';
 const SANS = "'Archivo', system-ui, sans-serif";
-
-/** Couleur de repli pour un statut inconnu (neutre « à étudier »). */
-const FALLBACK_COLOR = STATUS_COLORS.A_ETUDIER ?? '#98a0b0';
 
 const nfSurface = new Intl.NumberFormat('fr-FR');
 
@@ -91,7 +88,7 @@ function buildFeatureCollection(
 ): FeatureCollection {
   const features: Feature[] = [];
   for (const terrain of terrains) {
-    const color = STATUS_COLORS[terrain.status] ?? FALLBACK_COLOR;
+    const color = statusMeta(terrain.status).color;
     for (const parcelle of terrain.parcelles) {
       features.push({
         type: 'Feature',
@@ -141,7 +138,7 @@ function buildPointCollection(terrains: DashboardMapTerrain[]): FeatureCollectio
       properties: {
         terrainId: terrain.id,
         label: terrain.label,
-        color: STATUS_COLORS[terrain.status] ?? FALLBACK_COLOR,
+        color: statusMeta(terrain.status).color,
         surfaceM2: terrain.surfaceTotaleM2,
         prixM2,
       },
@@ -308,7 +305,18 @@ export function DashboardMap({ terrains, className }: DashboardMapProps) {
       map.remove();
       mapRef.current = null;
     };
-  }, [featureCollection, router]);
+    // Créée UNE SEULE FOIS (router est stable). Les données sont mises à jour par l'effet ci-dessous
+    // via setData, PAS en recréant la carte : sinon un `router.refresh()` (ex. changement de statut
+    // depuis une ligne du tableau) remonterait la carte et recadrerait, perdant le pan/zoom.
+  }, [router]);
+
+  // Mise à jour des sources sans remonter la carte ni recadrer (préserve la vue de l'utilisateur).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    (map.getSource(SOURCE_ID) as maplibre.GeoJSONSource | undefined)?.setData(featureCollection);
+    (map.getSource(POINTS_SOURCE_ID) as maplibre.GeoJSONSource | undefined)?.setData(pointCollection);
+  }, [featureCollection, pointCollection]);
 
   function switchBasemap(next: BasemapId): void {
     const map = mapRef.current;

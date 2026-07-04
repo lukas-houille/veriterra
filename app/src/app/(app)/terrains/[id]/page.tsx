@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
   AlertChip,
-  Badge,
   Card,
   CardContent,
   CardHeader,
@@ -25,6 +24,7 @@ import { statusMeta } from '@/modules/terrains/status';
 import { listDocuments } from '@/modules/terrains/documents';
 import { maxUploadMbForDisplay } from '@/lib/storage/s3';
 import type { EnrichmentBlockView } from '@/modules/terrains/types';
+import { StatusChanger } from '@/components/terrains/status-changer';
 import { EditTerrainForm } from './edit-terrain-form';
 import { EnrichmentActions } from './enrichment-actions';
 import { DocumentsPanel } from './documents-panel';
@@ -700,7 +700,7 @@ export default async function TerrainPage({
                   <p className="mt-1 text-sm text-muted-foreground">{terrain.address}</p>
                 </div>
               </div>
-              <Badge variant={status.badge}>{status.label}</Badge>
+              <StatusChanger terrainId={terrain.id} status={terrain.status} />
             </div>
 
             <div className="mt-6 flex flex-col gap-6 sm:flex-row sm:items-center">
@@ -754,7 +754,7 @@ export default async function TerrainPage({
           </div>
         </div>
 
-        {/* Édition des champs manuels et du statut (US-1.9). */}
+        {/* Édition des champs manuels (US-1.9). Le statut se change via l'en-tête (StatusChanger). */}
         <div className="mb-6">
           <EditTerrainForm
             key={terrain.id}
@@ -762,7 +762,6 @@ export default async function TerrainPage({
             initial={{
               label: terrain.label,
               address: terrain.address,
-              status: terrain.status,
               prixDemande: terrain.prixDemande,
               lienAnnonce: terrain.lienAnnonce,
               notes: terrain.notes,

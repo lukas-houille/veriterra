@@ -3,17 +3,20 @@ import { StatusPin, type PortfolioStatus } from '../src/signature/status-pin.js'
 
 describe('StatusPin', () => {
   it('se rend sans crash et expose un libellé accessible', () => {
-    render(<StatusPin status="prometteur" />);
+    render(<StatusPin status="à visiter" />);
     expect(
-      screen.getByRole('img', { name: 'Statut : prometteur' }),
+      screen.getByRole('img', { name: 'Statut : à visiter' }),
     ).toBeInTheDocument();
   });
 
-  it('applique la couleur et le halo propres à chaque statut', () => {
+  it('applique la couleur et le halo propres à chaque statut (pipeline à 7 états)', () => {
     const cases: Array<{ status: PortfolioStatus; hex: string; halo: string }> = [
-      { status: 'à étudier', hex: 'rgb(152, 160, 176)', halo: 'rgba(152, 160, 176, 0.18)' },
-      { status: 'prometteur', hex: 'rgb(46, 125, 91)', halo: 'rgba(46, 125, 91, 0.18)' },
-      { status: 'réservé', hex: 'rgb(219, 155, 44)', halo: 'rgba(219, 155, 44, 0.18)' },
+      { status: 'à contacter', hex: 'rgb(152, 160, 176)', halo: 'rgba(152, 160, 176, 0.18)' },
+      { status: 'à visiter', hex: 'rgb(99, 102, 241)', halo: 'rgba(99, 102, 241, 0.18)' },
+      { status: 'visité', hex: 'rgb(8, 145, 178)', halo: 'rgba(8, 145, 178, 0.18)' },
+      { status: 'démarches en cours', hex: 'rgb(219, 155, 44)', halo: 'rgba(219, 155, 44, 0.18)' },
+      { status: 'sous compromis', hex: 'rgb(46, 125, 91)', halo: 'rgba(46, 125, 91, 0.18)' },
+      { status: 'vendu', hex: 'rgb(120, 113, 108)', halo: 'rgba(120, 113, 108, 0.18)' },
       { status: 'écarté', hex: 'rgb(192, 67, 46)', halo: 'rgba(192, 67, 46, 0.18)' },
     ];
 
@@ -24,6 +27,13 @@ describe('StatusPin', () => {
       expect(pin.style.boxShadow).toBe(`0 0 0 3px ${halo}`);
       unmount();
     }
+  });
+
+  it('repli neutre pour un statut inconnu (ne plante pas, règle 3)', () => {
+    // Statut hors union (ex. valeur d'enum non encore stylée) : rendu avec la couleur de repli.
+    render(<StatusPin status={'inconnu' as PortfolioStatus} />);
+    const pin = screen.getByRole('img', { name: 'Statut : inconnu' });
+    expect(pin).toHaveStyle({ backgroundColor: 'rgb(152, 160, 176)' });
   });
 
   it('rend un cercle de 13px et fusionne className/style fournis', () => {

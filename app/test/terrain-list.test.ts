@@ -10,7 +10,7 @@ function item(over: Partial<TerrainListItem> & { id: string }): TerrainListItem 
   return {
     label: over.label ?? over.id,
     address: over.address ?? 'Lyon',
-    status: over.status ?? 'A_ETUDIER',
+    status: over.status ?? 'A_CONTACTER',
     prixDemande: over.prixDemande ?? null,
     surfaceTotaleM2: over.surfaceTotaleM2 ?? 500,
     createdAt: over.createdAt ?? '2026-01-01T00:00:00.000Z',

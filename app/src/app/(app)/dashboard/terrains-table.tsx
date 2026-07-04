@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { Badge, Input, StatusPin, cn } from '@veriterra/ui';
+import { Input, cn } from '@veriterra/ui';
 import {
   filterTerrains,
   prixM2 as prixM2Of,
@@ -11,7 +11,7 @@ import {
   type TerrainListItem,
   type TerrainSortKey,
 } from '@/modules/terrains/terrain-list';
-import { statusMeta } from '@/modules/terrains/status';
+import { StatusChanger } from '@/components/terrains/status-changer';
 
 // Îlot client : recherche et tri de la liste des terrains (US-5.9). Tri déclenché en cliquant
 // l'en-tête de colonne (plus de select box) : reclic sur la même colonne bascule le sens
@@ -184,7 +184,7 @@ export function TerrainsTable({ terrains }: { terrains: TerrainListItem[] }) {
           <div className="flex w-[150px] justify-end">
             <SortHeader label="Prix" sortAs="prixTotal" align="right" {...headerProps} />
           </div>
-          <div className="w-[118px] text-[11px] font-semibold uppercase tracking-[0.06em] text-neutral-500">Statut</div>
+          <div className="w-[184px] text-[11px] font-semibold uppercase tracking-[0.06em] text-neutral-500">Statut</div>
         </div>
 
         {rows.length === 0 ? (
@@ -195,13 +195,19 @@ export function TerrainsTable({ terrains }: { terrains: TerrainListItem[] }) {
           rows.map((terrain) => {
             const ratio = prixM2Of(terrain);
             const pm2 = ratio != null ? Math.round(ratio) : null;
-            const meta = statusMeta(terrain.status);
             return (
-              <Link
+              <div
                 key={terrain.id}
-                href={`/terrains/${terrain.id}`}
-                className="flex flex-col gap-2 border-b border-neutral-100 px-4 py-3 text-foreground transition-colors last:border-b-0 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:flex-row sm:items-center sm:gap-3"
+                className="relative flex flex-col gap-2 border-b border-neutral-100 px-4 py-3 text-foreground transition-colors last:border-b-0 hover:bg-neutral-50 sm:flex-row sm:items-center sm:gap-3"
               >
+                {/* Lien « étiré » : couvre toute la ligne pour ouvrir la fiche. Le changeur de statut,
+                    placé au-dessus (z-[2]), reste interactif SANS déclencher la navigation (motif clic
+                    imbriqué invalide évité : le changeur est un frère du lien, pas un enfant). */}
+                <Link
+                  href={`/terrains/${terrain.id}`}
+                  aria-label={`Ouvrir la fiche de ${terrain.label}`}
+                  className="absolute inset-0 z-[1] rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                />
                 <div className="min-w-0 sm:min-w-[170px] sm:flex-1">
                   <div className="text-sm font-semibold leading-tight text-foreground">{terrain.label}</div>
                   <div className="text-xs text-neutral-500">{terrain.address}</div>
@@ -229,12 +235,9 @@ export function TerrainsTable({ terrains }: { terrains: TerrainListItem[] }) {
                       <div className="text-xs italic text-neutral-400">Indisponible</div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 sm:w-[118px]">
-                    <StatusPin status={meta.pin} />
-                    <Badge variant={meta.badge}>{meta.label}</Badge>
-                  </div>
+                  <StatusChanger terrainId={terrain.id} status={terrain.status} className="relative z-[2] sm:w-[184px]" />
                 </div>
-              </Link>
+              </div>
             );
           })
         )}

@@ -7,6 +7,7 @@ import { ensureProjet, getActiveProjet } from '@/modules/projet/service';
 import type { ProjetSummary } from '@/modules/projet/types';
 import { scoreTerrain, type ScoreResult, type ScoringInput } from './scoring';
 import { EXPECTED_ENRICHMENT_TYPES, buildEnrichmentView } from './enrichment-view';
+import { TERRAIN_STATUSES, type TerrainStatusValue } from './status';
 import type {
   CreateTerrainInput,
   EnrichmentBlockView,
@@ -21,9 +22,9 @@ const PARCELLE_SOURCE = 'IGN API Carto Cadastre';
 const ENQUEUE_TIMEOUT_MS = 4000;
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Statuts de terrain admissibles (aligné sur l'enum Prisma `TerrainStatus`). */
-export const TERRAIN_STATUSES = ['A_ETUDIER', 'PROMETTEUR', 'RESERVE', 'ECARTE'] as const;
-export type TerrainStatusValue = (typeof TERRAIN_STATUSES)[number];
+// Statuts de terrain admissibles : source unique dans `status.ts` (alignée sur l'enum Prisma
+// `TerrainStatus`). Ré-exportés ici pour les consommateurs serveur (route PATCH) sans changer leurs imports.
+export { TERRAIN_STATUSES, type TerrainStatusValue };
 
 /** Valide qu'une valeur est bien une géométrie GeoJSON Polygon/MultiPolygon exploitable. */
 function isValidGeometry(g: unknown): g is GeoJsonGeometry {

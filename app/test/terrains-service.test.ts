@@ -69,7 +69,7 @@ describe('createTerrain', () => {
     expect(summary.parcelles).toHaveLength(2);
     expect(summary.surfaceTotaleM2).toBe(800);
     expect(summary.prixDemande).toBe(250000);
-    expect(summary.status).toBe('A_ETUDIER');
+    expect(summary.status).toBe('A_CONTACTER');
 
     // La colonne géométrie est bien peuplée en MultiPolygon (pipeline ST_GeomFromGeoJSON).
     const geoms = await admin.$queryRaw<Array<{ g: string | null }>>`
@@ -121,12 +121,12 @@ describe('updateTerrain', () => {
   it('met à jour les champs manuels et le statut, parcelles intactes', async () => {
     const t = await newTerrain('69382000AB0070');
     const updated = await updateTerrain(ORG_ID, t.id, {
-      status: 'PROMETTEUR',
+      status: 'A_VISITER',
       prixDemande: 199000,
       notes: 'à revoir',
       label: 'Terrain Nord',
     });
-    expect(updated?.status).toBe('PROMETTEUR');
+    expect(updated?.status).toBe('A_VISITER');
     expect(updated?.prixDemande).toBe(199000);
     expect(updated?.notes).toBe('à revoir');
     expect(updated?.label).toBe('Terrain Nord');
@@ -155,6 +155,6 @@ describe('updateTerrain', () => {
     const res = await updateTerrain(OTHER_ORG_ID, t.id, { status: 'ECARTE' });
     expect(res).toBeNull();
     const still = await getTerrain(ORG_ID, t.id);
-    expect(still?.status).toBe('A_ETUDIER');
+    expect(still?.status).toBe('A_CONTACTER');
   });
 });

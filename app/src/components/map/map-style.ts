@@ -335,10 +335,6 @@ export function applyVeriterraPlanTint(map: MaplibreMap): void {
 export const FRANCE_CENTER: [number, number] = [2.4, 46.6];
 export const FRANCE_ZOOM = 5;
 
-/** Couleurs de statut (alignées sur `StatusPin` de @veriterra/ui) pour les pins du dashboard. */
-export const STATUS_COLORS: Record<string, string> = {
-  A_ETUDIER: '#98a0b0',
-  PROMETTEUR: '#2e7d5b',
-  RESERVE: '#db9b2c',
-  ECARTE: '#c0432e',
-};
+/** Couleurs de statut pour les pins du dashboard : source unique dans `status.ts` (ré-exportée ici,
+ *  les consommateurs (dashboard-map) l'importent depuis map-style sans changer leur import). */
+export { STATUS_COLORS } from '@/modules/terrains/status';

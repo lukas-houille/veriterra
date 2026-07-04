@@ -694,6 +694,20 @@ export function SelectionMap({
 
   // Analyse d'ensoleillement EN PLACE : bascule 3D + relief natif + bâti/canopée extrudés + ombres Turf.
   const [sunActive, setSunActive] = useState(false);
+  // Petit écran : sans adaptation, la recherche (haut-gauche) et les sliders d'ensoleillement (bas-gauche)
+  // couvrent quasi tout le téléphone et rendent l'analyse inutilisable (retour porteur). On masque la
+  // recherche pendant l'analyse et on rend le panneau d'ensoleillement repliable.
+  const [isNarrow, setIsNarrow] = useState(false);
+  // Sur petit écran, le panneau d'ensoleillement est REPLIÉ par défaut (heure seule) pour laisser voir
+  // la carte ; l'utilisateur déplie pour la saison et les détails. Sans effet sur grand écran.
+  const [sunPanelCollapsed, setSunPanelCollapsed] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const update = () => setIsNarrow(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
   const [sunMinutes, setSunMinutes] = useState(14 * 60);
   const [sunDate, setSunDate] = useState<string>(todayStr);
   const [sunLoading, setSunLoading] = useState(false);
@@ -707,6 +721,13 @@ export function SelectionMap({
   // fond, même centroïde => on repeuple sans re-fetch ni re-cadrage) d'un changement de sélection
   // (nouveau centroïde => on recharge et on recadre).
   const sunFetchedKeyRef = useRef<string>('');
+  // Clé du centroïde déjà CADRÉ (caméra positionnée pour l'analyse) : évite de re-cadrer (easeTo) sur un
+  // simple rechargement de style survenu PENDANT le chargement initial (le fetch en vol est annulé, donc
+  // `sunDataRef` reste null et sans ce garde on retomberait dans la branche d'entrée, écrasant la caméra).
+  const sunFramedKeyRef = useRef<string>('');
+  // Vrai tant qu'on est EN analyse : sert à ne remettre la carte à plat qu'en SORTIE d'analyse, pas
+  // sur un rechargement de style (bascule de fond), qui écraserait sinon l'angle 3D de l'utilisateur.
+  const wasSunActiveRef = useRef(false);
   // Miroirs de l'instant courant : la mise à jour d'après-chargement applique l'heure/saison
   // RÉELLES même si l'utilisateur a bougé un curseur pendant le fetch initial (closures fraîches).
   const sunDateRef = useRef(sunDate);
@@ -758,17 +779,25 @@ export function SelectionMap({
       removeSunLayers(map);
       sunDataRef.current = null;
       sunFetchedKeyRef.current = '';
-      // Le relief reste en place (permanent) : on repasse seulement à plat et on réinitialise le ciel.
+      sunFramedKeyRef.current = '';
+      // Le relief reste en place (permanent) : on réinitialise le ciel.
       try {
         map.setSky({}); // réinitialise le ciel (retour en 2D).
       } catch {
         // pas de ciel : rien à faire.
       }
-      map.easeTo({ pitch: 0, bearing: 0 });
+      // On remet À PLAT seulement en SORTIE d'analyse (transition analyse -> plus d'analyse), PAS sur un
+      // simple rechargement de style (bascule de fond : cet effet re-tourne via `mapReady` alors qu'on
+      // n'était déjà plus en analyse). Sinon la bascule Plan/Satellite écraserait l'angle 3D de l'utilisateur.
+      if (wasSunActiveRef.current) {
+        map.easeTo({ pitch: 0, bearing: 0 });
+      }
+      wasSunActiveRef.current = false;
       // La sélection a été vidée pendant l'analyse : on referme le panneau (pas de demi-état).
       if (sunActive && !sunCentroid) setSunActive(false);
       return;
     }
+    wasSunActiveRef.current = true;
 
     // Le relief est déjà chargé (permanent) ; on (ré)ajoute les calques bâti/canopée/ombres/hillshade.
     // Idempotent : rejoué aussi après une bascule de fond de carte (setStyle a remis le style à zéro,
@@ -786,13 +815,18 @@ export function SelectionMap({
       return;
     }
 
-    // Entrée dans l'analyse (ou changement de sélection) : on cadre la vue 3D et on charge les volumes.
-    map.easeTo({
-      center: [sunCentroid.lon, sunCentroid.lat],
-      zoom: Math.max(map.getZoom(), 16.5),
-      pitch: 55,
-      bearing: -20,
-    });
+    // Entrée dans l'analyse (ou changement de sélection) : on cadre la vue 3D. On NE re-cadre PAS si ce
+    // centroïde a déjà été cadré (cas d'un rechargement de style pendant le chargement initial : le
+    // `jumpTo` de switchBasemap a déjà restauré la caméra de l'utilisateur, ne pas l'écraser).
+    if (sunFramedKeyRef.current !== centroidKey) {
+      map.easeTo({
+        center: [sunCentroid.lon, sunCentroid.lat],
+        zoom: Math.max(map.getZoom(), 16.5),
+        pitch: 55,
+        bearing: -20,
+      });
+      sunFramedKeyRef.current = centroidKey;
+    }
 
     let cancelled = false;
     setSunLoading(true);
@@ -1233,6 +1267,15 @@ export function SelectionMap({
       basemapRef.current = next;
       setBasemap(next);
       setMapReady(false);
+      // Capture la caméra AVANT setStyle : un `setStyle(..., diff:false)` (rebuild complet) applique le
+      // center/zoom par défaut du nouveau style (le plan IGN chargé par URL en porte un), ce qui
+      // réinitialiserait la vue de l'utilisateur. On la restaure à l'identique après chargement (retour porteur).
+      const camera = {
+        center: map.getCenter(),
+        zoom: map.getZoom(),
+        pitch: map.getPitch(),
+        bearing: map.getBearing(),
+      };
       // diff:false force un nouveau Style (loaded()===false) : un fond « plan » est chargé
       // par URL de façon asynchrone, et setStyle avec diff laisserait isStyleLoaded() vrai sur
       // l'ancien style, si bien que reinstall poserait les calques sur le style sortant (effacés
@@ -1244,6 +1287,7 @@ export function SelectionMap({
       // chargées, signalé par 'idle'/'sourcedata') : le once('styledata') gardé ratait souvent
       // l'instant et les parcelles ne revenaient jamais au retour en vue plan.
       map.once('styledata', () => {
+        map.jumpTo(camera); // restaure zoom/centre/pitch/bearing avant que l'effet soleil ne re-tourne
         installOverlays(map, next, selectionRef.current, matchesRef.current);
         setMapReady(true);
       });
@@ -1435,8 +1479,9 @@ export function SelectionMap({
           width: '340px',
           maxWidth: 'calc(100% - 32px)',
           zIndex: 12,
-          // Masqué en mode focalisé (fiche) : pas de recherche d'adresse/surface, la sélection est fixe.
-          display: readOnly ? 'none' : 'flex',
+          // Masqué en mode focalisé (fiche : sélection fixe) et, sur petit écran, PENDANT l'analyse
+          // d'ensoleillement (la recherche n'y sert pas et libère l'écran, retour porteur).
+          display: readOnly || (isNarrow && sunActive) ? 'none' : 'flex',
           flexDirection: 'column',
           gap: '8px',
         }}
@@ -1805,8 +1850,29 @@ export function SelectionMap({
               gap: '9px',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
               <span style={microLabel}>Ensoleillement (3D)</span>
+              {/* Repli/dépli (petit écran seulement) : garde la carte visible sur téléphone. */}
+              {isNarrow && (
+                <button
+                  type="button"
+                  onClick={() => setSunPanelCollapsed((c) => !c)}
+                  aria-expanded={!sunPanelCollapsed}
+                  style={{
+                    border: `1px solid ${BORDER}`,
+                    background: PANEL,
+                    color: SUB,
+                    fontFamily: SANS,
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    padding: '5px 10px',
+                    borderRadius: '8px',
+                  }}
+                >
+                  {sunPanelCollapsed ? 'Plus d’options' : 'Moins'}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setSunActive(false)}
@@ -1850,50 +1916,55 @@ export function SelectionMap({
               />
             </label>
 
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-              <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: SUB }}>
-                <span>Saison</span>
-                <span style={{ color: TEXT }}>
-                  {seasonLabel(sunDate)} · {sunDate}
-                </span>
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={364}
-                step={1}
-                value={dayOfYear(sunDate)}
-                onChange={(e) => setSunDate(dateForDayOfYear(Number(sunDate.slice(0, 4)), Number(e.target.value)))}
-                aria-label="Période de l'année"
-                style={{ width: '100%' }}
-              />
-            </label>
+            {/* Saison + repères : masqués quand le panneau est replié sur petit écran (heure seule). */}
+            {!(isNarrow && sunPanelCollapsed) && (
+              <>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: SUB }}>
+                    <span>Saison</span>
+                    <span style={{ color: TEXT }}>
+                      {seasonLabel(sunDate)} · {sunDate}
+                    </span>
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={364}
+                    step={1}
+                    value={dayOfYear(sunDate)}
+                    onChange={(e) => setSunDate(dateForDayOfYear(Number(sunDate.slice(0, 4)), Number(e.target.value)))}
+                    aria-label="Période de l'année"
+                    style={{ width: '100%' }}
+                  />
+                </label>
 
-            {/* Repères d'extrêmes (solstices/équinoxes) + remise à l'instant courant */}
-            <div role="group" aria-label="Repères de saison" style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-              {sunPresets.map((p) => {
-                const active = sunDate === p.date;
-                return (
+                {/* Repères d'extrêmes (solstices/équinoxes) + remise à l'instant courant */}
+                <div role="group" aria-label="Repères de saison" style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                  {sunPresets.map((p) => {
+                    const active = sunDate === p.date;
+                    return (
+                      <button
+                        key={p.label}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => setSunDate(p.date)}
+                        style={{ ...presetChip, background: active ? INDIGO : '#EEF0F5', color: active ? '#FFFFFF' : TEXT }}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
                   <button
-                    key={p.label}
                     type="button"
-                    aria-pressed={active}
-                    onClick={() => setSunDate(p.date)}
-                    style={{ ...presetChip, background: active ? INDIGO : '#EEF0F5', color: active ? '#FFFFFF' : TEXT }}
+                    onClick={resetSun}
+                    title="Revenir à aujourd'hui, 14:00"
+                    style={{ ...presetChip, marginLeft: 'auto', background: 'transparent', color: SUB }}
                   >
-                    {p.label}
+                    Aujourd&apos;hui
                   </button>
-                );
-              })}
-              <button
-                type="button"
-                onClick={resetSun}
-                title="Revenir à aujourd'hui, 14:00"
-                style={{ ...presetChip, marginLeft: 'auto', background: 'transparent', color: SUB }}
-              >
-                Aujourd&apos;hui
-              </button>
-            </div>
+                </div>
+              </>
+            )}
 
             <p style={{ margin: 0, fontSize: '12px', color: TEXT }}>
               {sunPos == null
@@ -1902,17 +1973,22 @@ export function SelectionMap({
                   ? `Soleil à ${Math.round(sunPos.altitudeDeg)}° de hauteur.`
                   : "Soleil sous l'horizon (nuit)."}
             </p>
-            <p
-              role={sunError ? 'alert' : 'status'}
-              aria-live="polite"
-              style={{ margin: 0, fontSize: '11px', color: SUB }}
-            >
-              {sunLoading
-                ? 'Chargement des volumes 3D...'
-                : sunError
-                  ? sunError
-                  : `${sunUnavail.b ? 'Bâtiments indisponibles' : `${sunCounts.b} bâtiment${sunCounts.b > 1 ? 's' : ''}`}${sunSansHauteur > 0 ? ` (dont ${sunSansHauteur} sans hauteur connue, non ombré${sunSansHauteur > 1 ? 's' : ''})` : ''}, ${sunUnavail.v ? 'végétation indisponible' : `${sunCounts.v} zone${sunCounts.v > 1 ? 's' : ''} boisée${sunCounts.v > 1 ? 's' : ''}`}. Ombres du bâti et de la végétation projetées au sol (méthode simplifiée), sur le relief ombré selon le soleil (MNT, exagéré 1,2x). Canopée approximée.`}
-            </p>
+            {/* Détails (comptes, méthode) : masqués quand replié sur petit écran, SAUF chargement, erreur
+                et toute INDISPONIBILITÉ de source (bâti/végétation/sans hauteur), qui doit rester visible
+                même repliée (règle 3, jamais taire une donnée manquante). */}
+            {(sunLoading || sunError || sunUnavail.b || sunUnavail.v || sunSansHauteur > 0 || !(isNarrow && sunPanelCollapsed)) && (
+              <p
+                role={sunError ? 'alert' : 'status'}
+                aria-live="polite"
+                style={{ margin: 0, fontSize: '11px', color: SUB }}
+              >
+                {sunLoading
+                  ? 'Chargement des volumes 3D...'
+                  : sunError
+                    ? sunError
+                    : `${sunUnavail.b ? 'Bâtiments indisponibles' : `${sunCounts.b} bâtiment${sunCounts.b > 1 ? 's' : ''}`}${sunSansHauteur > 0 ? ` (dont ${sunSansHauteur} sans hauteur connue, non ombré${sunSansHauteur > 1 ? 's' : ''})` : ''}, ${sunUnavail.v ? 'végétation indisponible' : `${sunCounts.v} zone${sunCounts.v > 1 ? 's' : ''} boisée${sunCounts.v > 1 ? 's' : ''}`}. Ombres du bâti et de la végétation projetées au sol (méthode simplifiée), sur le relief ombré selon le soleil (MNT, exagéré 1,2x). Canopée approximée.`}
+              </p>
+            )}
           </div>
         )}
 

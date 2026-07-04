@@ -138,18 +138,16 @@ type DeniveleState =
   | { state: 'unavailable' };
 
 // Feature GeoJSON minimal de la source de mesure. `t` distingue sommet (cercle) et étiquette (texte).
-// `sort` = priorité de placement des étiquettes : PLUS BAS = placé d'abord = GAGNE la collision. Le
-// brouillon vivant (priorité 0) prime ainsi sur les mesures figées (priorité 1), cœur de la v2.
+// Le brouillon vivant est poussé EN DERNIER dans la source (buildMeasureFC), donc dessiné au-dessus des
+// mesures figées (symbol-z-order: 'source' sur le calque d'étiquettes) : pas besoin de clé de tri.
 type MeasureFeature = {
   type: 'Feature';
-  properties: { t?: 'vertex' | 'label'; label?: string; sort?: number };
+  properties: { t?: 'vertex' | 'label'; label?: string };
   geometry: unknown;
 };
-const DRAFT_PRIORITY = 0;
-const FROZEN_PRIORITY = 1;
 
 const vertexFeat = (p: LngLat): MeasureFeature => ({ type: 'Feature', properties: { t: 'vertex' }, geometry: { type: 'Point', coordinates: p } });
-const labelFeat = (p: LngLat, label: string, priority = FROZEN_PRIORITY): MeasureFeature => ({ type: 'Feature', properties: { t: 'label', label, sort: priority }, geometry: { type: 'Point', coordinates: p } });
+const labelFeat = (p: LngLat, label: string): MeasureFeature => ({ type: 'Feature', properties: { t: 'label', label }, geometry: { type: 'Point', coordinates: p } });
 const lineFeat = (pts: LngLat[]): MeasureFeature => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: pts } });
 
 /** Ferme un anneau de sommets pour le rendu du polygone de mesure de surface. */
@@ -161,32 +159,32 @@ function closeMeasureRing(pts: LngLat[]): LngLat[] {
 }
 
 /** Étiquettes de longueur au milieu de chaque segment (distance affichée SUR l'axe). */
-function segmentLabels(pts: LngLat[], priority: number): MeasureFeature[] {
+function segmentLabels(pts: LngLat[]): MeasureFeature[] {
   const out: MeasureFeature[] = [];
   for (let i = 1; i < pts.length; i += 1) {
     const a = pts[i - 1]!;
     const b = pts[i]!;
-    out.push(labelFeat(segmentMidpoint(a, b), formatMeters(lineLengthMeters([a, b])), priority));
+    out.push(labelFeat(segmentMidpoint(a, b), formatMeters(lineLengthMeters([a, b]))));
   }
   return out;
 }
 
 /** Features d'une polyligne (distance) : ligne + sommets + étiquettes de segment. */
-function polylineFeatures(pts: LngLat[], priority = FROZEN_PRIORITY): MeasureFeature[] {
+function polylineFeatures(pts: LngLat[]): MeasureFeature[] {
   const out: MeasureFeature[] = [];
   if (pts.length >= 2) out.push(lineFeat(pts));
   for (const p of pts) out.push(vertexFeat(p));
-  out.push(...segmentLabels(pts, priority));
+  out.push(...segmentLabels(pts));
   return out;
 }
 
 /** Features d'une surface : polygone fermé + sommets + aire au centroïde (ou « tracé invalide »). */
-function surfaceFeatures(pts: LngLat[], priority = FROZEN_PRIORITY): MeasureFeature[] {
+function surfaceFeatures(pts: LngLat[]): MeasureFeature[] {
   const out: MeasureFeature[] = [];
   if (pts.length >= 3) {
     out.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [closeMeasureRing(pts)] } });
     const c = ringCentroid(pts);
-    if (c) out.push(labelFeat(c, isSelfIntersectingRing(pts) ? 'tracé invalide' : formatSquareMeters(polygonAreaMeters(pts)), priority));
+    if (c) out.push(labelFeat(c, isSelfIntersectingRing(pts) ? 'tracé invalide' : formatSquareMeters(polygonAreaMeters(pts))));
   } else if (pts.length >= 2) {
     out.push(lineFeat(pts));
   }
@@ -223,9 +221,10 @@ function measurementFeatures(m: Measurement): MeasureFeature[] {
   return [];
 }
 
-/** Features du BROUILLON en cours (priorité 0 = prime sur les figées). Ruban élastique jusqu'au curseur
- *  pour distance/surface ; pour le dénivelé, ruban A->curseur SEULEMENT tant qu'on place le 2e point, et
- *  sans étiquette de distance (le Δ n'apparaît qu'à la finalisation, jamais un chiffre trompeur). */
+/** Features du BROUILLON en cours (dessiné au-dessus des figées, il est poussé en dernier dans la
+ *  source). Ruban élastique jusqu'au curseur pour distance/surface ; pour le dénivelé, ruban A->curseur
+ *  SEULEMENT tant qu'on place le 2e point, et sans étiquette de distance (le Δ n'apparaît qu'à la
+ *  finalisation, jamais un chiffre trompeur). */
 function draftFeatures(tool: MeasureTool | null, draft: LngLat[], hover: LngLat | null): MeasureFeature[] {
   if (!tool || draft.length === 0) return [];
   if (tool === 'recul') return draft.map(vertexFeat); // finalisé au clic, pas de brouillon persistant
@@ -234,8 +233,8 @@ function draftFeatures(tool: MeasureTool | null, draft: LngLat[], hover: LngLat 
     return deniveleLineFeatures(pts);
   }
   const pts = hover != null ? [...draft, hover] : draft;
-  if (tool === 'surface') return surfaceFeatures(pts, DRAFT_PRIORITY);
-  return polylineFeatures(pts, DRAFT_PRIORITY);
+  if (tool === 'surface') return surfaceFeatures(pts);
+  return polylineFeatures(pts);
 }
 
 /** FeatureCollection complète : toutes les mesures figées + le brouillon en cours. */
@@ -473,8 +472,13 @@ function installMeasureLayers(map: MaplibreMap): void {
     });
   }
   // Étiquettes de mesure SUR l'axe (v2). Police servie par les glyphs IGN sur les deux fonds (comme
-  // les libellés du cadastre) ; halo blanc pour rester lisible. Rendues au-dessus (symboles = dernier
-  // passage), donc visibles même sur le bâti 3D de l'analyse d'ensoleillement.
+  // les libellés du cadastre) ; halo blanc pour rester lisible.
+  // IMPORTANT : `text-allow-overlap` + `text-ignore-placement` = rendu IMMÉDIAT sans collision. Sans
+  // cela, chaque `setData` du ruban élastique (~60 fps) relance le placement des symboles, qui fondent
+  // en sortie/entrée : les étiquettes CLIGNOTENT (disparaissent/réapparaissent à chaque mouvement de
+  // souris). En contournant le placement, l'étiquette est toujours dessinée, stable. Le brouillon,
+  // poussé en dernier dans la source, se dessine au-dessus (symbol-z-order: source), donc lisible aussi
+  // sur le bâti 3D de l'ensoleillement.
   if (!map.getLayer('measure-labels')) {
     map.addLayer({
       id: 'measure-labels',
@@ -486,10 +490,9 @@ function installMeasureLayers(map: MaplibreMap): void {
         'text-font': ['Source Sans Pro Regular'],
         'text-size': 12,
         'text-offset': [0, -0.7],
-        'text-allow-overlap': false,
-        // Priorité de placement : plus BAS = placé d'abord = gagne la collision. Le brouillon vivant
-        // (sort 0) prime donc sur les mesures figées (sort 1) quand deux étiquettes se chevauchent.
-        'symbol-sort-key': ['get', 'sort'],
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+        'symbol-z-order': 'source',
       },
       paint: {
         'text-color': '#0B4A57',

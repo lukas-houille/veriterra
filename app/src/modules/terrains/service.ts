@@ -412,6 +412,22 @@ export interface TerrainWithScore extends TerrainSummary {
   score: number | null;
   evaluated: number;
   redFlags: number;
+  /** Communes couvertes (dédupliquées, depuis les parcelles) pour le filtre par commune (US-3.3). */
+  communes: string[];
+}
+
+/** Communes distinctes couvertes par un terrain, dans l'ordre des parcelles (dédup stable). */
+function dedupCommunes(parcelles: TerrainSummary['parcelles']): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of parcelles) {
+    const c = p.commune?.trim();
+    if (c && !seen.has(c)) {
+      seen.add(c);
+      out.push(c);
+    }
+  }
+  return out;
 }
 
 /**
@@ -449,7 +465,13 @@ export async function listTerrainsWithScores(orgId: string): Promise<TerrainWith
   return terrains.map((t) => {
     const overrides = toOverrideMap(overridesByTerrain.get(t.id) ?? []);
     const result = scoreTerrainView(t, projet, byTerrain.get(t.id) ?? [], overrides);
-    return { ...t, score: result.global, evaluated: result.evaluated, redFlags: result.redFlags.length };
+    return {
+      ...t,
+      score: result.global,
+      evaluated: result.evaluated,
+      redFlags: result.redFlags.length,
+      communes: dedupCommunes(t.parcelles),
+    };
   });
 }
 

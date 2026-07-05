@@ -14,6 +14,19 @@ export interface TerrainListItem {
   score?: number | null;
   /** Nombre d'alertes rouges. */
   redFlags?: number;
+  /** Communes couvertes par les parcelles (un terrain multi-parcelles peut en couvrir plusieurs). */
+  communes?: string[];
+}
+
+/** Filtres avancés du tableau comparatif (US-3.3). Un filtre vide/absent ne restreint pas. */
+export interface AdvancedFilters {
+  /** Statuts retenus (OU entre eux). Vide => tous. */
+  statuses?: string[];
+  /** Communes retenues (un terrain passe si UNE de ses communes est retenue). Vide => toutes. */
+  communes?: string[];
+  /** Bornes de prix demandé (incluses). Un terrain sans prix est exclu dès qu'une borne est posée. */
+  prixMin?: number | null;
+  prixMax?: number | null;
 }
 
 export type TerrainSortKey = 'recent' | 'label' | 'score' | 'surface' | 'prixTotal' | 'prixM2';
@@ -44,6 +57,33 @@ export function filterTerrains<T extends Pick<TerrainListItem, 'label' | 'addres
   const q = normalize(query);
   if (q === '') return items;
   return items.filter((t) => normalize(t.label).includes(q) || normalize(t.address).includes(q));
+}
+
+/**
+ * Filtre avancé (US-3.3) : statut, commune, fourchette de prix. Chaque filtre actif réduit par ET ;
+ * un filtre vide n'a aucun effet. Règle 3 : un terrain sans prix demandé est EXCLU dès qu'une borne
+ * de prix est posée (jamais assimilé à 0), et non silencieusement gardé. Fonction pure et testable.
+ */
+export function filterAdvanced<T extends Pick<TerrainListItem, 'status' | 'prixDemande' | 'communes'>>(
+  items: T[],
+  f: AdvancedFilters,
+): T[] {
+  const statuses = f.statuses && f.statuses.length > 0 ? new Set(f.statuses) : null;
+  const communes = f.communes && f.communes.length > 0 ? new Set(f.communes) : null;
+  const hasPrixBound = f.prixMin != null || f.prixMax != null;
+  return items.filter((t) => {
+    if (statuses && !statuses.has(t.status)) return false;
+    if (communes) {
+      const cs = t.communes ?? [];
+      if (!cs.some((c) => communes.has(c))) return false;
+    }
+    if (hasPrixBound) {
+      if (t.prixDemande == null) return false; // règle 3 : indisponible n'est pas 0
+      if (f.prixMin != null && t.prixDemande < f.prixMin) return false;
+      if (f.prixMax != null && t.prixDemande > f.prixMax) return false;
+    }
+    return true;
+  });
 }
 
 /**

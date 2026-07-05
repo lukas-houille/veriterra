@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  filterAdvanced,
   filterTerrains,
   prixM2,
   sortTerrains,
@@ -84,6 +85,57 @@ describe('sortTerrains', () => {
   it('ne mute pas le tableau source', () => {
     const before = rows.map((r) => r.id);
     sortTerrains(rows, 'surface');
+    expect(rows.map((r) => r.id)).toEqual(before);
+  });
+});
+
+describe('filterAdvanced', () => {
+  const rows = [
+    item({ id: 'a', status: 'A_CONTACTER', prixDemande: 100000, communes: ['Lyon'] }),
+    item({ id: 'b', status: 'A_VISITER', prixDemande: 250000, communes: ['Décines', 'Lyon'] }),
+    item({ id: 'c', status: 'VENDU', prixDemande: null, communes: ['Bron'] }),
+    item({ id: 'd', status: 'A_VISITER', prixDemande: 400000, communes: [] }),
+  ];
+
+  it('sans filtre actif : renvoie tout', () => {
+    expect(filterAdvanced(rows, {}).map((r) => r.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(filterAdvanced(rows, { statuses: [], communes: [] }).map((r) => r.id)).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('statut : OU entre les statuts sélectionnés', () => {
+    expect(filterAdvanced(rows, { statuses: ['A_VISITER'] }).map((r) => r.id)).toEqual(['b', 'd']);
+    expect(filterAdvanced(rows, { statuses: ['A_CONTACTER', 'VENDU'] }).map((r) => r.id)).toEqual(['a', 'c']);
+  });
+
+  it('commune : match si UNE commune du terrain est retenue (multi-parcelle)', () => {
+    expect(filterAdvanced(rows, { communes: ['Lyon'] }).map((r) => r.id)).toEqual(['a', 'b']);
+    expect(filterAdvanced(rows, { communes: ['Bron'] }).map((r) => r.id)).toEqual(['c']);
+    expect(filterAdvanced(rows, { communes: ['Villeurbanne'] }).map((r) => r.id)).toEqual([]);
+  });
+
+  it('un terrain sans commune ne matche aucun filtre commune', () => {
+    expect(filterAdvanced(rows, { communes: ['Lyon'] }).map((r) => r.id)).not.toContain('d');
+  });
+
+  it('prix : fourchette incluse, terrain sans prix EXCLU (règle 3, jamais 0)', () => {
+    expect(filterAdvanced(rows, { prixMin: 150000 }).map((r) => r.id)).toEqual(['b', 'd']);
+    expect(filterAdvanced(rows, { prixMax: 250000 }).map((r) => r.id)).toEqual(['a', 'b']);
+    expect(filterAdvanced(rows, { prixMin: 100000, prixMax: 250000 }).map((r) => r.id)).toEqual(['a', 'b']);
+    // Bornes incluses.
+    expect(filterAdvanced(rows, { prixMin: 100000, prixMax: 100000 }).map((r) => r.id)).toEqual(['a']);
+    // 'c' (prix null) est exclu dès qu'une borne est posée, jamais assimilé à 0.
+    expect(filterAdvanced(rows, { prixMin: 0 }).map((r) => r.id)).not.toContain('c');
+  });
+
+  it('combinaison ET : statut + commune + prix', () => {
+    expect(
+      filterAdvanced(rows, { statuses: ['A_VISITER'], communes: ['Lyon'], prixMax: 300000 }).map((r) => r.id),
+    ).toEqual(['b']);
+  });
+
+  it('ne mute pas le tableau source', () => {
+    const before = rows.map((r) => r.id);
+    filterAdvanced(rows, { statuses: ['A_VISITER'] });
     expect(rows.map((r) => r.id)).toEqual(before);
   });
 });

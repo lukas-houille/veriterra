@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { Input, cn } from '@veriterra/ui';
+import { Input, StatusPin, cn } from '@veriterra/ui';
 import {
+  filterAdvanced,
   filterTerrains,
   prixM2 as prixM2Of,
   sortTerrains,
@@ -11,6 +12,7 @@ import {
   type TerrainListItem,
   type TerrainSortKey,
 } from '@/modules/terrains/terrain-list';
+import { STATUS_LIST } from '@/modules/terrains/status';
 import { StatusChanger } from '@/components/terrains/status-changer';
 
 // Îlot client : recherche et tri de la liste des terrains (US-5.9). Tri déclenché en cliquant
@@ -27,6 +29,19 @@ const prixFormat = new Intl.NumberFormat('fr-FR', {
 /** Sens de tri par défaut au premier clic sur une colonne (alphabétique croissant, sinon décroissant). */
 function defaultDirection(key: TerrainSortKey): SortDirection {
   return key === 'label' ? 'asc' : 'desc';
+}
+
+/** Ajoute/retire une valeur d'une sélection multiple (filtres statut/commune). */
+function toggleValue(arr: string[], v: string): string[] {
+  return arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
+}
+
+/** Parse une borne de prix saisie : null si vide ou non numérique (jamais 0 silencieux, règle 3). */
+function parseBound(s: string): number | null {
+  const t = s.trim();
+  if (t === '') return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
 }
 
 /** En-tête de colonne cliquable (défini hors du composant pour ne pas remonter à chaque rendu,
@@ -107,10 +122,47 @@ export function TerrainsTable({ terrains }: { terrains: TerrainListItem[] }) {
   const [sortKey, setSortKey] = useState<TerrainSortKey>('recent');
   const [direction, setDirection] = useState<SortDirection>('desc');
 
-  const rows = useMemo(
-    () => sortTerrains(filterTerrains(terrains, query), sortKey, direction),
-    [terrains, query, sortKey, direction],
+  // Filtres avancés (US-3.3) : statut, commune, fourchette de prix. Tout côté client sur la liste
+  // déjà chargée (aucune requête serveur), motif identique à la recherche/tri existants.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [communeFilter, setCommuneFilter] = useState<string[]>([]);
+  const [prixMin, setPrixMin] = useState('');
+  const [prixMax, setPrixMax] = useState('');
+
+  // Communes réellement présentes dans la liste (options du filtre), triées.
+  const communeOptions = useMemo(
+    () =>
+      Array.from(new Set(terrains.flatMap((t) => t.communes ?? []))).sort((a, b) =>
+        a.localeCompare(b, 'fr'),
+      ),
+    [terrains],
   );
+
+  const activeFilterCount =
+    statusFilter.length + communeFilter.length + (prixMin.trim() !== '' || prixMax.trim() !== '' ? 1 : 0);
+
+  const rows = useMemo(
+    () =>
+      sortTerrains(
+        filterAdvanced(filterTerrains(terrains, query), {
+          statuses: statusFilter,
+          communes: communeFilter,
+          prixMin: parseBound(prixMin),
+          prixMax: parseBound(prixMax),
+        }),
+        sortKey,
+        direction,
+      ),
+    [terrains, query, statusFilter, communeFilter, prixMin, prixMax, sortKey, direction],
+  );
+
+  function resetFilters() {
+    setStatusFilter([]);
+    setCommuneFilter([]);
+    setPrixMin('');
+    setPrixMax('');
+  }
 
   function onSort(key: TerrainSortKey) {
     if (key === sortKey) {
@@ -125,17 +177,145 @@ export function TerrainsTable({ terrains }: { terrains: TerrainListItem[] }) {
 
   return (
     <div>
-      {/* Recherche */}
-      <div className="mb-3">
+      {/* Recherche + accès aux filtres */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <Input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Rechercher un terrain (libellé, adresse)"
           aria-label="Rechercher un terrain"
-          className="max-w-sm"
+          className="max-w-sm flex-1"
         />
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((o) => !o)}
+          aria-expanded={filtersOpen}
+          className={cn(
+            'inline-flex h-11 items-center gap-1.5 rounded-md border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            activeFilterCount > 0
+              ? 'border-indigo-300 bg-indigo-50 text-indigo-600'
+              : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50',
+          )}
+        >
+          Filtres
+          {activeFilterCount > 0 ? (
+            <span className="rounded-full bg-indigo-500 px-1.5 text-[11px] font-semibold tabular-nums text-white">
+              {activeFilterCount}
+            </span>
+          ) : null}
+          <span aria-hidden="true" className="text-[9px] leading-none">
+            {filtersOpen ? '▲' : '▼'}
+          </span>
+        </button>
       </div>
+
+      {/* Panneau de filtres avancés (US-3.3) : statut, commune, fourchette de prix. */}
+      {filtersOpen ? (
+        <div className="mb-3 flex flex-col gap-3 rounded-lg border border-border bg-neutral-50 p-3">
+          {/* Statut */}
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-neutral-500">Statut</p>
+            <div className="flex flex-wrap gap-1.5">
+              {STATUS_LIST.map((s) => {
+                const active = statusFilter.includes(s.key);
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setStatusFilter((f) => toggleValue(f, s.key))}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      active
+                        ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                        : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50',
+                    )}
+                  >
+                    <StatusPin status={s.pin} className="h-2 w-2" />
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Commune (uniquement si au moins une commune est présente dans la liste) */}
+          {communeOptions.length > 0 ? (
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-neutral-500">Commune</p>
+              <div className="flex flex-wrap gap-1.5">
+                {communeOptions.map((c) => {
+                  const active = communeFilter.includes(c);
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setCommuneFilter((f) => toggleValue(f, c))}
+                      className={cn(
+                        'rounded-md border px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        active
+                          ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                          : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50',
+                      )}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Fourchette de prix demandé */}
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-neutral-500">
+              Prix demandé (€)
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                inputMode="numeric"
+                value={prixMin}
+                onChange={(e) => setPrixMin(e.target.value)}
+                placeholder="Min"
+                aria-label="Prix minimum"
+                className="h-9 w-28 rounded-md border border-neutral-300 bg-white px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <span className="text-xs text-neutral-400" aria-hidden="true">
+                à
+              </span>
+              <input
+                type="number"
+                min={0}
+                inputMode="numeric"
+                value={prixMax}
+                onChange={(e) => setPrixMax(e.target.value)}
+                placeholder="Max"
+                aria-label="Prix maximum"
+                className="h-9 w-28 rounded-md border border-neutral-300 bg-white px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <span className="text-[11px] italic text-neutral-400">
+                Les terrains sans prix saisi sont exclus de la fourchette.
+              </span>
+            </div>
+          </div>
+
+          {activeFilterCount > 0 ? (
+            <div>
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="text-xs font-medium text-indigo-600 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Réinitialiser les filtres
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Tri mobile : les en-têtes de colonnes (tri au clic) sont masqués sous `sm`, on offre
           donc ici un contrôle de tri compact équivalent. */}
@@ -189,7 +369,7 @@ export function TerrainsTable({ terrains }: { terrains: TerrainListItem[] }) {
 
         {rows.length === 0 ? (
           <div className="px-4 py-7 text-center text-sm text-neutral-500">
-            Aucun terrain ne correspond à la recherche.
+            Aucun terrain ne correspond à la recherche ou aux filtres.
           </div>
         ) : (
           rows.map((terrain) => {

@@ -135,9 +135,9 @@ L'exploration est la feature phare. Le parcours : définir mon projet (onboardin
 **US-3.2 [MVP] Affichage du score. LIVRÉE (jauge + détail ; radar à venir).** Je veux voir le score afin de le lire vite.
 - Jauge globale 0-100 sur la fiche (`ScoreGauge`) + détail par critère (barre + base sourcée) + alertes rouges. **LIVRÉ**. Radar SVG par catégorie : fast-follow.
 
-**US-3.3 [MVP] Tableau comparatif. PARTIELLE (colonne score + tri livrés).** Je veux comparer mes terrains afin de choisir.
+**US-3.3 [MVP] Tableau comparatif. LIVRÉE.** Je veux comparer mes terrains afin de choisir.
 - Colonne Score + tri par score (non évalués en fin) + badge d'alertes sur le dashboard, plus recherche et tris existants (US-5.9). **LIVRÉ**.
-- Filtres avancés (statut, commune, budget, score en panneau) au-delà de la recherche + tri : fast-follow.
+- Filtres avancés (statut, commune, prix demandé) en panneau au-delà de la recherche + tri. **LIVRÉ** (`feat/filtres-comparaison`) : panneau repliable, filtre pur `filterAdvanced` (ET entre filtres, commune = match si une parcelle correspond, fourchette de prix bornes incluses, terrain sans prix exclu de la fourchette et jamais assimilé à 0, règle 3), 100% client sur la liste déjà chargée. Le filtre par score a été écarté (décision porteur) ; filtre par score et persistance des filtres dans l'URL = fast-follow.
 
 **US-3.4 [MVP] Alertes rouges. LIVRÉE (fiche + table).** Je veux voir les points bloquants afin de ne pas perdre de temps.
 - Drapeaux rouges (non constructible, inondable, hors DVF) sur la fiche et le tableau ; ils pèsent sur le score sans l'annuler ni exclure le terrain. **LIVRÉ**. Indicateur sur la carte : fast-follow.

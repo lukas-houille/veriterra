@@ -23,6 +23,29 @@ export interface CriterionScore {
   score: number | null;
   /** Explication sourcée et lisible (ex. « +12 % vs estimation DVF »). */
   basis: string;
+  /** true si la note a été forcée manuellement (US-3.1). */
+  overridden?: boolean;
+  /** Note d'origine (dérivée des données) au moment de l'override, figée : peut être null (critère
+   *  non évalué, règle 3). Traçabilité (règle 1). */
+  originalScore?: number | null;
+  /** Base explicative d'origine, figée à la pose de l'override, conservée pour la traçabilité. */
+  originalBasis?: string;
+  /** Justification manuelle brute (pour ré-édition), distincte de `basis` qui sert l'affichage. */
+  overrideNote?: string | null;
+}
+
+/** Correction manuelle d'un critère (US-3.1) : note forcée + justification optionnelle, plus la
+ *  trace figée de la valeur d'origine (renseignée depuis la persistance). */
+export interface CriterionOverride {
+  /** Note manuelle 0-100 (bornée à l'application). */
+  score: number;
+  /** Justification libre saisie par l'utilisateur (devient la base affichée si présente). */
+  note?: string | null;
+  /** Note d'origine figée à la pose (persistée). Absente => on retombe sur la valeur dérivée
+   *  courante ; `null` = le critère n'était pas évalué à l'origine (règle 3, jamais un 0 fabriqué). */
+  originalScore?: number | null;
+  /** Base explicative d'origine figée à la pose (persistée). */
+  originalBasis?: string | null;
 }
 
 export type RedFlagKey = 'non_constructible' | 'inondable' | 'hors_dvf';
@@ -222,3 +245,59 @@ export function scoreTerrain(input: ScoringInput): ScoreResult {
 }
 
 export const CRITERIA_COUNT = CRITERIA.length;
+
+/** Liste ordonnée des clés de critères (source unique pour la validation serveur des overrides). */
+export const CRITERION_KEYS: readonly CriterionKey[] = CRITERIA.map((c) => c.key);
+
+/** Garde de type : true si `value` est une clé de critère connue. */
+export function isCriterionKey(value: string): value is CriterionKey {
+  return (CRITERION_KEYS as readonly string[]).includes(value);
+}
+
+/**
+ * Applique des overrides manuels à un résultat de score (US-3.1) et RE-RENORMALISE le global sur
+ * les critères désormais évalués (un override d'un critère jusque-là non évalué, ex. trajet/tension,
+ * l'intègre au global). Fonction PURE : la trace de la valeur d'origine (`originalScore`/
+ * `originalBasis`) affichée est celle FIGÉE à la pose de l'override quand elle est fournie (règle 1 :
+ * elle ne doit pas suivre un ré-enrichissement ultérieur) ; à défaut on retombe sur la valeur dérivée
+ * courante. Un critère non évalué garde `originalScore` à null (jamais un 0 fabriqué, règle 3). Les
+ * alertes rouges (dérivées des données) restent inchangées.
+ */
+export function applyOverrides(
+  result: ScoreResult,
+  overrides: Map<CriterionKey, CriterionOverride>,
+): ScoreResult {
+  if (overrides.size === 0) return result;
+  const criteria: CriterionScore[] = result.criteria.map((c) => {
+    const ov = overrides.get(c.key);
+    if (!ov) return c;
+    const note = ov.note?.trim();
+    // Trace figée si l'override la porte (originalScore défini, même à null) ; sinon dérivé courant.
+    const hasTrace = ov.originalScore !== undefined;
+    return {
+      ...c,
+      score: clamp(Math.round(ov.score)),
+      basis: note ? note : 'valeur saisie manuellement',
+      overridden: true,
+      originalScore: hasTrace ? ov.originalScore : c.score,
+      originalBasis: hasTrace ? (ov.originalBasis ?? undefined) : c.basis,
+      overrideNote: ov.note ?? null,
+    };
+  });
+  let weighted = 0;
+  let weightSum = 0;
+  let evaluated = 0;
+  for (const c of criteria) {
+    if (c.score != null) {
+      weighted += c.score * c.weight;
+      weightSum += c.weight;
+      evaluated += 1;
+    }
+  }
+  return {
+    ...result,
+    criteria,
+    global: weightSum > 0 ? Math.round(weighted / weightSum) : null,
+    evaluated,
+  };
+}

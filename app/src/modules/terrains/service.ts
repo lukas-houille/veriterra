@@ -5,7 +5,15 @@ import { getEnrichTerrainQueue } from '@/lib/queues';
 import { deleteObject } from '@/lib/storage/s3';
 import { ensureProjet, getActiveProjet } from '@/modules/projet/service';
 import type { ProjetSummary } from '@/modules/projet/types';
-import { scoreTerrain, type ScoreResult, type ScoringInput } from './scoring';
+import {
+  applyOverrides,
+  isCriterionKey,
+  scoreTerrain,
+  type CriterionKey,
+  type CriterionOverride,
+  type ScoreResult,
+  type ScoringInput,
+} from './scoring';
 import { EXPECTED_ENRICHMENT_TYPES, buildEnrichmentView } from './enrichment-view';
 import { TERRAIN_STATUSES, type TerrainStatusValue } from './status';
 import type {
@@ -335,13 +343,68 @@ function toScoringInput(
   };
 }
 
-/** Score d'un terrain à partir d'une vue déjà chargée (fiche : évite de refetcher l'enrichissement). */
+/** Score d'un terrain à partir d'une vue déjà chargée (fiche : évite de refetcher l'enrichissement).
+ *  Les overrides manuels (US-3.1), s'il y en a, sont appliqués et le global re-renormalisé. */
 export function scoreTerrainView(
   terrain: Pick<TerrainSummary, 'prixDemande' | 'surfaceTotaleM2'>,
   projet: ProjetSummary | null,
   blocks: Array<Pick<EnrichmentBlockView, 'type' | 'data'>>,
+  overrides?: Map<CriterionKey, CriterionOverride>,
 ): ScoreResult {
-  return scoreTerrain(toScoringInput(terrain, projet, blocks));
+  const result = scoreTerrain(toScoringInput(terrain, projet, blocks));
+  return overrides && overrides.size > 0 ? applyOverrides(result, overrides) : result;
+}
+
+// ---------- Overrides de score (US-3.1) : corrections manuelles persistées, scopées tenant ----------
+
+type ScoreOverrideRow = {
+  terrainId: string;
+  criterion: string;
+  overrideScore: number;
+  note: string | null;
+  originalScore: number | null;
+  originalBasis: string | null;
+};
+
+// Sélection commune : la trace figée (originalScore/originalBasis) DOIT transiter jusqu'au moteur,
+// sinon la valeur d'origine affichée suivrait un ré-enrichissement ultérieur (règle 1).
+const SCORE_OVERRIDE_SELECT = {
+  criterion: true,
+  overrideScore: true,
+  note: true,
+  originalScore: true,
+  originalBasis: true,
+} as const;
+
+/** Regroupe des lignes d'override en Map par critère (ignore une clé de critère inconnue, règle 3).
+ *  Reporte la trace d'origine figée pour que l'affichage n'en dérive pas une nouvelle. */
+function toOverrideMap(
+  rows: Array<Pick<ScoreOverrideRow, 'criterion' | 'overrideScore' | 'note' | 'originalScore' | 'originalBasis'>>,
+): Map<CriterionKey, CriterionOverride> {
+  const map = new Map<CriterionKey, CriterionOverride>();
+  for (const r of rows) {
+    if (isCriterionKey(r.criterion)) {
+      map.set(r.criterion, {
+        score: r.overrideScore,
+        note: r.note,
+        originalScore: r.originalScore,
+        originalBasis: r.originalBasis,
+      });
+    }
+  }
+  return map;
+}
+
+/** Charge les overrides d'un terrain (scopé tenant via forOrg/RLS). */
+export async function getScoreOverrides(
+  orgId: string,
+  terrainId: string,
+): Promise<Map<CriterionKey, CriterionOverride>> {
+  const rows = (await forOrg(orgId).terrainScoreOverride.findMany({
+    where: { terrainId },
+    select: SCORE_OVERRIDE_SELECT,
+  })) as unknown as Array<Pick<ScoreOverrideRow, 'criterion' | 'overrideScore' | 'note' | 'originalScore' | 'originalBasis'>>;
+  return toOverrideMap(rows);
 }
 
 /** Terrain enrichi de son score global (tableau comparatif du dashboard). */
@@ -358,9 +421,16 @@ export interface TerrainWithScore extends TerrainSummary {
  */
 export async function listTerrainsWithScores(orgId: string): Promise<TerrainWithScore[]> {
   const [terrains, projet] = await Promise.all([listTerrains(orgId), getActiveProjet(orgId)]);
-  const blockRows = (await forOrg(orgId).enrichmentBlock.findMany({
-    select: { terrainId: true, type: true, data: true },
-  })) as unknown as Array<{ terrainId: string; type: string; data: unknown }>;
+  // Blocs d'enrichissement et overrides manuels chargés chacun en UN findMany (pas de N+1),
+  // tous deux scopés tenant via forOrg (RLS).
+  const [blockRows, overrideRows] = await Promise.all([
+    forOrg(orgId).enrichmentBlock.findMany({
+      select: { terrainId: true, type: true, data: true },
+    }) as unknown as Promise<Array<{ terrainId: string; type: string; data: unknown }>>,
+    forOrg(orgId).terrainScoreOverride.findMany({
+      select: { terrainId: true, ...SCORE_OVERRIDE_SELECT },
+    }) as unknown as Promise<ScoreOverrideRow[]>,
+  ]);
 
   const byTerrain = new Map<string, Array<Pick<EnrichmentBlockView, 'type' | 'data'>>>();
   for (const b of blockRows) {
@@ -369,8 +439,88 @@ export async function listTerrainsWithScores(orgId: string): Promise<TerrainWith
     byTerrain.set(b.terrainId, arr);
   }
 
+  const overridesByTerrain = new Map<string, ScoreOverrideRow[]>();
+  for (const o of overrideRows) {
+    const arr = overridesByTerrain.get(o.terrainId) ?? [];
+    arr.push(o);
+    overridesByTerrain.set(o.terrainId, arr);
+  }
+
   return terrains.map((t) => {
-    const result = scoreTerrainView(t, projet, byTerrain.get(t.id) ?? []);
+    const overrides = toOverrideMap(overridesByTerrain.get(t.id) ?? []);
+    const result = scoreTerrainView(t, projet, byTerrain.get(t.id) ?? [], overrides);
     return { ...t, score: result.global, evaluated: result.evaluated, redFlags: result.redFlags.length };
   });
+}
+
+/**
+ * Pose ou met à jour l'override manuel d'un critère (US-3.1). La trace de la valeur d'origine
+ * (`originalScore`/`originalBasis`) est capturée depuis le score CALCULÉ (sans override) et figée à
+ * la première pose : la branche `update` ne la réécrit pas (elle reste la valeur dérivée initiale).
+ * La lecture pour tracer précède l'upsert (transaction `withOrg`) ; si le terrain disparaît dans
+ * l'intervalle, la violation de clé étrangère est mappée en `false` (404) plutôt qu'une 500.
+ * Renvoie `false` si le terrain n'existe pas (ou plus) dans le tenant.
+ */
+export async function setScoreOverride(
+  orgId: string,
+  terrainId: string,
+  criterion: CriterionKey,
+  overrideScore: number,
+  note: string | null,
+  overriddenById: string | null,
+): Promise<boolean> {
+  const clamped = Math.min(100, Math.max(0, Math.round(overrideScore)));
+  // Score dérivé (sans override) pour capturer la valeur d'origine du critère.
+  const [terrain, projet, enrichment] = await Promise.all([
+    getTerrain(orgId, terrainId),
+    getActiveProjet(orgId),
+    getTerrainEnrichment(orgId, terrainId),
+  ]);
+  if (!terrain) return false;
+  const base = scoreTerrainView(terrain, projet, enrichment.blocks);
+  const originCrit = base.criteria.find((c) => c.key === criterion);
+  const originalScore = originCrit ? originCrit.score : null;
+  const originalBasis = originCrit ? originCrit.basis : null;
+  const trimmedNote = note?.trim() ? note.trim() : null;
+
+  try {
+    await withOrg(orgId, async (tx) => {
+      await tx.terrainScoreOverride.upsert({
+        where: { terrainId_criterion: { terrainId, criterion } },
+        // À la création : fige la valeur d'origine (dérivée des données). À la mise à jour : ne touche
+        // qu'à la note manuelle et à l'auteur, en préservant la trace d'origine initiale.
+        create: {
+          organisationId: orgId,
+          terrainId,
+          criterion,
+          overrideScore: clamped,
+          originalScore,
+          originalBasis,
+          note: trimmedNote,
+          overriddenById,
+        },
+        update: { overrideScore: clamped, note: trimmedNote, overriddenById },
+      });
+    });
+  } catch (e) {
+    // Course rare : le terrain a été supprimé entre la lecture et l'upsert (FK P2003), ou la ligne
+    // a disparu (P2025). On renvoie false (404) plutôt qu'une 500. Toute autre erreur remonte.
+    const code = (e as { code?: unknown }).code;
+    if (code === 'P2003' || code === 'P2025') return false;
+    throw e;
+  }
+  return true;
+}
+
+/** Retire l'override manuel d'un critère (retour au score dérivé). `false` si le terrain est absent
+ *  du tenant. Idempotent : supprimer un override inexistant renvoie `true` (état déjà atteint). */
+export async function clearScoreOverride(
+  orgId: string,
+  terrainId: string,
+  criterion: CriterionKey,
+): Promise<boolean> {
+  const terrain = await getTerrain(orgId, terrainId);
+  if (!terrain) return false;
+  await forOrg(orgId).terrainScoreOverride.deleteMany({ where: { terrainId, criterion } });
+  return true;
 }

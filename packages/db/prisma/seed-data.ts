@@ -21,6 +21,8 @@ export const DOCUMENT_A_ID = '00000000-0000-0000-0000-0000000000a6';
 export const DOCUMENT_B_ID = '00000000-0000-0000-0000-0000000000b6';
 export const INVITATION_A_ID = '00000000-0000-0000-0000-0000000000a7';
 export const INVITATION_B_ID = '00000000-0000-0000-0000-0000000000b7';
+export const SCORE_OVERRIDE_A_ID = '00000000-0000-0000-0000-0000000000a8';
+export const SCORE_OVERRIDE_B_ID = '00000000-0000-0000-0000-0000000000b8';
 
 // Petits carrés GeoJSON (WGS84) autour de Lyon, un par tenant.
 const POLY_A = {
@@ -212,6 +214,35 @@ export async function seed(): Promise<void> {
       sizeBytes: 4321,
       storageKey: `org/${ORG_B_ID}/terrain/${TERRAIN_B_ID}/${DOCUMENT_B_ID}`,
       uploadedById: USER_B_ID,
+    },
+  });
+
+  // Overrides de score (US-3.1), un par tenant, pour les tests d'isolation RLS.
+  await admin.terrainScoreOverride.upsert({
+    where: { id: SCORE_OVERRIDE_A_ID },
+    update: {},
+    create: {
+      id: SCORE_OVERRIDE_A_ID,
+      organisationId: ORG_A_ID,
+      terrainId: TERRAIN_A_ID,
+      criterion: 'trajet',
+      overrideScore: 80,
+      originalScore: null,
+      originalBasis: 'donnée à venir',
+      note: 'à 10 min du travail',
+      overriddenById: USER_A_ID,
+    },
+  });
+  await admin.terrainScoreOverride.upsert({
+    where: { id: SCORE_OVERRIDE_B_ID },
+    update: {},
+    create: {
+      id: SCORE_OVERRIDE_B_ID,
+      organisationId: ORG_B_ID,
+      terrainId: TERRAIN_B_ID,
+      criterion: 'tension',
+      overrideScore: 40,
+      overriddenById: USER_B_ID,
     },
   });
 

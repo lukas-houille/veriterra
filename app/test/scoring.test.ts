@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { scoreTerrain, type ScoringInput } from '@/modules/terrains/scoring';
+import {
+  applyOverrides,
+  CRITERION_KEYS,
+  isCriterionKey,
+  scoreTerrain,
+  type CriterionKey,
+  type CriterionOverride,
+  type ScoringInput,
+} from '@/modules/terrains/scoring';
 import type { PenteData, PluData, PrixDvfData, RisquesData, ServicesData } from '@veriterra/enrichment';
 
 const base: ScoringInput = {
@@ -139,5 +147,97 @@ describe('alertes rouges', () => {
     const r = scoreTerrain({ ...base, plu: plu('N') });
     expect(r.redFlags.length).toBeGreaterThan(0);
     expect(r.global).toBe(12); // noté malgré l'alerte, jamais exclu
+  });
+});
+
+describe('overrides manuels (US-3.1)', () => {
+  const ov = (score: number, note?: string): CriterionOverride => ({ score, note });
+
+  it('CRITERION_KEYS couvre les 8 critères et isCriterionKey garde la validation', () => {
+    expect(CRITERION_KEYS).toHaveLength(8);
+    expect(CRITERION_KEYS).toContain('prix');
+    expect(isCriterionKey('prix')).toBe(true);
+    expect(isCriterionKey('inconnu')).toBe(false);
+  });
+
+  it('sans override, le résultat est inchangé (référence identique)', () => {
+    const r = scoreTerrain({ ...base, plu: plu('U') });
+    expect(applyOverrides(r, new Map())).toBe(r);
+  });
+
+  it('override remplace la note d\'un critère et re-renormalise le global', () => {
+    // Base : PLU U (constructibilite 90, poids 15) seul évalué => global 90.
+    const r = scoreTerrain({ ...base, plu: plu('U') });
+    expect(r.global).toBe(90);
+    // On force constructibilite à 50.
+    const o = applyOverrides(r, new Map<CriterionKey, CriterionOverride>([['constructibilite', ov(50)]]));
+    const c = o.criteria.find((x) => x.key === 'constructibilite')!;
+    expect(c.score).toBe(50);
+    expect(c.overridden).toBe(true);
+    expect(c.originalScore).toBe(90); // trace de la valeur dérivée d'origine
+    expect(o.global).toBe(50);
+    expect(r.global).toBe(90); // l'entrée n'est pas mutée
+  });
+
+  it('override d\'un critère non évalué (trajet) l\'intègre au global, origine tracée à null', () => {
+    // Base : PLU U (90, poids 15) + on note trajet (poids 10) à 100.
+    const r = scoreTerrain({ ...base, plu: plu('U') });
+    expect(r.evaluated).toBe(1);
+    const o = applyOverrides(r, new Map<CriterionKey, CriterionOverride>([['trajet', ov(100, 'à 10 min')]]));
+    const t = o.criteria.find((x) => x.key === 'trajet')!;
+    expect(t.score).toBe(100);
+    expect(t.overridden).toBe(true);
+    expect(t.originalScore).toBeNull(); // jamais un 0 fabriqué (règle 3)
+    expect(t.basis).toBe('à 10 min'); // la note devient la base affichée
+    expect(o.evaluated).toBe(2);
+    // (90*15 + 100*10) / 25 = 94.
+    expect(o.global).toBe(94);
+  });
+
+  it('la note manuelle est bornée 0-100 et arrondie', () => {
+    const r = scoreTerrain({ ...base, plu: plu('U') });
+    const hi = applyOverrides(r, new Map<CriterionKey, CriterionOverride>([['constructibilite', ov(150)]]));
+    expect(hi.criteria.find((x) => x.key === 'constructibilite')!.score).toBe(100);
+    const lo = applyOverrides(r, new Map<CriterionKey, CriterionOverride>([['constructibilite', ov(-10)]]));
+    expect(lo.criteria.find((x) => x.key === 'constructibilite')!.score).toBe(0);
+    const rounded = applyOverrides(r, new Map<CriterionKey, CriterionOverride>([['constructibilite', ov(72.6)]]));
+    expect(rounded.criteria.find((x) => x.key === 'constructibilite')!.score).toBe(73);
+  });
+
+  it('sans note, la base indique une saisie manuelle', () => {
+    const r = scoreTerrain({ ...base, plu: plu('U') });
+    const o = applyOverrides(r, new Map<CriterionKey, CriterionOverride>([['constructibilite', ov(50)]]));
+    expect(o.criteria.find((x) => x.key === 'constructibilite')!.basis).toBe('valeur saisie manuellement');
+  });
+
+  it('overrideNote expose la note brute pour la ré-édition', () => {
+    const r = scoreTerrain({ ...base, plu: plu('U') });
+    const o = applyOverrides(r, new Map<CriterionKey, CriterionOverride>([['constructibilite', ov(50, 'ma justif')]]));
+    expect(o.criteria.find((x) => x.key === 'constructibilite')!.overrideNote).toBe('ma justif');
+  });
+
+  it('la trace d\'origine FIGÉE est préférée à la valeur dérivée courante (règle 1)', () => {
+    // Dérivé courant : PLU U => constructibilite 90. Mais l'override porte une trace figée à 40.
+    const r = scoreTerrain({ ...base, plu: plu('U') });
+    const o = applyOverrides(
+      r,
+      new Map<CriterionKey, CriterionOverride>([
+        ['constructibilite', { score: 55, originalScore: 40, originalBasis: 'zone à urbaniser (à la pose)' }],
+      ]),
+    );
+    const c = o.criteria.find((x) => x.key === 'constructibilite')!;
+    expect(c.originalScore).toBe(40); // figée, PAS 90 (dérivé courant)
+    expect(c.originalBasis).toBe('zone à urbaniser (à la pose)');
+  });
+
+  it('trace figée à null (critère non évalué à l\'origine) reste null même si le dérivé courant existe', () => {
+    const r = scoreTerrain({ ...base, plu: plu('U') }); // constructibilite dérivée = 90
+    const o = applyOverrides(
+      r,
+      new Map<CriterionKey, CriterionOverride>([
+        ['constructibilite', { score: 55, originalScore: null, originalBasis: null }],
+      ]),
+    );
+    expect(o.criteria.find((x) => x.key === 'constructibilite')!.originalScore).toBeNull(); // figée à null
   });
 });

@@ -11,6 +11,8 @@ import {
   ORG_A_ID,
   ORG_B_ID,
   PROJET_B_ID,
+  SCORE_OVERRIDE_A_ID,
+  SCORE_OVERRIDE_B_ID,
   TERRAIN_A_ID,
   TERRAIN_B_ID,
   USER_A_ID,
@@ -117,6 +119,27 @@ describe('RLS tenant isolation', () => {
     await expect(
       db.enrichmentBlock.create({
         data: { organisationId: ORG_A_ID, terrainId: TERRAIN_A_ID, type: 'PLU' },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('org B sees only its own score overrides (TerrainScoreOverride RLS)', async () => {
+    const db = forOrg(ORG_B_ID);
+    const overrides = await db.terrainScoreOverride.findMany();
+    expect(overrides.map((o) => o.id)).toEqual([SCORE_OVERRIDE_B_ID]);
+  });
+
+  it("org B cannot read org A's score override by id", async () => {
+    const db = forOrg(ORG_B_ID);
+    const ov = await db.terrainScoreOverride.findUnique({ where: { id: SCORE_OVERRIDE_A_ID } });
+    expect(ov).toBeNull();
+  });
+
+  it('WITH CHECK blocks creating a score override stamped with another org', async () => {
+    const db = forOrg(ORG_B_ID);
+    await expect(
+      db.terrainScoreOverride.create({
+        data: { organisationId: ORG_A_ID, terrainId: TERRAIN_A_ID, criterion: 'prix', overrideScore: 50 },
       }),
     ).rejects.toThrow();
   });

@@ -128,9 +128,9 @@ L'exploration est la feature phare. Le parcours : définir mon projet (onboardin
 
 ## Epic 3 — Scoring et comparaison
 
-**US-3.1 [MVP] Score hybride. PARTIELLE (calcul livré, override à venir).** Je veux un score afin de prioriser.
+**US-3.1 [MVP] Score hybride. LIVRÉE.** Je veux un score afin de prioriser.
 - Critères notés sur 100, pondérés, score global calculé. **LIVRÉ** (`feat/scoring`) : moteur pur, 8 critères de la scorecard notés depuis les données sourcées + le projet, critère sans donnée non évalué (jamais 0), global renormalisé sur les critères évalués.
-- Override manuel par critère, avec trace de la valeur d'origine. **RESTE À FAIRE** (demande un modèle `Score` persisté).
+- Override manuel par critère, avec trace de la valeur d'origine. **LIVRÉ** (`feat/score-override`) : modèle `TerrainScoreOverride` persisté et scopé RLS ; l'override remplace la note du critère et re-renormalise le global (un critère « donnée à venir » noté à la main entre alors dans le global) ; la valeur d'origine (dérivée, figée à la pose) reste affichée pour la traçabilité (règle 1) ; édition par critère depuis la fiche (`ScoreCriteriaEditor`), retour au dérivé par réinitialisation.
 
 **US-3.2 [MVP] Affichage du score. LIVRÉE (jauge + détail ; radar à venir).** Je veux voir le score afin de le lire vite.
 - Jauge globale 0-100 sur la fiche (`ScoreGauge`) + détail par critère (barre + base sourcée) + alertes rouges. **LIVRÉ**. Radar SVG par catégorie : fast-follow.

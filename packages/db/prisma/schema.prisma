@@ -48,6 +48,7 @@ model Organisation {
   enrichments EnrichmentBlock[]
   documents   TerrainDocument[]
   invitations Invitation[]
+  scoreOverrides TerrainScoreOverride[]
 }
 
 /// Invitation à rejoindre une organisation, adressée à un e-mail (l'identité OIDC pouvant ne pas
@@ -165,6 +166,7 @@ model Terrain {
   parcelles    TerrainParcelle[]
   enrichments  EnrichmentBlock[]
   documents    TerrainDocument[]
+  scoreOverrides TerrainScoreOverride[]
 
   @@index([organisationId])
   @@index([projetId])
@@ -244,6 +246,40 @@ model EnrichmentBlock {
   terrain      Terrain      @relation(fields: [terrainId], references: [id], onDelete: Cascade)
 
   @@unique([terrainId, type])
+  @@index([organisationId])
+  @@index([terrainId])
+}
+
+/// Override manuel de la note d'un critère de score (US-3.1). Le score reste DÉRIVÉ des données
+/// sourcées (moteur pur `scoreTerrain`) ; cette table ne persiste QUE les corrections manuelles par
+/// critère, avec la trace de la valeur d'origine (`originalScore`/`originalBasis`) au moment de
+/// l'override (règle 1 : traçabilité). `criterion` est une des clés de `CriterionKey` (scoring.ts,
+/// source unique), stockée en texte et validée applicativement plutôt qu'en enum Prisma pour ne pas
+/// dupliquer la liste des critères. Table scopée au tenant (`organisationId`) : protégée par RLS.
+model TerrainScoreOverride {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @db.Uuid
+  terrainId      String   @db.Uuid
+  /// Clé du critère (CriterionKey), ex. « prix », « trajet ». Validée côté serveur.
+  criterion      String
+  /// Note forcée manuellement, 0-100 (bornée côté serveur).
+  overrideScore  Int
+  /// Note calculée au moment de l'override, ou null si le critère n'était pas évalué (règle 3 :
+  /// jamais un 0 fabriqué). Sert la traçabilité, pas le recalcul.
+  originalScore  Int?
+  /// Base explicative d'origine (ex. « +12 % vs estimation DVF »).
+  originalBasis  String?
+  /// Justification libre saisie par l'utilisateur (optionnelle).
+  note           String?
+  /// Auteur de l'override (nullable, sans FK vers User qui n'est pas scopée tenant).
+  overriddenById String?  @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  terrain      Terrain      @relation(fields: [terrainId], references: [id], onDelete: Cascade)
+
+  @@unique([terrainId, criterion])
   @@index([organisationId])
   @@index([terrainId])
 }

@@ -17,14 +17,15 @@ import {
 } from '@veriterra/ui';
 import type { PenteData, PluData, PrixDvfData, RisquesData, ServicesData } from '@veriterra/enrichment';
 import { auth } from '@/auth';
-import { getTerrain, getTerrainEnrichment, scoreTerrainView } from '@/modules/terrains/service';
+import { getScoreOverrides, getTerrain, getTerrainEnrichment, scoreTerrainView } from '@/modules/terrains/service';
 import { getActiveProjet } from '@/modules/projet/service';
-import { CRITERIA_COUNT, type ScoreResult } from '@/modules/terrains/scoring';
+import { CRITERIA_COUNT } from '@/modules/terrains/scoring';
 import { statusMeta } from '@/modules/terrains/status';
 import { listDocuments } from '@/modules/terrains/documents';
 import { maxUploadMbForDisplay } from '@/lib/storage/s3';
 import type { EnrichmentBlockView } from '@/modules/terrains/types';
 import { StatusChanger } from '@/components/terrains/status-changer';
+import { ScoreCriteriaEditor } from '@/components/terrains/score-criteria-editor';
 import { EditTerrainForm } from './edit-terrain-form';
 import { EnrichmentActions } from './enrichment-actions';
 import { DocumentsPanel } from './documents-panel';
@@ -602,46 +603,6 @@ function ZonageApercu({ block }: { block: EnrichmentBlockView | undefined }) {
   );
 }
 
-/** Carte de score (US-3.1/3.2/3.4) : jauge globale, détail par critère sourcé, alertes rouges. */
-function ScoreCard({ score }: { score: ScoreResult }) {
-  return (
-    <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
-      <BlockHeader title="Score par catégorie" meta="dérivé des données sourcées, relatif au projet" />
-      {score.redFlags.length > 0 ? (
-        <div className="mb-3 flex flex-wrap gap-2">
-          {score.redFlags.map((f) => (
-            <AlertChip key={f.key} severity="danger">
-              {f.label}
-            </AlertChip>
-          ))}
-        </div>
-      ) : null}
-      <div className="flex flex-col gap-2">
-        {score.criteria.map((c) => (
-          <div key={c.key} className="flex items-center gap-3">
-            <div className="w-44 shrink-0">
-              <p className="text-xs font-medium text-neutral-600">{c.label}</p>
-              <p className="truncate text-[10.5px] text-neutral-400" title={c.basis}>
-                {c.basis}
-              </p>
-            </div>
-            {c.score != null ? (
-              <>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-100">
-                  <div className="h-full rounded-full bg-indigo-500" style={{ width: `${c.score}%` }} />
-                </div>
-                <span className="w-7 shrink-0 text-right font-mono text-xs text-neutral-700">{c.score}</span>
-              </>
-            ) : (
-              <span className="flex-1 text-xs italic text-neutral-400">non évalué</span>
-            )}
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 export default async function TerrainPage({
   params,
 }: {
@@ -663,7 +624,8 @@ export default async function TerrainPage({
   const documents = await listDocuments(session.user.orgId, id);
   const maxUploadMb = maxUploadMbForDisplay();
   const projet = await getActiveProjet(session.user.orgId);
-  const score = scoreTerrainView(terrain, projet, enrichment.blocks);
+  const overrides = await getScoreOverrides(session.user.orgId, id);
+  const score = scoreTerrainView(terrain, projet, enrichment.blocks, overrides);
   const pluBlock = enrichment.blocks.find((b) => b.type === 'PLU');
 
   const status = statusMeta(terrain.status);
@@ -781,8 +743,9 @@ export default async function TerrainPage({
           {/* ----- Onglet Aperçu : données rapides sourcées ----- */}
           <TabsContent value="apercu">
             <div className="flex flex-col gap-6">
-              {/* Score par catégorie (Tranche 3) : le score global et le résumé sont en tête. */}
-              <ScoreCard score={score} />
+              {/* Score par catégorie (Tranche 3) : le score global et le résumé sont en tête.
+                  Éditable (US-3.1) : override manuel par critère, global recalculé. */}
+              <ScoreCriteriaEditor terrainId={terrain.id} score={score} />
 
               {/* Résumé du zonage PLU (le détail complet vit dans l'onglet Enrichissement). */}
               <ZonageApercu block={pluBlock} />

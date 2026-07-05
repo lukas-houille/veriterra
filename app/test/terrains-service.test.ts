@@ -8,7 +8,16 @@ vi.mock('@/lib/queues', () => ({
   getEnrichTerrainQueue: () => ({ add: vi.fn(async () => ({ id: 'job-1' })) }),
 }));
 
-import { createTerrain, getTerrain, listTerrains, updateTerrain } from '@/modules/terrains/service';
+import {
+  clearScoreOverride,
+  createTerrain,
+  getScoreOverrides,
+  getTerrain,
+  listTerrains,
+  listTerrainsWithScores,
+  setScoreOverride,
+  updateTerrain,
+} from '@/modules/terrains/service';
 import type { ParcelleInput } from '@/modules/terrains/types';
 
 const ORG_ID = '00000000-0000-0000-0000-0000000000cc';
@@ -156,5 +165,102 @@ describe('updateTerrain', () => {
     expect(res).toBeNull();
     const still = await getTerrain(ORG_ID, t.id);
     expect(still?.status).toBe('A_CONTACTER');
+  });
+});
+
+describe('overrides de score (US-3.1)', () => {
+  // Terrain avec un bloc PLU (zone U) : la constructibilité y est dérivée à 90, ce qui donne une
+  // valeur d'origine non nulle à tracer.
+  async function terrainWithPlu(idu: string) {
+    const t = await createTerrain(ORG_ID, null, {
+      address: 'a',
+      inseeCode: '69381',
+      parcelles: [parcelle(idu, 400)],
+    });
+    // createTerrain pré-crée des blocs PENDING (dont PLU) : on upsert pour renseigner la donnée.
+    const pluData = {
+      typezone: 'U',
+      zoneLibelle: 'UB',
+      zoneDescription: null,
+      documentType: 'PLU',
+      documentName: 'x',
+      dateValidite: null,
+      reglementUrl: null,
+      isRnu: false,
+      note: null,
+    };
+    await admin.enrichmentBlock.upsert({
+      where: { terrainId_type: { terrainId: t.id, type: 'PLU' } },
+      update: { status: 'OK', source: 'PLU', confidence: 'ELEVEE', data: pluData },
+      create: {
+        organisationId: ORG_ID,
+        terrainId: t.id,
+        type: 'PLU',
+        status: 'OK',
+        source: 'PLU',
+        confidence: 'ELEVEE',
+        data: pluData,
+      },
+    });
+    return t;
+  }
+
+  it("pose un override, capture la valeur d'origine dérivée et l'applique au score de la liste", async () => {
+    const t = await terrainWithPlu('69382000AB0080');
+    const ok = await setScoreOverride(ORG_ID, t.id, 'constructibilite', 40, 'zone en révision', null);
+    expect(ok).toBe(true);
+
+    const map = await getScoreOverrides(ORG_ID, t.id);
+    // La map porte aussi la trace d'origine figée (règle 1), pas seulement score/note.
+    expect(map.get('constructibilite')).toMatchObject({ score: 40, note: 'zone en révision', originalScore: 90 });
+
+    const row = await admin.terrainScoreOverride.findFirst({
+      where: { terrainId: t.id, criterion: 'constructibilite' },
+    });
+    expect(row?.originalScore).toBe(90); // valeur dérivée d'origine, tracée (règle 1)
+
+    const listed = (await listTerrainsWithScores(ORG_ID)).find((x) => x.id === t.id);
+    expect(listed?.score).toBe(40); // le global renormalisé reflète l'override
+  });
+
+  it("la mise à jour d'un override préserve la valeur d'origine initiale", async () => {
+    const t = await terrainWithPlu('69382000AB0081');
+    await setScoreOverride(ORG_ID, t.id, 'constructibilite', 40, null, null);
+    await setScoreOverride(ORG_ID, t.id, 'constructibilite', 20, 'maj', null);
+    const row = await admin.terrainScoreOverride.findFirst({
+      where: { terrainId: t.id, criterion: 'constructibilite' },
+    });
+    expect(row?.overrideScore).toBe(20);
+    expect(row?.originalScore).toBe(90); // toujours la valeur dérivée initiale, pas 40
+    expect(row?.note).toBe('maj');
+  });
+
+  it("override d'un critère sans source (trajet) : origine tracée à null, jamais un 0 (règle 3)", async () => {
+    const t = await terrainWithPlu('69382000AB0082');
+    await setScoreOverride(ORG_ID, t.id, 'trajet', 75, null, null);
+    const row = await admin.terrainScoreOverride.findFirst({
+      where: { terrainId: t.id, criterion: 'trajet' },
+    });
+    expect(row?.originalScore).toBeNull();
+  });
+
+  it('clearScoreOverride retire l\'override (idempotent), le score redevient dérivé', async () => {
+    const t = await terrainWithPlu('69382000AB0083');
+    await setScoreOverride(ORG_ID, t.id, 'constructibilite', 40, null, null);
+    expect(await clearScoreOverride(ORG_ID, t.id, 'constructibilite')).toBe(true);
+    expect((await getScoreOverrides(ORG_ID, t.id)).size).toBe(0);
+    expect(await clearScoreOverride(ORG_ID, t.id, 'constructibilite')).toBe(true); // idempotent
+    const listed = (await listTerrainsWithScores(ORG_ID)).find((x) => x.id === t.id);
+    expect(listed?.score).toBe(90); // dérivé, override retiré
+  });
+
+  it("un override sur un terrain d'une autre org est refusé (RLS) : false, aucune fuite", async () => {
+    const t = await terrainWithPlu('69382000AB0084');
+    expect(await setScoreOverride(OTHER_ORG_ID, t.id, 'constructibilite', 10, null, null)).toBe(false);
+    expect(await clearScoreOverride(OTHER_ORG_ID, t.id, 'constructibilite')).toBe(false);
+    expect((await getScoreOverrides(ORG_ID, t.id)).size).toBe(0);
+    // L'autre org ne voit pas un override posé par ORG_ID.
+    await setScoreOverride(ORG_ID, t.id, 'constructibilite', 55, null, null);
+    expect((await getScoreOverrides(OTHER_ORG_ID, t.id)).size).toBe(0);
   });
 });
